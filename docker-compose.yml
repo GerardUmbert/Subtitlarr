@@ -8,7 +8,7 @@ services:
       - BAZARR_API_KEY=${BAZARR_API_KEY}
       - ACTIVE_ENGINE=${ACTIVE_ENGINE:-ollama}
       - FALLBACK_ENGINE=${FALLBACK_ENGINE:-}
-      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma3:4b}
       - OLLAMA_NUM_CTX=${OLLAMA_NUM_CTX:-8192}
       - OLLAMA_BATCH_TOKEN_BUDGET=${OLLAMA_BATCH_TOKEN_BUDGET:-0}
@@ -27,14 +27,14 @@ services:
       - DB_PATH=/data/subtitlarr.db
     volumes:
       - ./data:/data
-    depends_on:
-      - ollama
     restart: unless-stopped
 
-  # Local-dev convenience only. On a real deployment (e.g. Unraid), Ollama
-  # usually already runs as its own existing container — point
-  # OLLAMA_BASE_URL at that container instead of defining a service here,
-  # and drop the depends_on above.
+  # Local-dev convenience only, and only relevant if ACTIVE_ENGINE=ollama —
+  # not a hard dependency of subtitlarr (no depends_on above), since Gemini
+  # and NVIDIA need no local model server at all. On a real deployment
+  # (e.g. Unraid), Ollama usually already runs as its own existing
+  # container — point OLLAMA_BASE_URL at that container instead of
+  # defining a service here, and remove this block entirely.
   ollama:
     image: ollama/ollama:latest
     ports:

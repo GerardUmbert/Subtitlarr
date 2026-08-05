@@ -21,17 +21,27 @@
       <div class="field">
         <label>Age threshold (days)</label>
         <input v-model.number="ageThresholdDays" type="number" min="0" />
+        <p class="field-hint">A scheduled run only translates items that have been missing a subtitle for at least this many days — freshly-wanted items are left alone so Bazarr's own providers get a chance to find a real subtitle first. Doesn't apply to "Run now" (ignores the age gate) or per-item re-runs.</p>
       </div>
       <div class="field">
         <label>Daily translation limit</label>
         <input v-model.number="dailyTranslationLimit" type="number" min="0" />
-        <p class="field-hint">Max items to translate per day (0 = unlimited). Applies to "Run now" and scheduled runs — per-item re-runs always bypass this.</p>
+        <p class="field-hint">Max items to translate per day (0 = unlimited). Applies to "Run now" and scheduled runs — per-item re-runs always bypass this. This exists to protect a local/GPU engine (Ollama) from being pegged non-stop for hours on a large backlog — if you're using a remote/cloud engine (Gemini, NVIDIA) instead, there's no local hardware to protect, so 0 (unlimited) is generally safe, subject to that provider's own rate limits.</p>
       </div>
       <div class="field">
         <label>Pause between items (seconds)</label>
         <input v-model.number="pauseBetweenItemsSeconds" type="number" min="0" />
         <p class="field-hint">Brief rest between translations so the GPU isn't pegged non-stop for hours (0 = no pause).</p>
       </div>
+      <p class="field-hint" v-if="nextRun">Next scheduled run: {% raw %}{{ nextRun }}{% endraw %}</p>
+    </div>
+  </div>
+
+  <div class="engine-card" style="margin-top:16px;">
+    <div class="panel-title">Uploads</div>
+    <div class="panel-title-sub">Applies to every translation, regardless of how it was triggered — scheduled runs, "Run now", filtered batches, and single-item re-runs alike</div>
+
+    <div class="engine-config" style="margin-top:0; border-top:none;">
       <div class="field">
         <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
           <input type="checkbox" v-model="queueUploadsEnabled" style="width:auto;" />
@@ -39,7 +49,6 @@
         </label>
         <p class="field-hint">Translated subtitles are cached locally and held as "pending upload" instead of being sent to Bazarr right away — push them all in one batch later from the Jobs page. Useful if uploading wakes a sleeping NAS and you'd rather do that once instead of once per item.</p>
       </div>
-      <p class="field-hint" v-if="nextRun">Next scheduled run: {% raw %}{{ nextRun }}{% endraw %}</p>
     </div>
   </div>
 

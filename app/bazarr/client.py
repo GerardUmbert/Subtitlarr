@@ -109,7 +109,20 @@ class BazarrClient:
             "/api/subtitles/contents", params={"subtitlePath": subtitle_path}
         )
         resp.raise_for_status()
-        return [SubtitleCue.model_validate(row) for row in resp.json().get("data", [])]
+        try:
+            body = resp.json()
+        except ValueError as exc:
+            # A 200 OK with a non-JSON (often empty) body — seen live
+            # against a real Bazarr instance for at least one source file,
+            # cause unconfirmed (empty/corrupt file on disk is the leading
+            # theory). Surfaced as a clear, catchable error instead of a
+            # bare JSONDecodeError so it reads as "bad source file" rather
+            # than an unexpected crash.
+            raise BazarrError(
+                f"Bazarr returned a non-JSON response for {subtitle_path!r} "
+                f"(HTTP {resp.status_code}, body: {resp.text[:200]!r})"
+            ) from exc
+        return [SubtitleCue.model_validate(row) for row in body.get("data", [])]
 
     # ---- Upload (write) ----
 

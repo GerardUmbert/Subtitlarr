@@ -49,7 +49,7 @@ createApp({
       runningFiltered: false,
       currentRunItems: [],
       currentBatchOnly: false,
-      excludeNoSource: false,
+      excludeNoSource: true,
       filters: [
         { label: "All", value: "" },
         { label: "Queued", value: "pending" },
@@ -84,7 +84,7 @@ createApp({
       if (Number.isFinite(p) && p > 0) this.page = p;
     }
     if (params.get("batch") === "1") this.currentBatchOnly = true;
-    if (params.get("exclude_no_source") === "1") this.excludeNoSource = true;
+    if (params.has("exclude_no_source")) this.excludeNoSource = params.get("exclude_no_source") === "1";
   },
   computed: {
     totalPages() {
@@ -157,7 +157,10 @@ createApp({
       if (this.search) params.set("search", this.search);
       if (this.page > 1) params.set("page", String(this.page));
       if (this.currentBatchOnly) params.set("batch", "1");
-      if (this.excludeNoSource) params.set("exclude_no_source", "1");
+      // Always written explicitly (not just when true) — the default is
+      // now true, so omitting it when false would make a reload silently
+      // re-check a box the user just unchecked.
+      params.set("exclude_no_source", this.excludeNoSource ? "1" : "0");
       const qs = params.toString();
       const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
       // replaceState (not pushState) — filter changes shouldn't pile up

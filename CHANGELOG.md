@@ -13,6 +13,25 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 - Settings page's translation-schedule card was still titled "Schedule"
   after Jobs renamed its counterpart to "Translate next batch" — renamed
   to match.
+- **Queue page's "Hide items with no source subtitle" now defaults to
+  checked** — was unchecked by default, so a fresh page load showed every
+  untranslatable item until toggled manually. The filter's URL-round-trip
+  is now explicit both ways (`exclude_no_source=1`/`0`), since silently
+  omitting the param when unchecked would have let a reload re-apply the
+  new default over a deliberate uncheck.
+- **`docker-compose.yml`**: `OLLAMA_BASE_URL` was hardcoded to the bundled
+  `ollama` service, silently ignoring the env var if set — now respects
+  `${OLLAMA_BASE_URL}` like every other setting, defaulting to the bundled
+  container only when unset. Also dropped `depends_on: [ollama]` — Ollama
+  isn't a hard dependency (Gemini/NVIDIA need no local model server at
+  all), so requiring it to be defined/running was wrong whenever a
+  cloud engine is active.
+- **`app.bazarr.client.get_subtitle_contents()` now raises a clear
+  `BazarrError`** (including a snippet of the actual response body)
+  instead of crashing on a bare `JSONDecodeError` when Bazarr returns a
+  200 OK with a non-JSON body — seen live (empty body for one real
+  source file; a separate live report also saw an HTML page returned
+  instead of JSON, still under investigation).
 
 ## [0.4.0]
 

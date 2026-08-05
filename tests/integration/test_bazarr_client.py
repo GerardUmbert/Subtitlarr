@@ -125,6 +125,20 @@ async def test_get_subtitle_contents(client):
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_get_subtitle_contents_raises_clear_error_on_non_json_response(client):
+    """Seen live against a real Bazarr instance: a 200 OK with an empty (or
+    otherwise non-JSON) body for one specific source file — cause
+    unconfirmed, but must surface as a catchable BazarrError instead of a
+    bare JSONDecodeError bubbling up uncaught."""
+    respx.get(f"{BASE_URL}/api/subtitles/contents").mock(
+        return_value=httpx.Response(200, text="")
+    )
+    with pytest.raises(BazarrError, match="non-JSON response"):
+        await client.get_subtitle_contents("/tv/The Bear/S03E10.es.srt")
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_upload_episode_subtitle_success(client):
     route = respx.post(f"{BASE_URL}/api/episodes/subtitles").mock(
         return_value=httpx.Response(204)
