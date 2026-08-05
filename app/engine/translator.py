@@ -6,6 +6,7 @@ from pathlib import Path
 
 from app.bazarr.client import BazarrClient
 from app.db import repository
+from app.engine import upload_queue
 from app.providers.base import ProviderError, ProviderRateLimitedError, TranslationProvider
 from app.subtitles import srt_io
 from app.subtitles.reconciler import (
@@ -174,6 +175,7 @@ async def translate_item(
     num_ctx: int = 8192,
     batch_token_budget_override: int = 0,
     cached_source_path: Path | None = None,
+    queue_uploads: bool = False,
 ) -> None:
     """Fetches the source subtitle (via Bazarr's API, or from a local
     scratch-cache file when cached_source_path is provided — see
@@ -243,24 +245,37 @@ async def translate_item(
             translated_subs = srt_io.with_ai_disclaimer(translated_subs)
         srt_bytes = srt_io.compose_srt(translated_subs)
 
-        if item["item_type"] == "episode":
-            await client.upload_episode_subtitle(
-                series_id=item["series_id"],
-                episode_id=item["bazarr_id"],
-                language_code2=target_lang,
-                srt_bytes=srt_bytes,
+        if queue_uploads:
+            # Hold the translated file locally instead of uploading now —
+            # Bazarr's own handling of the upload is what wakes the NAS's
+            # disks, so queuing lets a whole run finish without touching
+            # them; a later "push queued uploads" sends everything in one
+            # burst. Not marked done/completed yet — the upload hasn't
+            # actually happened.
+            upload_queue.save_pending_upload(upload_queue.DEFAULT_QUEUE_ROOT, item_id, srt_bytes)
+            repository.update_item_status(
+                conn, item_id, "translated_pending_upload",
+                source_language=source_lang, engine_used=engine_used,
             )
         else:
-            await client.upload_movie_subtitle(
-                radarr_id=item["bazarr_id"],
-                language_code2=target_lang,
-                srt_bytes=srt_bytes,
-            )
+            if item["item_type"] == "episode":
+                await client.upload_episode_subtitle(
+                    series_id=item["series_id"],
+                    episode_id=item["bazarr_id"],
+                    language_code2=target_lang,
+                    srt_bytes=srt_bytes,
+                )
+            else:
+                await client.upload_movie_subtitle(
+                    radarr_id=item["bazarr_id"],
+                    language_code2=target_lang,
+                    srt_bytes=srt_bytes,
+                )
 
-        repository.update_item_status(
-            conn, item_id, "done",
-            source_language=source_lang, engine_used=engine_used, mark_completed=True,
-        )
+            repository.update_item_status(
+                conn, item_id, "done",
+                source_language=source_lang, engine_used=engine_used, mark_completed=True,
+            )
         repository.log_item_attempt(
             conn, item_id, run_id, "done",
             engine_used=engine_used, settings_snapshot=settings_snapshot,

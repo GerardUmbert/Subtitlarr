@@ -133,6 +133,11 @@
 
 ## Not started
 
+- **`PORT` env var has no effect.** `settings.port` is defined but never
+  read anywhere — the Dockerfile hardcodes `uvicorn --port 8000`. Either
+  wire it into the Dockerfile's CMD or drop the setting/document it as
+  host-mapping-only.
+
 - [x] **Pre-fetch source subtitles from Bazarr, cached locally** — built
   2026-08-05, see `plans/prefetch-source-subtitles.md` for full details.
   Applies to every run type (not just scheduled). Not yet live-verified

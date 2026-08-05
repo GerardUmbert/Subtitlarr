@@ -32,15 +32,41 @@
         <input v-model.number="pauseBetweenItemsSeconds" type="number" min="0" />
         <p class="field-hint">Brief rest between translations so the GPU isn't pegged non-stop for hours (0 = no pause).</p>
       </div>
+      <div class="field">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="checkbox" v-model="queueUploadsEnabled" style="width:auto;" />
+          Queue uploads instead of pushing immediately
+        </label>
+        <p class="field-hint">Translated subtitles are cached locally and held as "pending upload" instead of being sent to Bazarr right away — push them all in one batch later from the Jobs page. Useful if uploading wakes a sleeping NAS and you'd rather do that once instead of once per item.</p>
+      </div>
       <p class="field-hint" v-if="nextRun">Next scheduled run: {% raw %}{{ nextRun }}{% endraw %}</p>
-      <div class="field-row">
-        <button class="btn btn-primary" @click="save" :disabled="saving">
-          {% raw %}{{ saving ? 'Saving…' : 'Save' }}{% endraw %}
-        </button>
-        <span v-if="saved" class="test-result">● saved</span>
-        <span v-if="error" class="test-result error">● {% raw %}{{ error }}{% endraw %}</span>
+    </div>
+  </div>
+
+  <div class="engine-card" style="margin-top:16px;">
+    <div class="panel-title">Bazarr sync schedules</div>
+    <div class="panel-title-sub">Optional, independent crons for the two on-demand Jobs page syncs — leave blank to keep them manual-only</div>
+
+    <div class="engine-config" style="margin-top:0; border-top:none;">
+      <div class="field">
+        <label>Sync wanted / missing cron</label>
+        <input v-model="syncMediaCron" placeholder="e.g. 40 9 * * * (blank = manual only)" />
+        <p class="field-hint" v-if="nextSyncMediaRun">Next run: {% raw %}{{ nextSyncMediaRun }}{% endraw %}</p>
+      </div>
+      <div class="field">
+        <label>Pull pending subtitles cron</label>
+        <input v-model="syncSubsCron" placeholder="e.g. 40 9 * * * (blank = manual only)" />
+        <p class="field-hint" v-if="nextSyncSubsRun">Next run: {% raw %}{{ nextSyncSubsRun }}{% endraw %}</p>
       </div>
     </div>
+  </div>
+
+  <div class="field-row" style="margin-top:16px;">
+    <button class="btn btn-primary" @click="save" :disabled="saving">
+      {% raw %}{{ saving ? 'Saving…' : 'Save' }}{% endraw %}
+    </button>
+    <span v-if="saved" class="test-result">● saved</span>
+    <span v-if="error" class="test-result error">● {% raw %}{{ error }}{% endraw %}</span>
   </div>
 </div>
 {% endblock %}

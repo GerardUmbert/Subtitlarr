@@ -57,6 +57,18 @@ async def lifespan(app: FastAPI):
     state.cron_scheduler = CronScheduler()
     state.cron_scheduler.start()
     state.cron_scheduler.install(settings.schedule_cron, state.run_controller.run_scheduled)
+    if settings.sync_media_cron:
+        state.cron_scheduler.install(
+            settings.sync_media_cron,
+            lambda: jobs.cron_sync_media(state.run_controller),
+            job_id="sync_media",
+        )
+    if settings.sync_subs_cron:
+        state.cron_scheduler.install(
+            settings.sync_subs_cron,
+            lambda: jobs.cron_sync_subs(state.run_controller),
+            job_id="sync_subs",
+        )
 
     yield
 

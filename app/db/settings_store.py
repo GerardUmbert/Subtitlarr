@@ -30,6 +30,9 @@ PERSISTED_KEYS = (
     "age_threshold_days",
     "daily_translation_limit",
     "pause_between_items_seconds",
+    "queue_uploads_enabled",
+    "sync_media_cron",
+    "sync_subs_cron",
 )
 
 

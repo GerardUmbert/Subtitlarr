@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>subtitlarr</Name>
+  <Repository>ghcr.io/YOUR_GITHUB_USERNAME/subtitlarr:latest</Repository>
+  <Registry>https://ghcr.io/YOUR_GITHUB_USERNAME/subtitlarr</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/YOUR_GITHUB_USERNAME/subtitlarr</Support>
+  <Project>https://github.com/YOUR_GITHUB_USERNAME/subtitlarr</Project>
+  <Overview>Fills gaps in your Bazarr subtitle library by translating subtitles you already have (e.g. English) into languages you're missing (e.g. Spanish), using a local or cloud LLM. Never mounts your media folders — all reading and writing of subtitles happens through Bazarr's own REST API, so Bazarr remains the only thing with filesystem access to your library.&#13;&#10;&#13;&#10;Requires a running Bazarr instance (with its API key) and at least one translation engine: Ollama (local, e.g. an existing Ollama container on this server), Gemini, or NVIDIA NIM (both cloud, free tiers available).&#13;&#10;&#13;&#10;No media path needs to be mapped into this container — only the /data path below, which is Subtitlarr's own small SQLite database, not your library.</Overview>
+  <Category>MediaApp:Other Tools:</Category>
+  <WebUI>http://[IP]:[PORT:8000]/</WebUI>
+  <TemplateURL/>
+  <Icon>https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/subtitlarr/master/unraid/icon.png</Icon>
+  <ExtraParams></ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+
+  <Config Name="WebUI Port" Target="8000" Default="8000" Mode="tcp" Description="Port the Subtitlarr web UI listens on inside the container." Type="Port" Display="always" Required="true" Mask="false">8000</Config>
+
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/subtitlarr" Mode="rw" Description="Subtitlarr's own SQLite database (queue, run history, settings). NOT a media path — do not point this at your library." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/subtitlarr</Config>
+
+  <Config Name="Bazarr Base URL" Target="BAZARR_BASE_URL" Default="" Mode="" Description="Bazarr's root URL, e.g. http://192.168.1.10:6767 (or the container name/IP if on the same custom Docker network)." Type="Variable" Display="always" Required="true" Mask="false"></Config>
+  <Config Name="Bazarr API Key" Target="BAZARR_API_KEY" Default="" Mode="" Description="Bazarr → Settings → General → API key." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+
+  <Config Name="Active Engine" Target="ACTIVE_ENGINE" Default="ollama" Mode="" Description="Which translation engine to use: ollama, gemini, or nvidia." Type="Variable" Display="always" Required="true" Mask="false">ollama</Config>
+  <Config Name="Fallback Engine" Target="FALLBACK_ENGINE" Default="" Mode="" Description="Optional — same values as above, used automatically if the active engine fails or is rate-limited." Type="Variable" Display="always" Required="false" Mask="false"></Config>
+
+  <Config Name="Ollama Base URL" Target="OLLAMA_BASE_URL" Default="http://localhost:11434" Mode="" Description="URL of an existing Ollama server/container, e.g. http://192.168.1.10:11434." Type="Variable" Display="always" Required="false" Mask="false">http://localhost:11434</Config>
+  <Config Name="Ollama Model" Target="OLLAMA_MODEL" Default="gemma3:4b" Mode="" Description="Model name — must already be pulled on the target Ollama server (ollama pull gemma3:4b)." Type="Variable" Display="always" Required="false" Mask="false">gemma3:4b</Config>
+  <Config Name="Ollama Context Window" Target="OLLAMA_NUM_CTX" Default="8192" Mode="" Description="Context window size in tokens — raise if long subtitle files come back incomplete (Ollama's own default of 4096 silently truncates larger prompts)." Type="Variable" Display="advanced" Required="false" Mask="false">8192</Config>
+
+  <Config Name="Gemini API Key" Target="GEMINI_API_KEY" Default="" Mode="" Description="Optional — free tier available at aistudio.google.com." Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="Gemini Model" Target="GEMINI_MODEL" Default="gemini-2.0-flash" Mode="" Description="Verify current at aistudio.google.com — Google periodically retires older model IDs." Type="Variable" Display="advanced" Required="false" Mask="false">gemini-2.0-flash</Config>
+
+  <Config Name="NVIDIA API Key" Target="NVIDIA_API_KEY" Default="" Mode="" Description="Optional — free tier at build.nvidia.com." Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="NVIDIA Model" Target="NVIDIA_MODEL" Default="deepseek-ai/deepseek-v4-flash" Mode="" Description="Must be a real instructable chat model, not a dedicated translation model (e.g. NOT Riva Translate)." Type="Variable" Display="advanced" Required="false" Mask="false">deepseek-ai/deepseek-v4-flash</Config>
+
+  <Config Name="Schedule Cron" Target="SCHEDULE_CRON" Default="0 3 * * *" Mode="" Description="5-field cron expression for the main scheduled translation job." Type="Variable" Display="always" Required="false" Mask="false">0 3 * * *</Config>
+  <Config Name="Age Threshold (days)" Target="AGE_THRESHOLD_DAYS" Default="14" Mode="" Description="Days a subtitle must be missing before a scheduled run will translate it — gives Bazarr's own providers first chance to find a real subtitle." Type="Variable" Display="always" Required="false" Mask="false">14</Config>
+  <Config Name="Daily Translation Limit" Target="DAILY_TRANSLATION_LIMIT" Default="100" Mode="" Description="Max items translated per day by scheduled/full runs (0 = unlimited). Per-item re-runs always bypass this." Type="Variable" Display="advanced" Required="false" Mask="false">100</Config>
+  <Config Name="Pause Between Items (seconds)" Target="PAUSE_BETWEEN_ITEMS_SECONDS" Default="30" Mode="" Description="Brief rest between translations so the GPU isn't pegged non-stop for hours (0 = no pause)." Type="Variable" Display="advanced" Required="false" Mask="false">30</Config>
+  <Config Name="Queue Uploads" Target="QUEUE_UPLOADS_ENABLED" Default="false" Mode="" Description="If true, translated subtitles are held locally instead of uploaded immediately — push them all in one batch later from the Jobs page (useful if uploads wake a sleeping NAS)." Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
+  <Config Name="Sync Wanted/Missing Cron" Target="SYNC_MEDIA_CRON" Default="" Mode="" Description="Optional cron expression to auto-refresh Bazarr's wanted list. Leave blank for manual-only (triggered from the Jobs page)." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="Pull Pending Subtitles Cron" Target="SYNC_SUBS_CRON" Default="" Mode="" Description="Optional cron expression to auto pre-fetch source subtitle content into the local cache. Leave blank for manual-only." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+
+  <Config Name="Log Level" Target="LOG_LEVEL" Default="INFO" Mode="" Description="Logging verbosity: DEBUG, INFO, WARNING, or ERROR." Type="Variable" Display="advanced" Required="false" Mask="false">INFO</Config>
+</Container>

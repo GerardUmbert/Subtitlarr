@@ -212,6 +212,18 @@ def get_item_by_bazarr_id(
     ).fetchone()
 
 
+def get_items_by_status(conn: sqlite3.Connection, status: str) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM items WHERE status = ? ORDER BY last_updated ASC", (status,)
+    ).fetchall()
+
+
+def count_items_by_status(conn: sqlite3.Connection, status: str) -> int:
+    return conn.execute(
+        "SELECT COUNT(*) FROM items WHERE status = ?", (status,)
+    ).fetchone()[0]
+
+
 def update_item_status(
     conn: sqlite3.Connection,
     item_id: int,
@@ -235,7 +247,7 @@ def update_item_status(
     if error_message is not None:
         fields.append("error_message = ?")
         values.append(error_message)
-    elif status in ("translating", "done"):
+    elif status in ("translating", "done", "translated_pending_upload"):
         # A fresh attempt or a successful completion must never leave a
         # stale error from a previous failed run visible in the UI.
         fields.append("error_message = NULL")

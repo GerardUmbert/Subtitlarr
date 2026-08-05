@@ -77,6 +77,22 @@ class Settings(BaseSettings):
     # A brief rest between items so a long run doesn't peg the GPU
     # non-stop for hours straight. 0 disables the pause entirely.
     pause_between_items_seconds: int = 30
+    # When true, a successful translation is cached to local disk instead of
+    # immediately uploaded to Bazarr — items sit as 'translated_pending_upload'
+    # until a separate "push queued uploads" action sends them all in one
+    # burst. Lets a NAS's disks stay asleep for the whole translation run
+    # (Bazarr's own upload handling is what wakes them, not anything
+    # Subtitlarr does directly) and batches that wake-up into one burst
+    # whenever you choose to push, instead of once per item.
+    queue_uploads_enabled: bool = False
+
+    # Independent daily crons for the two Bazarr sync jobs — deliberately
+    # separate from schedule_cron (the translation job), so wanted-list and
+    # source-subtitle prefetching can run ahead of a NAS waking up for
+    # translation, or on their own schedule entirely. Empty string = not
+    # scheduled (manual-only via the Jobs page, the original behavior).
+    sync_media_cron: str = "40 9 * * *"
+    sync_subs_cron: str = "40 9 * * *"
 
     # Runtime
     db_path: str = "/data/subtitlarr.db"

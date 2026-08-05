@@ -3,6 +3,59 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.0]
+
+### Added
+- **Optional deferred-upload queue**: a new "Queue uploads instead of
+  pushing immediately" setting caches a successful translation's output
+  locally (`translated_pending_upload` status, new scratch dir
+  `subtitlarr-upload-queue/`) instead of uploading to Bazarr right away —
+  a new "Push queued uploads" job on the Jobs page then sends everything
+  queued to Bazarr in one batch. Lets a whole translation run finish
+  without waking a sleeping NAS (Bazarr's own handling of the upload is
+  what wakes it), batching that wake-up into one deliberate push instead
+  of once per item. New `app/engine/upload_queue.py`,
+  `POST /api/jobs/push-uploads`, migration 0004 (widens `items.status`).
+- **Independent daily crons for the two Bazarr sync jobs**: "Sync
+  wanted/missing" and "Pull pending subtitles" can now run on their own
+  schedule (default `40 9 * * *` for both), separate from the main
+  translation cron — configurable per-job from Settings, or left blank to
+  stay manual-only via the Jobs page as before. `CronScheduler` now
+  supports multiple independently-managed named jobs instead of a single
+  hardcoded one.
+- **Startup cleanup for stale open runs**: `run_history` rows left with
+  `finished_at IS NULL` by a process killed mid-batch are now closed out
+  automatically at startup (mirrors the existing stuck-item recovery),
+  with counts backfilled from `item_run_log`. Non-destructive — unlike
+  "Clear database," the run and its item history are kept, just marked
+  finished. Also exposed as an on-demand `POST /api/jobs/close-stale-runs`.
+- Jobs page action names now describe what they actually do: "Translate
+  next batch" (was "Scheduled job" — now also shows the configured daily
+  limit), "Sync wanted / missing from Bazarr" (was "Sync media"), "Pull
+  pending subtitles (sources) from Bazarr" (was "Sync subtitles").
+
+### Fixed
+- **Responsive layout was broken below 980px**: the sidebar used to
+  vanish entirely (`display:none`) with no way to reach other pages: it's
+  now a collapsible top bar with a working hamburger toggle. Also fixed a
+  CSS grid-track sizing bug that let wide table content force the whole
+  page to scroll horizontally instead of just the table itself, and a
+  grid-stretch bug that made the collapsed sidebar visually balloon to
+  match the page's full height on tall pages.
+- **Docker base image switched from `python:3.12-alpine` to
+  `python:3.12-slim`**: pydantic-core's Rust-based wheels don't reliably
+  cover musl/Alpine, which was causing real build failures. Also updated
+  `docker-compose.yml` and `.env.example`, which had drifted out of sync
+  with several engine/scheduling settings added since they were last
+  touched (NVIDIA engine, daily limit, pause-between-items, queue-uploads,
+  sync crons).
+
+### Added (deployment)
+- **Unraid Community Applications template** (`unraid/subtitlarr.xml`)
+  documenting every environment variable as a proper UI field, plus
+  README guidance on building/pushing your own image and picking a Docker
+  network type that can reach Bazarr/Ollama.
+
 ## [0.3.0]
 
 ### Added

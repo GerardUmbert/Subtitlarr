@@ -45,15 +45,38 @@ This also starts an Ollama container. Then open `http://localhost:8000`.
 
 ### Unraid (or any Docker host with Bazarr/Ollama already running)
 
-Create a container from this image with:
+There's no publicly published image yet, so on Unraid you first build and
+push your own, then point a container at it:
 
-- **Port**: `8000` → your choice of host port
-- **Volume**: a host path (e.g. `/mnt/user/appdata/subtitlarr`) → `/data`
-  (this is Subtitlarr's own database, *not* a media path)
-- **Environment variables** (see table below) — set `OLLAMA_BASE_URL` and
-  `BAZARR_BASE_URL` to reach your existing containers, e.g.
-  `http://<unraid-ip>:11434` and `http://<unraid-ip>:6767`, or the container
-  name if they're on the same custom Docker network.
+```bash
+docker build -t ghcr.io/<your-github-username>/subtitlarr:latest .
+docker push ghcr.io/<your-github-username>/subtitlarr:latest
+```
+
+(any registry works — Docker Hub, GHCR, or Unraid's own local image if
+you build directly on the box with `docker build` and skip the push)
+
+Then either:
+
+- **Community Applications template**: use
+  [`unraid/subtitlarr.xml`](unraid/subtitlarr.xml) as a starting point —
+  replace `YOUR_GITHUB_USERNAME` with wherever you pushed the image, then
+  add it as a template in Unraid's Docker tab (Add Container → Template →
+  paste the raw file URL or import it manually). It documents every
+  environment variable below as a proper UI field.
+- **Manual container**: create a container from your image with:
+  - **Port**: `8000` → your choice of host port
+  - **Volume**: a host path (e.g. `/mnt/user/appdata/subtitlarr`) → `/data`
+    (this is Subtitlarr's own database, *not* a media path)
+  - **Network type**: `bridge` works for most setups. If Bazarr/Ollama are
+    reachable only from a specific custom Docker network (e.g. a macvlan
+    `br0` network some Tailscale subnet-router setups use), switch
+    Subtitlarr to that same network in Unraid's network-type dropdown so
+    it can reach them by container name.
+  - **Environment variables** (see table below) — set `OLLAMA_BASE_URL` and
+    `BAZARR_BASE_URL` to reach your existing containers, e.g.
+    `http://<unraid-ip>:11434` and `http://<unraid-ip>:6767`, or the
+    container name if they're on the same custom Docker network.
 
 No media folders need to be mounted into this container — that's
 intentional.
@@ -75,12 +98,23 @@ Translation Engine / Language Rules / Bazarr Connection pages).
 | `OLLAMA_NUM_CTX` | Context window size in tokens — raise if long subtitle files come back incomplete (Ollama's own default of 4096 silently truncates larger prompts) | `8192` |
 | `GEMINI_API_KEY` | Gemini API key | *(none)* |
 | `GEMINI_MODEL` | Model name (verify current at [aistudio.google.com](https://aistudio.google.com) — Google retires older model IDs periodically) | `gemini-2.0-flash` |
-| `SCHEDULE_CRON` | 5-field cron expression for scheduled runs | `0 3 * * *` |
+| `NVIDIA_API_KEY` | NVIDIA NIM API key (free tier at [build.nvidia.com](https://build.nvidia.com)) | *(none)* |
+| `NVIDIA_MODEL` | Must be a real instructable chat model, not a dedicated translation model | `deepseek-ai/deepseek-v4-flash` |
+| `SCHEDULE_CRON` | 5-field cron expression for the main scheduled translation job | `0 3 * * *` |
 | `AGE_THRESHOLD_DAYS` | Days a subtitle must be missing before a scheduled run will translate it | `14` |
+| `DAILY_TRANSLATION_LIMIT` | Max items translated per day by scheduled/full runs (0 = unlimited); per-item re-runs bypass this | `100` |
+| `PAUSE_BETWEEN_ITEMS_SECONDS` | Rest between translations so the GPU isn't pegged non-stop | `30` |
+| `QUEUE_UPLOADS_ENABLED` | Hold translated subtitles locally instead of uploading immediately — push them all later in one batch from the Jobs page | `false` |
+| `SYNC_MEDIA_CRON` | Optional cron to auto-refresh Bazarr's wanted list; blank = manual only | *(blank)* |
+| `SYNC_SUBS_CRON` | Optional cron to auto pre-fetch source subtitle content; blank = manual only | *(blank)* |
 | `DB_PATH` | SQLite file path inside the container | `/data/subtitlarr.db` |
 | `RUN_CONCURRENCY` | Reserved for future use | `1` |
 | `LOG_LEVEL` | Logging verbosity | `INFO` |
-| `PORT` | Web UI port | `8000` |
+
+`PORT` is accepted but currently has no effect — the container always
+listens on `8000` internally (map it to any host port you like via Docker's
+own port mapping). Fixing `PORT` to actually change the internal listen
+port is tracked in `TODO.md`.
 
 Source-language priority (e.g. prefer English, then Italian) and the set of
 managed target languages are configured from the **Language Rules** page in
@@ -116,12 +150,16 @@ python -m pytest
 
 ## Known limitations / verify-before-relying-on
 
-- The Docker image has not yet been build-tested in this environment
-  (no Docker daemon was available during development) — before deploying,
-  run `docker build -t subtitlarr .` yourself and confirm it completes
-  cleanly on `python:3.12-alpine`. If any dependency fails to build due to
-  missing musl wheels, switch the base image in the `Dockerfile` to
-  `python:3.12-slim`.
+- The `Dockerfile` uses `python:3.12-slim` (Debian-based) rather than
+  Alpine — pydantic-core (used by FastAPI/pydantic, this app's core web
+  framework) is Rust-based and its prebuilt wheels don't reliably cover
+  musl/Alpine, which caused real build failures. `slim` trades a larger
+  image (~150MB base vs. Alpine's ~50MB) for a build that's known to work.
+- The Docker image has not been build-tested in *this* development
+  environment (no Docker daemon available here) — run
+  `docker build -t subtitlarr .` yourself once before deploying, and check
+  `docker compose up` reaches `http://localhost:8000`.
+- `PORT` is not yet wired to anything — see the Configuration table above.
 - Bazarr's upload/read endpoints were verified against the current
   `morpheus65535/bazarr` source on GitHub, not against a live instance —
   the very first real translation you run is the actual proof this works

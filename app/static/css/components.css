@@ -549,6 +549,7 @@ tbody tr:last-child td { border-bottom: none; }
 .status-queued, .status-pending { background: var(--surface-2); color: var(--ink-faint); }
 .status-failed { background: var(--bad-soft); color: var(--bad); }
 .status-skipped_no_source { background: var(--surface-2); color: var(--ink-faint); }
+.status-translated_pending_upload { background: var(--warn-soft); color: var(--warn); }
 
 .row-time { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink-faint); white-space: nowrap; }
 .row-action { text-align: right; }

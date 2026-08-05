@@ -1,4 +1,4 @@
-FROM python:3.12-alpine
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -7,7 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 
-RUN adduser -D -u 1000 subtitlarr \
+RUN useradd --uid 1000 --create-home --shell /usr/sbin/nologin subtitlarr \
     && mkdir -p /data \
     && chown -R subtitlarr:subtitlarr /app /data
 USER subtitlarr

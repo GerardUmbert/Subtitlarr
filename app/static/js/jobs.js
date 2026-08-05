@@ -18,6 +18,12 @@ createApp({
       syncingSubs: false,
       syncSubsStarted: false,
       syncSubsResult: null,
+      queueUploadsEnabled: false,
+      pendingUploadCount: 0,
+      pushUploadsActive: false,
+      pushingUploads: false,
+      pushUploadsStarted: false,
+      pushUploadsResult: null,
       confirmingClear: false,
       clearing: false,
       clearResult: null,
@@ -36,6 +42,9 @@ createApp({
         this.runActive = jobs.run_active;
         this.syncMediaActive = jobs.sync_media_active;
         this.syncSubsActive = jobs.sync_subs_active;
+        this.queueUploadsEnabled = jobs.queue_uploads_enabled;
+        this.pendingUploadCount = jobs.pending_upload_count;
+        this.pushUploadsActive = jobs.push_uploads_active;
       } catch (_) {
         // keep last known state on transient failure
       }
@@ -95,6 +104,39 @@ createApp({
       } finally {
         this.syncingSubs = false;
       }
+    },
+    async pushUploads() {
+      this.pushingUploads = true;
+      this.error = "";
+      this.pushUploadsResult = null;
+      try {
+        const result = await Api.pushUploads();
+        if (!result.started) {
+          this.error = result.reason || "Could not start push";
+          return;
+        }
+        this.pushUploadsStarted = true;
+        setTimeout(() => (this.pushUploadsStarted = false), 3000);
+        await this.load();
+        this.pollPushUploadsResult();
+      } catch (err) {
+        this.error = err.message;
+      } finally {
+        this.pushingUploads = false;
+      }
+    },
+    pollPushUploadsResult() {
+      const check = async () => {
+        const status = await Api.getSyncStatus();
+        if (status.push_uploads.active) {
+          setTimeout(check, 1000);
+        } else {
+          this.pushUploadsResult = status.push_uploads.result;
+          if (status.push_uploads.error) this.error = status.push_uploads.error;
+          await this.load();
+        }
+      };
+      setTimeout(check, 1000);
     },
     pollSyncSubsResult() {
       // The job runs in the background (asyncio.create_task) — poll until

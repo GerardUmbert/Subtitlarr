@@ -64,6 +64,7 @@ const Api = (() => {
     clearDatabase: () => request("POST", "/api/jobs/clear-database"),
     syncMedia: () => request("POST", "/api/jobs/sync-media"),
     syncSubs: () => request("POST", "/api/jobs/sync-subs"),
+    pushUploads: () => request("POST", "/api/jobs/push-uploads"),
     getSyncStatus: () => request("GET", "/api/jobs/sync-status"),
 
     getHistory: (params = {}) => {

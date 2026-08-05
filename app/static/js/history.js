@@ -4,6 +4,7 @@ const STATUS_LABELS = {
   pending: "queued",
   queued: "queued",
   translating: "translating",
+  translated_pending_upload: "pending upload",
   done: "done",
   failed: "failed",
   skipped_no_source: "no source",

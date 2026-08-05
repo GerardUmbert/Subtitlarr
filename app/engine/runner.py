@@ -144,6 +144,7 @@ class RunController:
                         num_ctx=self._settings.ollama_num_ctx,
                         batch_token_budget_override=batch_token_budget_override,
                         cached_source_path=cached_path,
+                        queue_uploads=self._settings.queue_uploads_enabled,
                     )
                 except Exception:  # noqa: BLE001 - one item's failure must not abort the batch
                     progress.failed += 1
