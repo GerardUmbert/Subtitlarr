@@ -8,6 +8,10 @@ createApp({
       ageThresholdDays: 14,
       dailyTranslationLimit: 100,
       nextRun: "",
+      syncMediaCron: "",
+      syncSubsCron: "",
+      nextSyncMediaRun: "",
+      nextSyncSubsRun: "",
       runActive: false,
       running: false,
       runStarted: false,
@@ -45,6 +49,17 @@ createApp({
         this.queueUploadsEnabled = jobs.queue_uploads_enabled;
         this.pendingUploadCount = jobs.pending_upload_count;
         this.pushUploadsActive = jobs.push_uploads_active;
+      } catch (_) {
+        // keep last known state on transient failure
+      }
+      try {
+        const [cfg, nextRuns] = await Promise.all([Api.getScheduleConfig(), Api.getNextRuns()]);
+        this.syncMediaCron = cfg.sync_media_cron;
+        this.syncSubsCron = cfg.sync_subs_cron;
+        this.nextSyncMediaRun = nextRuns.next_sync_media_run
+          ? new Date(nextRuns.next_sync_media_run).toLocaleString() : "";
+        this.nextSyncSubsRun = nextRuns.next_sync_subs_run
+          ? new Date(nextRuns.next_sync_subs_run).toLocaleString() : "";
       } catch (_) {
         // keep last known state on transient failure
       }

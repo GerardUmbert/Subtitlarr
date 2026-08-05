@@ -3,6 +3,17 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.5.0]
+
+### Fixed
+- Jobs page: "Sync wanted / missing" and "Pull pending subtitles" now show
+  their own cron expression and next scheduled run, same as "Translate
+  next batch" already did — previously only the main translation job
+  surfaced this even though both sync jobs got independent crons in 0.4.0.
+- Settings page's translation-schedule card was still titled "Schedule"
+  after Jobs renamed its counterpart to "Translate next batch" — renamed
+  to match.
+
 ## [0.4.0]
 
 ### Added

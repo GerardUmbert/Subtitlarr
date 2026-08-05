@@ -36,6 +36,8 @@
     <div class="panel-title-sub">Refreshes the wanted-subtitle list — no subtitle content is fetched, no translation runs</div>
 
     <div class="engine-config" style="margin-top:0; border-top:none;">
+      <p class="field-hint">Cron: <span class="mono">{% raw %}{{ syncMediaCron || 'not scheduled' }}{% endraw %}</span> (<a href="/settings">change</a>)</p>
+      <p class="field-hint" v-if="nextSyncMediaRun">Next scheduled run: {% raw %}{{ nextSyncMediaRun }}{% endraw %}</p>
       <div class="field-row">
         <button class="btn" @click="syncMedia" :disabled="syncMediaActive || syncingMedia || runActive">
           {% raw %}{{ syncMediaActive ? 'Syncing…' : (syncingMedia ? 'Starting…' : 'Sync wanted / missing') }}{% endraw %}
@@ -50,6 +52,8 @@
     <div class="panel-title-sub">Pre-fetches source subtitle content for every pending item into the local cache — no translation, no uploads</div>
 
     <div class="engine-config" style="margin-top:0; border-top:none;">
+      <p class="field-hint">Cron: <span class="mono">{% raw %}{{ syncSubsCron || 'not scheduled' }}{% endraw %}</span> (<a href="/settings">change</a>)</p>
+      <p class="field-hint" v-if="nextSyncSubsRun">Next scheduled run: {% raw %}{{ nextSyncSubsRun }}{% endraw %}</p>
       <div class="field-row">
         <button class="btn" @click="syncSubs" :disabled="syncSubsActive || syncingSubs || runActive">
           {% raw %}{{ syncSubsActive ? 'Pulling…' : (syncingSubs ? 'Starting…' : 'Pull pending subtitles') }}{% endraw %}
