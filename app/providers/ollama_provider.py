@@ -109,8 +109,14 @@ class OllamaProvider(TranslationProvider):
         except httpx.HTTPError as exc:
             logger.warning("Ollama force-unload after watchdog timeout failed: %s", exc)
 
-    async def translate(self, dialogue_text: str, source_lang: str, target_lang: str) -> str:
-        system_prompt = build_system_prompt(source_lang, target_lang)
+    async def translate(
+        self,
+        dialogue_text: str,
+        source_lang: str,
+        target_lang: str,
+        catalan_vegeta_insults: bool = False,
+    ) -> str:
+        system_prompt = build_system_prompt(source_lang, target_lang, catalan_vegeta_insults)
 
         for attempt in (1, 2):
             try:

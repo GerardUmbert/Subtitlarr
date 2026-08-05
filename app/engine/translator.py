@@ -46,6 +46,7 @@ async def _translate_batch(
     active_provider: TranslationProvider,
     fallback_provider: TranslationProvider | None,
     item_id: int,
+    catalan_vegeta_insults: bool = False,
 ) -> tuple[list, str]:
     """Translates and reconciles ONE batch of cues, with fallback-provider
     handling. Returns (reassembled_subs_for_this_batch, engine_used)."""
@@ -59,7 +60,9 @@ async def _translate_batch(
     # vs. anything before/after it.
     call_started = time.monotonic()
     try:
-        llm_response = await active_provider.translate(dialogue_text, source_lang, target_lang)
+        llm_response = await active_provider.translate(
+            dialogue_text, source_lang, target_lang, catalan_vegeta_insults
+        )
         logger.info(
             "translate() call for item %d (%s) took %.2fs",
             item_id, active_provider.name, time.monotonic() - call_started,
@@ -72,7 +75,9 @@ async def _translate_batch(
             active_provider.name, item_id, fallback_provider.name,
         )
         engine_used = fallback_provider.name
-        llm_response = await fallback_provider.translate(dialogue_text, source_lang, target_lang)
+        llm_response = await fallback_provider.translate(
+            dialogue_text, source_lang, target_lang, catalan_vegeta_insults
+        )
 
     return reassemble(batch, llm_response), engine_used
 
@@ -99,6 +104,7 @@ async def _translate_batches(
     active_provider: TranslationProvider,
     fallback_provider: TranslationProvider | None,
     item_id: int,
+    catalan_vegeta_insults: bool = False,
 ) -> tuple[list, str]:
     """Runs all of an item's batches, sequentially for every provider
     except NVIDIA (windowed concurrency there — see
@@ -111,7 +117,8 @@ async def _translate_batches(
     if active_provider.name != "nvidia":
         for batch in batches:
             batch_result, batch_engine = await _translate_batch(
-                batch, source_lang, target_lang, active_provider, fallback_provider, item_id
+                batch, source_lang, target_lang, active_provider, fallback_provider, item_id,
+                catalan_vegeta_insults,
             )
             translated_subs.extend(batch_result)
             engine_used = batch_engine
@@ -122,7 +129,10 @@ async def _translate_batches(
         window_started = time.monotonic()
         results = await asyncio.gather(
             *(
-                _translate_batch(batch, source_lang, target_lang, active_provider, fallback_provider, item_id)
+                _translate_batch(
+                    batch, source_lang, target_lang, active_provider, fallback_provider, item_id,
+                    catalan_vegeta_insults,
+                )
                 for batch in window
             )
         )
@@ -225,9 +235,11 @@ async def translate_item(
             item_id, time.monotonic() - chunk_started, len(batches),
         )
 
+        catalan_vegeta_insults = repository.get_config(conn, "catalan_vegeta_insults", default=False)
         translate_started = time.monotonic()
         translated_subs, engine_used = await _translate_batches(
-            batches, source_lang, target_lang, active_provider, fallback_provider, item_id
+            batches, source_lang, target_lang, active_provider, fallback_provider, item_id,
+            catalan_vegeta_insults,
         )
         logger.info(
             "Item %d: all batches took %.2fs total (item started %.2fs ago)",
@@ -250,12 +262,15 @@ async def translate_item(
             # Bazarr's own handling of the upload is what wakes the NAS's
             # disks, so queuing lets a whole run finish without touching
             # them; a later "push queued uploads" sends everything in one
-            # burst. Not marked done/completed yet — the upload hasn't
-            # actually happened.
+            # burst. Status is NOT "done" — the upload itself hasn't
+            # happened — but completed_at IS stamped here: translation
+            # work genuinely finished at this moment, and the Queue page's
+            # duration column needs it to show real per-item translation
+            # time instead of "—" for every queued item.
             upload_queue.save_pending_upload(upload_queue.DEFAULT_QUEUE_ROOT, item_id, srt_bytes)
             repository.update_item_status(
                 conn, item_id, "translated_pending_upload",
-                source_language=source_lang, engine_used=engine_used,
+                source_language=source_lang, engine_used=engine_used, mark_completed=True,
             )
         else:
             if item["item_type"] == "episode":

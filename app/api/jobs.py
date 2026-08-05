@@ -117,15 +117,16 @@ _push_uploads_state = {"active": False, "error": None, "result": None}
 
 
 @router.post("/push-uploads")
-async def push_uploads(conn=Depends(state.get_conn), client=Depends(state.get_client), runner=Depends(state.get_runner)):
+async def push_uploads(conn=Depends(state.get_conn), client=Depends(state.get_client)):
     """Uploads every item currently held as 'translated_pending_upload' to
     Bazarr in one pass — the deferred half of queue_uploads_enabled. Only
     meaningful when that setting is (or was) on; otherwise there's nothing
-    queued to push."""
+    queued to push. Deliberately NOT gated on a translation run being
+    active — it only touches items that already finished translating and
+    are sitting in the upload queue, which a live run never writes to
+    mid-progress, so there's no real conflict to guard against."""
     if _push_uploads_state["active"]:
         return {"started": False, "reason": "A push is already in progress"}
-    if runner.current is not None and runner.current.active:
-        return {"started": False, "reason": "A run is already in progress"}
 
     async def _run():
         _push_uploads_state["active"] = True

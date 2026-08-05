@@ -176,11 +176,18 @@ nav { display: flex; flex-direction: column; gap: 2px; }
 }
 
 .stat {
+  display: block;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 16px 18px;
   box-shadow: var(--mono-shadow);
+  text-decoration: none;
+  transition: border-color 0.12s ease, transform 0.12s ease;
+}
+a.stat:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
 }
 
 .stat-label {

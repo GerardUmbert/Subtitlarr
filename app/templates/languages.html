@@ -35,25 +35,18 @@
     </div>
 
     <div class="engine-config">
-      <div class="panel-title" style="margin-bottom:2px;">Managed languages</div>
-      <div class="panel-title-sub">Target languages Subtitlarr should try to fill in (optional — leave empty to follow Bazarr's own configured languages)</div>
-      <div class="tag-input-list">
-        <span class="tag-chip" v-for="(lang, i) in managedLanguages" :key="lang">
-          {% raw %}{{ lang.toUpperCase() }}{% endraw %}
-          <span class="remove" @click="removeManaged(i)">×</span>
-        </span>
-      </div>
-      <div class="field-row" style="margin-top:0;">
-        <input v-model="newManagedLang" placeholder="e.g. es" style="max-width:120px;"
-               @keyup.enter="addManaged" />
-        <button class="btn" @click="addManaged">Add</button>
-      </div>
-      <div class="field-row">
-        <button class="btn btn-primary" @click="save" :disabled="saving">
-          {% raw %}{{ saving ? 'Saving…' : 'Save' }}{% endraw %}
-        </button>
-        <span v-if="saved" class="test-result">● saved</span>
-      </div>
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+        <input type="checkbox" v-model="catalanVegetaInsults" style="width:auto;" />
+        Vegeta-style insults for Catalan
+      </label>
+      <p class="field-hint">When translating into Catalan, adapt insults and profanity into the proud, colorful, non-literal style of Vegeta's Catalan dub (TV3's Bola de Drac Z) instead of a literal translation. Doesn't affect any other language.</p>
+    </div>
+
+    <div class="field-row" style="margin-top:16px;">
+      <button class="btn btn-primary" @click="save" :disabled="saving">
+        {% raw %}{{ saving ? 'Saving…' : 'Save' }}{% endraw %}
+      </button>
+      <span v-if="saved" class="test-result">● saved</span>
     </div>
   </div>
 </div>

@@ -34,7 +34,9 @@ class TrackingProvider(TranslationProvider):
         self.max_in_flight = 0
         self.call_order: list[int] = []
 
-    async def translate(self, dialogue_text: str, source_lang: str, target_lang: str) -> str:
+    async def translate(
+        self, dialogue_text: str, source_lang: str, target_lang: str, catalan_vegeta_insults: bool = False
+    ) -> str:
         index = int(dialogue_text.split("\n", 1)[0])
         self.call_order.append(index)
         self.in_flight += 1
@@ -119,7 +121,7 @@ async def test_nvidia_falls_back_per_batch_on_rate_limit_within_a_window():
     class FlakyProvider(TranslationProvider):
         name = "nvidia"
 
-        async def translate(self, dialogue_text, source_lang, target_lang):
+        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False):
             index = int(dialogue_text.split("\n", 1)[0])
             if index == 2:
                 raise ProviderRateLimitedError("simulated 429")

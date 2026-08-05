@@ -74,7 +74,7 @@
     <div class="engine-config" style="margin-top:0; border-top:none;">
       <p class="field-hint">{% raw %}{{ pendingUploadCount }}{% endraw %} item{% raw %}{{ pendingUploadCount === 1 ? '' : 's' }}{% endraw %} waiting to be pushed.</p>
       <div class="field-row">
-        <button class="btn" @click="pushUploads" :disabled="pushUploadsActive || pushingUploads || runActive || pendingUploadCount === 0">
+        <button class="btn" @click="pushUploads" :disabled="pushUploadsActive || pushingUploads || pendingUploadCount === 0">
           {% raw %}{{ pushUploadsActive ? 'Pushing…' : (pushingUploads ? 'Starting…' : 'Push queued uploads') }}{% endraw %}
         </button>
         <span v-if="pushUploadsStarted" class="test-result">● started</span>

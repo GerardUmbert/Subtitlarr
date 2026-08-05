@@ -86,7 +86,13 @@ class FakeBazarrClient:
 class FakeProvider(TranslationProvider):
     name = "fake"
 
-    async def translate(self, dialogue_text: str, source_lang: str, target_lang: str) -> str:
+    def __init__(self):
+        self.received_catalan_vegeta_insults: list[bool] = []
+
+    async def translate(
+        self, dialogue_text: str, source_lang: str, target_lang: str, catalan_vegeta_insults: bool = False
+    ) -> str:
+        self.received_catalan_vegeta_insults.append(catalan_vegeta_insults)
         # trivial "translation": prefix each line to prove content flowed through
         return "1\nHola.\n\n2\n¿Cómo estás?"
 
@@ -163,6 +169,45 @@ async def test_full_translation_round_trip(conn, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_catalan_vegeta_insults_setting_reaches_the_provider(conn, monkeypatch):
+    """Confirms the DB-stored catalan_vegeta_insults toggle (Language
+    Rules page) actually flows from translate_item() through to the
+    provider's translate() call for a Catalan target — and stays off for
+    a non-Catalan item even with the setting enabled."""
+    repository.set_config(conn, "source_lang_priority", ["en"])
+    repository.set_config(conn, "catalan_vegeta_insults", True)
+    repository.upsert_item_seen(
+        conn, item_type="episode", bazarr_id=42, series_id=1,
+        title="Legacy", series_title="The Bear", season_episode="3x7",
+        target_language="ca",
+    )
+
+    fake_client = FakeBazarrClient(
+        wanted_episodes=[
+            WantedEpisode(
+                seriesTitle="The Bear", episode_number="3x7", episodeTitle="Legacy",
+                missing_subtitles=[LanguageInfo(name="Catalan", code2="ca", code3="cat")],
+                sonarrSeriesId=1, sonarrEpisodeId=42,
+            )
+        ]
+    )
+
+    from app.config import Settings
+    settings = Settings(active_engine="ollama", fallback_engine="")
+
+    fake_provider = FakeProvider()
+    monkeypatch.setattr("app.engine.runner.get_active_provider", lambda s: fake_provider)
+    monkeypatch.setattr("app.engine.runner.get_fallback_provider", lambda s: None)
+
+    controller = RunController(conn, lambda: fake_client, settings)
+    progress = await controller.run_now()
+
+    assert progress.processed == 1
+    assert progress.failed == 0
+    assert fake_provider.received_catalan_vegeta_insults == [True]
+
+
+@pytest.mark.asyncio
 async def test_queue_uploads_enabled_holds_output_instead_of_uploading(conn, monkeypatch, tmp_path):
     """With queue_uploads_enabled, a successful translation must NOT reach
     Bazarr at all — it's cached to local disk and the item marked
@@ -201,7 +246,11 @@ async def test_queue_uploads_enabled_holds_output_instead_of_uploading(conn, mon
 
     row = conn.execute("SELECT * FROM items WHERE bazarr_id = 42").fetchone()
     assert row["status"] == "translated_pending_upload"
-    assert row["completed_at"] is None  # not actually done yet
+    # completed_at IS stamped even though status isn't "done" yet — it
+    # reflects when translation finished, not when it was pushed to
+    # Bazarr, so the Queue page's duration column shows real per-item
+    # translation time instead of "—" for every queued item.
+    assert row["completed_at"] is not None
     assert row["engine_used"] == "fake"
 
     queued_file = tmp_path / "upload-queue" / f"{row['id']}.srt"
@@ -255,7 +304,9 @@ class EchoProvider(TranslationProvider):
 
     name = "echo"
 
-    async def translate(self, dialogue_text: str, source_lang: str, target_lang: str) -> str:
+    async def translate(
+        self, dialogue_text: str, source_lang: str, target_lang: str, catalan_vegeta_insults: bool = False
+    ) -> str:
         blocks = dialogue_text.strip().split("\n\n")
         out = []
         for block in blocks:

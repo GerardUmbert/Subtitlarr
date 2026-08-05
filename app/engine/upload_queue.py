@@ -56,7 +56,12 @@ async def push_pending_uploads(
                     language_code2=item["target_language"],
                     srt_bytes=srt_bytes,
                 )
-            repository.update_item_status(conn, item_id, "done", mark_completed=True)
+            # completed_at was already stamped when translation finished
+            # (see translator.translate_item) — pushing to Bazarr later
+            # doesn't change WHEN the translation itself completed, so
+            # mark_completed is deliberately omitted here to avoid
+            # overwriting it with the (much later) push time.
+            repository.update_item_status(conn, item_id, "done")
             path.unlink(missing_ok=True)
             pushed += 1
         except Exception:  # noqa: BLE001 - one bad upload must not abort the push

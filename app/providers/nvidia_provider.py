@@ -73,8 +73,14 @@ class NvidiaProvider(TranslationProvider):
     async def aclose(self) -> None:
         await self._client.aclose()
 
-    async def translate(self, dialogue_text: str, source_lang: str, target_lang: str) -> str:
-        system_prompt = build_system_prompt(source_lang, target_lang)
+    async def translate(
+        self,
+        dialogue_text: str,
+        source_lang: str,
+        target_lang: str,
+        catalan_vegeta_insults: bool = False,
+    ) -> str:
+        system_prompt = build_system_prompt(source_lang, target_lang, catalan_vegeta_insults)
         try:
             resp = await self._client.post(
                 "/chat/completions",

@@ -5,7 +5,38 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [0.5.0]
 
+### Added
+- **Catalan "Vegeta-style" insult translation** (Language Rules page): an
+  optional toggle that, when translating into Catalan, adapts insults and
+  profanity into the proud, colorful, non-literal style of Vegeta's
+  Catalan dub (TV3's Bola de Drac Z) instead of a literal translation.
+  Confirmed live that DeepSeek V4 Flash already recognizes this specific
+  cultural reference and produces natural, in-character adaptations from
+  a style description alone — no hardcoded phrase list needed. The prompt
+  explicitly requires matching the ORIGINAL insult's intensity/context
+  (a mild jab gets a milder Vegeta-style line, a harsh insult gets a more
+  severe one), not an arbitrary pick from the style. Only affects insult/
+  profanity lines — the rest of the translation stays normal and accurate.
+  New `app.providers.prompts.CATALAN_VEGETA_INSULTS_ADDON`, threaded
+  through every provider's `translate()` and read live per-item from
+  Language Rules' saved config (not locked in at run start).
+
 ### Fixed
+- **"Push queued uploads" no longer blocked while a translation run is
+  active** — it only touches items that already finished translating and
+  are sitting in the upload queue, which a live run never writes to
+  mid-progress, so the guard was unnecessarily conservative.
+- **Removed the dead "Managed languages" field** from Language Rules — it
+  was saved but never actually read anywhere in the translation pipeline;
+  target languages always come directly from whatever Bazarr itself
+  reports as missing, not from Subtitlarr's own config.
+- **Source language priority now defaults to `[\"en\"]`** on a fresh
+  install instead of an empty list.
+- **Items held as "pending upload" now show a real duration** on the
+  Queue page instead of "—" — `completed_at` is stamped when translation
+  actually finishes, not deferred until the later "push queued uploads"
+  action, and pushing to Bazarr no longer overwrites that original
+  timestamp with the (much later) push time.
 - Jobs page: "Sync wanted / missing" and "Pull pending subtitles" now show
   their own cron expression and next scheduled run, same as "Translate
   next batch" already did — previously only the main translation job

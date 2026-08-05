@@ -5,9 +5,8 @@ createApp({
     return {
       pageLoading: true,
       sourcePriority: [],
-      managedLanguages: [],
       newSourceLang: "",
-      newManagedLang: "",
+      catalanVegetaInsults: false,
       saving: false,
       saved: false,
     };
@@ -16,7 +15,7 @@ createApp({
     async load() {
       const cfg = await Api.getLanguageConfig();
       this.sourcePriority = cfg.source_priority;
-      this.managedLanguages = cfg.managed_languages;
+      this.catalanVegetaInsults = cfg.catalan_vegeta_insults;
     },
     addSource() {
       const lang = this.newSourceLang.trim().toLowerCase();
@@ -28,23 +27,13 @@ createApp({
     removeSource(i) {
       this.sourcePriority.splice(i, 1);
     },
-    addManaged() {
-      const lang = this.newManagedLang.trim().toLowerCase();
-      if (lang && !this.managedLanguages.includes(lang)) {
-        this.managedLanguages.push(lang);
-      }
-      this.newManagedLang = "";
-    },
-    removeManaged(i) {
-      this.managedLanguages.splice(i, 1);
-    },
     async save() {
       this.saving = true;
       this.saved = false;
       try {
         await Api.setLanguageConfig({
           source_priority: this.sourcePriority,
-          managed_languages: this.managedLanguages,
+          catalan_vegeta_insults: this.catalanVegetaInsults,
         });
         this.saved = true;
         setTimeout(() => (this.saved = false), 3000);

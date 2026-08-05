@@ -36,7 +36,13 @@ def _seed_pending_item(conn, bazarr_id: int, title: str, item_type: str = "episo
         season_episode="1x1" if item_type == "episode" else None, target_language="es",
     )
     item_id = conn.execute("SELECT id FROM items WHERE bazarr_id = ?", (bazarr_id,)).fetchone()["id"]
-    repository.update_item_status(conn, item_id, "translated_pending_upload", engine_used="fake")
+    # mark_completed=True mirrors real translate_item() behavior: translation
+    # work genuinely finished when an item lands in translated_pending_upload,
+    # only the upload itself is deferred — completed_at must already be set
+    # here so tests can verify push_pending_uploads() doesn't clobber it.
+    repository.update_item_status(
+        conn, item_id, "translated_pending_upload", engine_used="fake", mark_completed=True
+    )
     return item_id
 
 
@@ -58,6 +64,28 @@ async def test_push_uploads_one_queued_episode(conn, tmp_path):
     assert row["status"] == "done"
     assert row["completed_at"] is not None
     assert not (queue_dir / f"{item_id}.srt").exists()  # cleaned up after success
+
+
+@pytest.mark.asyncio
+async def test_push_uploads_does_not_overwrite_the_original_completed_at(conn, tmp_path):
+    """completed_at reflects when TRANSLATION finished, not when it was
+    pushed to Bazarr — the Queue page's duration column depends on this to
+    show real per-item translation time instead of the (much longer) wait
+    until someone clicks 'Push queued uploads'."""
+    item_id = _seed_pending_item(conn, bazarr_id=55, title="Delayed Push")
+    original_completed_at = conn.execute(
+        "SELECT completed_at FROM items WHERE id = ?", (item_id,)
+    ).fetchone()["completed_at"]
+    assert original_completed_at is not None
+
+    queue_dir = tmp_path / "queue"
+    upload_queue.save_pending_upload(queue_dir, item_id, b"1\nHola.\n")
+    client = FakeClient()
+    await upload_queue.push_pending_uploads(conn, client, queue_dir)
+
+    row = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    assert row["status"] == "done"
+    assert row["completed_at"] == original_completed_at
 
 
 @pytest.mark.asyncio

@@ -24,26 +24,26 @@
 
   <template v-else>
   <div class="stats">
-    <div class="stat">
+    <a class="stat" href="/queue?status=&item_type=&exclude_no_source=0">
       <div class="stat-label">Wanted (Bazarr)</div>
       <div class="stat-value">{% raw %}{{ stats.wanted ?? '—' }}{% endraw %}</div>
       <div class="stat-hint">tracked missing-subtitle items</div>
-    </div>
-    <div class="stat">
+    </a>
+    <a class="stat" href="/queue?status=&item_type=&exclude_no_source=1">
       <div class="stat-label">Translatable</div>
       <div class="stat-value accent">{% raw %}{{ stats.translatable ?? '—' }}{% endraw %}</div>
       <div class="stat-hint">have a usable source language</div>
-    </div>
-    <div class="stat">
+    </a>
+    <a class="stat" href="/queue?status=done&item_type=&exclude_no_source=0">
       <div class="stat-label">Completed</div>
       <div class="stat-value good">{% raw %}{{ stats.completed ?? '—' }}{% endraw %}</div>
       <div class="stat-hint">written back to Bazarr</div>
-    </div>
-    <div class="stat">
+    </a>
+    <a class="stat" href="/queue?status=skipped_no_source&item_type=&exclude_no_source=0">
       <div class="stat-label">No source available</div>
       <div class="stat-value faint">{% raw %}{{ stats.no_source ?? '—' }}{% endraw %}</div>
       <div class="stat-hint">needs speech-to-text, not translation</div>
-    </div>
+    </a>
   </div>
 
   <div class="panel">

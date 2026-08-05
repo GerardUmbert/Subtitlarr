@@ -21,10 +21,18 @@ class TranslationProvider(ABC):
     name: str
 
     @abstractmethod
-    async def translate(self, dialogue_text: str, source_lang: str, target_lang: str) -> str:
+    async def translate(
+        self,
+        dialogue_text: str,
+        source_lang: str,
+        target_lang: str,
+        catalan_vegeta_insults: bool = False,
+    ) -> str:
         """Sends dialogue-only text (index + content, no timestamps) to the
         LLM and returns its raw text response. Reassembly onto original
-        timing happens separately in app.subtitles.reconciler."""
+        timing happens separately in app.subtitles.reconciler.
+        catalan_vegeta_insults only has an effect when target_lang is
+        Catalan — see app.providers.prompts."""
         ...
 
     @abstractmethod

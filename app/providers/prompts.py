@@ -18,13 +18,42 @@ SYSTEM_PROMPT = (
 )
 
 
-def build_system_prompt(source_lang_code: str, target_lang_code: str) -> str:
-    return SYSTEM_PROMPT.format(
+# Optional add-on, appended only when translating INTO Catalan and the
+# corresponding Language Rules toggle is on. Deliberately doesn't hardcode
+# a fixed phrase list — confirmed live that DeepSeek V4 Flash already
+# recognizes this specific cultural reference (TV3's Bola de Drac Z dub)
+# and produces natural, in-character adaptations from the style
+# description alone (e.g. "Maleïda bèstia... tros d'inútil!" for "you
+# stupid idiot... worthless piece of garbage"), without needing a curated
+# vocabulary baked into the prompt.
+CATALAN_VEGETA_INSULTS_ADDON = (
+    " For any insult, swear word, or contemptuous expression in the "
+    "source dialogue, do NOT translate it literally — adapt it into the "
+    "proud, colorful, larger-than-life insult style of Vegeta's Catalan "
+    "dub (TV3's Bola de Drac Z), reflecting his characteristic tone of "
+    "pride and superiority. Match the intensity and intent of the "
+    "ORIGINAL insult, not just its general category — a mild jab (e.g. "
+    "\"idiot\") should get a comparatively milder Vegeta-style dismissal, "
+    "while a harsh, degrading insult should get one of his more severe, "
+    "contemptuous ones. Consider who is speaking to whom and why, so the "
+    "chosen insult fits the scene's context, not a random pick from the "
+    "same style. Keep the rest of the translation natural and accurate; "
+    "this rule applies only to insults/profanity."
+)
+
+
+def build_system_prompt(
+    source_lang_code: str, target_lang_code: str, catalan_vegeta_insults: bool = False
+) -> str:
+    prompt = SYSTEM_PROMPT.format(
         source_lang=language_name(source_lang_code),
         source_lang_code=source_lang_code,
         target_lang=language_name(target_lang_code),
         target_lang_code=target_lang_code,
     )
+    if catalan_vegeta_insults and target_lang_code == "ca":
+        prompt += CATALAN_VEGETA_INSULTS_ADDON
+    return prompt
 
 
 def build_user_prompt(dialogue_text: str) -> str:
