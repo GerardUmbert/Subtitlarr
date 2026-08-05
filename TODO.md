@@ -133,9 +133,10 @@
 
 ## Not started
 
-- **Pre-fetch source subtitles from Bazarr** — superseded by the more
-  detailed writeup in `plans/prefetch-source-subtitles.md` (now tied to the
-  10am scheduled-sync cron rather than every run_batch() call).
+- [x] **Pre-fetch source subtitles from Bazarr, cached locally** — built
+  2026-08-05, see `plans/prefetch-source-subtitles.md` for full details.
+  Applies to every run type (not just scheduled). Not yet live-verified
+  end-to-end.
 - **Per-batch translation history view** — see `plans/batch-history-view.md`.
 
 - [x] **Watchdog for stuck/slow Ollama requests** — implemented in

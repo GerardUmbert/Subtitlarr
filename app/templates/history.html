@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}History{% endblock %}
+{% block content %}
+<div id="history-app">
+  <div class="page-head">
+    <div>
+      <h1>History</h1>
+      <p class="page-sub">Every past translation run, grouped by batch — expand a run to see each file's individual result and elapsed time.</p>
+    </div>
+  </div>
+
+  <div class="panel-loading" v-if="pageLoading">
+    <div class="loading-spinner"></div>
+    <p>Loading history…</p>
+  </div>
+
+  <template v-else>
+    <div v-if="!runs.length" class="panel">
+      <div class="empty-state" style="padding:40px 20px;">No runs yet — trigger a translation from the Queue or Jobs page.</div>
+    </div>
+
+    <div class="panel history-run" v-for="run in runs" :key="run.id" style="margin-bottom:14px;">
+      <div class="history-run-head" @click="toggleExpand(run)">
+        <div class="history-run-main">
+          <div class="history-run-title">
+            <span class="chip" style="cursor:default;">{% raw %}{{ triggeredByLabel(run.triggered_by) }}{% endraw %}</span>
+            <span class="badge badge-local" v-if="run.primary_engine">{% raw %}{{ engineSummary(run) }}{% endraw %}</span>
+            <span v-if="!run.finished_at" class="status-pill status-translating"><span class="dot"></span>in progress</span>
+          </div>
+          <div class="history-run-meta">
+            {% raw %}{{ formatDateTime(run.started_at) }}{% endraw %} · {% raw %}{{ runDuration(run) }}{% endraw %}
+          </div>
+        </div>
+        <div class="history-run-stats">
+          <span class="history-stat"><b>{% raw %}{{ run.items_processed }}{% endraw %}</b> files</span>
+          <span class="history-stat good" v-if="run.items_processed - run.items_failed > 0"><b>{% raw %}{{ run.items_processed - run.items_failed }}{% endraw %}</b> ok</span>
+          <span class="history-stat bad" v-if="run.items_failed > 0"><b>{% raw %}{{ run.items_failed }}{% endraw %}</b> failed</span>
+          <span class="expand-arrow" :class="{ open: expandedRunId === run.id }">▾</span>
+        </div>
+      </div>
+
+      <div class="history-run-body" v-if="expandedRunId === run.id">
+        <div v-if="loadingItemsForRunId === run.id" class="empty-state" style="padding:20px;">Loading…</div>
+        <div class="table-scroll" v-else-if="(runItems[run.id] || []).length">
+          <table>
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Language</th>
+                <th>Status</th>
+                <th>Engine</th>
+                <th>Duration</th>
+                <th>Error</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in runItems[run.id]" :key="item.log_id">
+                <td>
+                  <div class="title-cell">{% raw %}{{ item.series_title || item.title }}{% endraw %}</div>
+                  <div class="title-type">{% raw %}{{ item.season_episode ? item.season_episode + ' · episode' : 'movie' }}{% endraw %}</div>
+                </td>
+                <td><span class="lang-tag">{% raw %}{{ item.target_language.toUpperCase() }}{% endraw %}</span></td>
+                <td><span :class="'status-pill status-' + item.status"><span class="dot"></span>{% raw %}{{ statusLabel(item.status) }}{% endraw %}</span></td>
+                <td class="row-time">{% raw %}{{ item.engine_used || '—' }}{% endraw %}</td>
+                <td class="row-time">{% raw %}{{ itemDuration(item) }}{% endraw %}</td>
+                <td class="row-time" :title="item.error_message || ''">{% raw %}{{ (item.error_message || '').slice(0, 50) }}{% endraw %}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="empty-state" style="padding:20px;">No items logged for this run.</div>
+      </div>
+    </div>
+
+    <div class="pagination" v-if="runs.length">
+      <span>Page {% raw %}{{ page }}{% endraw %} of {% raw %}{{ totalPages }}{% endraw %} ({% raw %}{{ total }}{% endraw %} runs)</span>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" :disabled="page <= 1" @click="prevPage">Previous</button>
+        <button class="btn" :disabled="page >= totalPages" @click="nextPage">Next</button>
+      </div>
+    </div>
+  </template>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/history.js?v={{ asset_version }}"></script>
+{% endblock %}

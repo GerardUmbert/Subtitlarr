@@ -17,6 +17,12 @@
     </div>
   </div>
 
+  <div class="panel-loading" v-if="pageLoading">
+    <div class="loading-spinner"></div>
+    <p>Loading dashboard…</p>
+  </div>
+
+  <template v-else>
   <div class="stats">
     <div class="stat">
       <div class="stat-label">Wanted (Bazarr)</div>
@@ -112,6 +118,7 @@
       </div>
     </div>
   </div>
+  </template>
 </div>
 {% endblock %}
 {% block scripts %}

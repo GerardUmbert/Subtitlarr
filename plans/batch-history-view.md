@@ -71,5 +71,18 @@ Not yet decided — either:
 
 ## Status
 
-Not started. Discussed 2026-08-05, written up per user request — build only
-after the open questions above are answered.
+Run-level grouping built 2026-08-05 as a new `/history` page — see the
+real implementation for the resolved open questions:
+1. Raw sent/received text per batch: NOT built — this version only shows
+   run/item-level status, engine, and elapsed time, not the raw LLM
+   request/response content. Still a real gap for future diagnosis (see
+   the original motivating example in this file — the repetition-loop
+   investigation that needed a live reproduction because raw text wasn't
+   persisted anywhere).
+2. Surfaced as its own dedicated page (`/history`), not an expand-in-place
+   row on the Queue page.
+3. No retention limit — same as item_run_log today, kept indefinitely.
+
+A true PER-BATCH view (one row per LLM request within an item, not just
+one row per item) is still not built — this remains open for a future
+pass if the per-item view isn't detailed enough.

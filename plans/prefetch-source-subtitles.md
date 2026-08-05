@@ -72,7 +72,17 @@ reads from local disk instead.
 
 ## Status
 
-Not started. Original version of this plan already existed in TODO.md
-(written during an earlier session) — this version supersedes it with the
-10am-cron-triggered framing the user specifically proposed on 2026-08-05,
-rather than "at the start of every run_batch() call."
+Built 2026-08-05. Applies to ALL run types (scheduled, manual full,
+filtered, single-item), not scheduled-only as originally framed — user
+confirmed this scope during implementation. Scratch dir:
+`tempfile.gettempdir()/subtitlarr-scratch/run_{run_id}/`, in the
+container's own ephemeral filesystem (never the persistent `/data`
+volume). Fetches all of a run's items concurrently via `asyncio.gather()`
+(no windowing/pacing — this is local Bazarr/NAS traffic, not a
+rate-limited cloud API). A successful item's cache is deleted right after
+upload; a failed item's cache is deliberately left in place. New module:
+`app/engine/prefetch.py`. `translator.translate_item()` gained an optional
+`cached_source_path` param. Tests: `tests/unit/test_prefetch.py` (7 tests).
+
+Not yet live-verified end-to-end against the real server/Bazarr as of
+writing — implemented and unit-tested only.

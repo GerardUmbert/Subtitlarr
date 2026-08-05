@@ -3,6 +3,7 @@ const { createApp } = Vue;
 createApp({
   data() {
     return {
+      pageLoading: true,
       active: "ollama",
       fallback: "",
       ollamaModel: "",
@@ -155,6 +156,7 @@ createApp({
     } catch (_) {
       // no pull in progress / endpoint not reachable yet
     }
+    this.pageLoading = false;
   },
   unmounted() {
     if (this._pullPollHandle) clearTimeout(this._pullPollHandle);

@@ -4,9 +4,22 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app import state
 from app.db import repository
-from app.engine import selector
+from app.engine import prefetch, selector
 
 router = APIRouter(prefix="/api/queue", tags=["queue"])
+
+
+def _with_cached_flag(rows: list) -> list[dict]:
+    """Whether each row's source subtitle is currently sitting in the local
+    scratch cache — a pure filesystem fact (prefetch.py), not DB state, so
+    it's checked live rather than stored. Cheap: just a path.exists() per
+    row, no file reads."""
+    result = []
+    for row in rows:
+        d = dict(row)
+        d["source_cached_locally"] = (prefetch.DEFAULT_SCRATCH_ROOT / f"{d['id']}.srt").exists()
+        result.append(d)
+    return result
 
 
 @router.get("")
@@ -24,7 +37,7 @@ async def list_queue(
         conn, status=status, item_type=item_type, search=search,
         exclude_no_source=exclude_no_source, page=page, page_size=page_size, sort=sort,
     )
-    return {"data": [dict(row) for row in rows], "total": total, "page": page, "page_size": page_size}
+    return {"data": _with_cached_flag(rows), "total": total, "page": page, "page_size": page_size}
 
 
 @router.get("/matching-count")
@@ -71,7 +84,7 @@ async def get_current_run_items(conn=Depends(state.get_conn), runner=Depends(sta
     if progress is None or not progress.active or progress.run_id is None:
         return {"active": False, "data": []}
     rows = repository.list_items_by_ids(conn, progress.item_ids)
-    return {"active": True, "run_id": progress.run_id, "data": [dict(row) for row in rows]}
+    return {"active": True, "run_id": progress.run_id, "data": _with_cached_flag(rows)}
 
 
 @router.get("/{item_id}")

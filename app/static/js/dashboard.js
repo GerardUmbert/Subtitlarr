@@ -22,6 +22,7 @@ function timeAgo(isoString) {
 createApp({
   data() {
     return {
+      pageLoading: true,
       stats: {},
       run: { active: false, processed: 0, total: 0, failed: 0, rate_per_min: 0 },
       recentItems: [],
@@ -133,6 +134,7 @@ createApp({
   },
   async mounted() {
     await this.refreshAll();
+    this.pageLoading = false;
     this.scheduleRefresh();
   },
   unmounted() {

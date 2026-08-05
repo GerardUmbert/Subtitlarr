@@ -1,5 +1,8 @@
+import asyncio
 import logging
 import sqlite3
+import time
+from pathlib import Path
 
 from app.bazarr.client import BazarrClient
 from app.db import repository
@@ -48,8 +51,18 @@ async def _translate_batch(
     dialogue_text = srt_io.extract_dialogue_text(batch)
 
     engine_used = active_provider.name
+    # Diagnostic timing: live runs showed 60-135s gaps between LLM requests
+    # with NO corresponding gap visible in httpx's own request logging
+    # (which only logs AFTER a call completes, not when it starts) — this
+    # pins down exactly how long is spent waiting on translate() itself
+    # vs. anything before/after it.
+    call_started = time.monotonic()
     try:
         llm_response = await active_provider.translate(dialogue_text, source_lang, target_lang)
+        logger.info(
+            "translate() call for item %d (%s) took %.2fs",
+            item_id, active_provider.name, time.monotonic() - call_started,
+        )
     except ProviderRateLimitedError:
         if fallback_provider is None:
             raise
@@ -61,6 +74,65 @@ async def _translate_batch(
         llm_response = await fallback_provider.translate(dialogue_text, source_lang, target_lang)
 
     return reassemble(batch, llm_response), engine_used
+
+
+# NVIDIA-only: its cloud endpoint has no local VRAM/GPU contention (unlike
+# Ollama, where concurrent requests would just serialize against the same
+# model instance anyway — no real speedup, and it fights the watchdog/
+# timeout logic that assumes one request at a time). Kept well under
+# NVIDIA's documented 40 requests/minute ceiling. Confirmed safe: each
+# batch's cues carry their own real subtitle index baked into the prompt
+# (srt_io.extract_dialogue_text), and reassemble() maps translated content
+# back onto the ORIGINAL cue list by matching that index, never by
+# position/arrival order — and asyncio.gather() itself returns results in
+# the same order as its input regardless of which one resolves first. So
+# concurrent batches can't misorder cues even though responses can arrive
+# out of order.
+NVIDIA_CONCURRENT_BATCH_WINDOW = 4
+
+
+async def _translate_batches(
+    batches: list[list],
+    source_lang: str,
+    target_lang: str,
+    active_provider: TranslationProvider,
+    fallback_provider: TranslationProvider | None,
+    item_id: int,
+) -> tuple[list, str]:
+    """Runs all of an item's batches, sequentially for every provider
+    except NVIDIA (windowed concurrency there — see
+    NVIDIA_CONCURRENT_BATCH_WINDOW). Returns (all translated subs in
+    original order, engine_used — the last batch's engine wins if a
+    fallback occurred partway)."""
+    translated_subs: list = []
+    engine_used = active_provider.name
+
+    if active_provider.name != "nvidia":
+        for batch in batches:
+            batch_result, batch_engine = await _translate_batch(
+                batch, source_lang, target_lang, active_provider, fallback_provider, item_id
+            )
+            translated_subs.extend(batch_result)
+            engine_used = batch_engine
+        return translated_subs, engine_used
+
+    for window_start in range(0, len(batches), NVIDIA_CONCURRENT_BATCH_WINDOW):
+        window = batches[window_start : window_start + NVIDIA_CONCURRENT_BATCH_WINDOW]
+        window_started = time.monotonic()
+        results = await asyncio.gather(
+            *(
+                _translate_batch(batch, source_lang, target_lang, active_provider, fallback_provider, item_id)
+                for batch in window
+            )
+        )
+        logger.info(
+            "Item %d: NVIDIA window of %d batch(es) (starting at batch %d) took %.2fs",
+            item_id, len(window), window_start + 1, time.monotonic() - window_started,
+        )
+        for batch_result, batch_engine in results:  # gather() preserves input order
+            translated_subs.extend(batch_result)
+            engine_used = batch_engine
+    return translated_subs, engine_used
 
 
 def _batch_token_budget(num_ctx: int, override: int = 0) -> int:
@@ -101,13 +173,16 @@ async def translate_item(
     add_ai_disclaimer: bool = True,
     num_ctx: int = 8192,
     batch_token_budget_override: int = 0,
+    cached_source_path: Path | None = None,
 ) -> None:
-    """Fetches the source subtitle via Bazarr's API (never touches the media
-    filesystem directly), translates it in batches sized to fit within the
-    provider's context window (a full movie/episode's dialogue can easily
-    exceed a small local model's limit if sent as one prompt — see
-    srt_io.chunk_cues), reassembles each batch onto its original timing, and
-    uploads the merged result back to Bazarr. Updates DB status throughout."""
+    """Fetches the source subtitle (via Bazarr's API, or from a local
+    scratch-cache file when cached_source_path is provided — see
+    engine.prefetch — never touches the media filesystem directly either
+    way), translates it in batches sized to fit within the provider's
+    context window (a full movie/episode's dialogue can easily exceed a
+    small local model's limit if sent as one prompt — see srt_io.chunk_cues),
+    reassembles each batch onto its original timing, and uploads the merged
+    result back to Bazarr. Updates DB status throughout."""
     item_id = item["id"]
     target_lang = item["target_language"]
 
@@ -125,22 +200,37 @@ async def translate_item(
     }
 
     repository.update_item_status(conn, item_id, "translating", mark_attempt=True)
+    item_started = time.monotonic()
 
     try:
-        cues = await client.get_subtitle_contents(source_subtitle_path)
-        original_subs = srt_io.cues_from_bazarr(cues)
+        fetch_started = time.monotonic()
+        if cached_source_path is not None:
+            original_subs = srt_io.parse_srt_bytes(cached_source_path.read_bytes())
+        else:
+            cues = await client.get_subtitle_contents(source_subtitle_path)
+            original_subs = srt_io.cues_from_bazarr(cues)
         if not original_subs:
             raise ProviderError("Source subtitle has no cues")
+        logger.info(
+            "Item %d: source read+parse (cached=%s) took %.2fs, %d cues",
+            item_id, cached_source_path is not None, time.monotonic() - fetch_started, len(original_subs),
+        )
 
+        chunk_started = time.monotonic()
         batches = srt_io.chunk_cues(original_subs, max_tokens_per_batch=resolved_batch_budget)
-        translated_subs: list = []
-        engine_used = active_provider.name
-        for batch in batches:
-            batch_result, batch_engine = await _translate_batch(
-                batch, source_lang, target_lang, active_provider, fallback_provider, item_id
-            )
-            translated_subs.extend(batch_result)
-            engine_used = batch_engine  # last batch's engine wins if a fallback occurred partway
+        logger.info(
+            "Item %d: chunk_cues() took %.2fs, %d batches",
+            item_id, time.monotonic() - chunk_started, len(batches),
+        )
+
+        translate_started = time.monotonic()
+        translated_subs, engine_used = await _translate_batches(
+            batches, source_lang, target_lang, active_provider, fallback_provider, item_id
+        )
+        logger.info(
+            "Item %d: all batches took %.2fs total (item started %.2fs ago)",
+            item_id, time.monotonic() - translate_started, time.monotonic() - item_started,
+        )
 
         # Full-file sanity check BEFORE the disclaimer is added (which
         # deliberately changes cue count/first-cue timing by design) — if

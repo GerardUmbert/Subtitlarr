@@ -9,6 +9,12 @@
     </div>
   </div>
 
+  <div class="panel-loading" v-if="pageLoading">
+    <div class="loading-spinner"></div>
+    <p>Loading jobs…</p>
+  </div>
+
+  <template v-else>
   <div class="engine-card">
     <div class="panel-title">Scheduled job</div>
     <div class="panel-title-sub">Runs the same age-gated job as the cron, on demand</div>
@@ -22,6 +28,38 @@
         </button>
         <span v-if="runStarted" class="test-result">● started</span>
       </div>
+    </div>
+  </div>
+
+  <div class="engine-card" style="margin-top:16px;">
+    <div class="panel-title">Sync media from Bazarr</div>
+    <div class="panel-title-sub">Refreshes the wanted-subtitle list — no subtitle content is fetched, no translation runs</div>
+
+    <div class="engine-config" style="margin-top:0; border-top:none;">
+      <div class="field-row">
+        <button class="btn" @click="syncMedia" :disabled="syncMediaActive || syncingMedia || runActive">
+          {% raw %}{{ syncMediaActive ? 'Syncing…' : (syncingMedia ? 'Starting…' : 'Sync media') }}{% endraw %}
+        </button>
+        <span v-if="syncMediaStarted" class="test-result">● started</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="engine-card" style="margin-top:16px;">
+    <div class="panel-title">Sync subtitles from Bazarr</div>
+    <div class="panel-title-sub">Pre-fetches source subtitle content for every pending item into the local cache — no translation, no uploads</div>
+
+    <div class="engine-config" style="margin-top:0; border-top:none;">
+      <div class="field-row">
+        <button class="btn" @click="syncSubs" :disabled="syncSubsActive || syncingSubs || runActive">
+          {% raw %}{{ syncSubsActive ? 'Syncing…' : (syncingSubs ? 'Starting…' : 'Sync subtitles') }}{% endraw %}
+        </button>
+        <span v-if="syncSubsStarted" class="test-result">● started</span>
+      </div>
+      <p class="field-hint" v-if="syncSubsResult">
+        ● resolved {% raw %}{{ syncSubsResult.resolved }}{% endraw %} items,
+        cached {% raw %}{{ syncSubsResult.cached }}{% endraw %} source subtitles
+      </p>
     </div>
   </div>
 
@@ -53,6 +91,7 @@
       <p class="field-hint error" v-if="error">● {% raw %}{{ error }}{% endraw %}</p>
     </div>
   </div>
+  </template>
 </div>
 {% endblock %}
 {% block scripts %}

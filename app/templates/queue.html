@@ -1,15 +1,20 @@
 {% extends "base.html" %}
-{% block title %}Queue & History{% endblock %}
+{% block title %}Queue{% endblock %}
 {% block content %}
 <div id="queue-app">
   <div class="page-head">
     <div>
-      <h1>Queue &amp; History</h1>
-      <p class="page-sub">Every item Subtitlarr has tracked, and what happened to it. Any row — including done ones — can be run again individually.</p>
+      <h1>Queue</h1>
+      <p class="page-sub">Every item Subtitlarr has tracked, and what happened to it. Any row — including done ones — can be run again individually. See <a href="/history">History</a> for a run-by-run breakdown.</p>
     </div>
   </div>
 
-  <div class="panel" style="margin-bottom:0;">
+  <div class="panel-loading" v-if="pageLoading">
+    <div class="loading-spinner"></div>
+    <p>Loading queue…</p>
+  </div>
+
+  <div class="panel" style="margin-bottom:0;" v-else>
     <div class="queue-toolbar">
       <span v-if="runActive" :class="['chip', { active: currentBatchOnly }]"
             @click="toggleCurrentBatch">Current batch{% raw %}{{ currentRunItems.length ? ` (${currentRunItems.length})` : '' }}{% endraw %}</span>
@@ -50,7 +55,10 @@
         <tbody v-if="displayedItems.length">
           <tr v-for="item in displayedItems" :key="item.id">
             <td>
-              <div class="title-cell">{% raw %}{{ item.series_title || item.title }}{% endraw %}</div>
+              <div class="title-cell">
+                {% raw %}{{ item.series_title || item.title }}{% endraw %}
+                <span v-if="item.source_cached_locally" class="badge badge-local" title="Source subtitle is cached locally — won't re-fetch from Bazarr">cached</span>
+              </div>
               <div class="title-type">{% raw %}{{ item.season_episode ? item.season_episode + ' · episode' : 'movie' }}{% endraw %}</div>
             </td>
             <td>

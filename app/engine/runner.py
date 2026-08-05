@@ -8,7 +8,7 @@ from typing import Callable
 from app.bazarr.client import BazarrClient
 from app.config import Settings
 from app.db import repository
-from app.engine import poller, selector, translator
+from app.engine import poller, prefetch, selector, translator
 from app.providers.registry import get_active_provider, get_fallback_provider
 
 logger = logging.getLogger(__name__)
@@ -96,6 +96,19 @@ class RunController:
         )
         self.current = progress
 
+        # Fetch every item's source subtitle from Bazarr ONCE, up front, in
+        # one concurrent burst, instead of once per item spread out over the
+        # whole run (which could take hours with pause_between_items_seconds
+        # between each one) — keeps the NAS's disks from being woken up
+        # repeatedly for the run's entire duration. Any item whose prefetch
+        # fails just falls back to a live per-item fetch in translate_item(),
+        # so a single bad fetch can't abort the run. Shared flat directory
+        # (not per-run_id) so a failed item's cache from an EARLIER run is
+        # found and reused here instead of being silently orphaned.
+        cached_paths = await prefetch.prefetch_source_subtitles(
+            client, ready_items, prefetch.DEFAULT_SCRATCH_ROOT
+        )
+
         active_provider = get_active_provider(self._settings)
         fallback_provider = get_fallback_provider(self._settings)
 
@@ -116,6 +129,8 @@ class RunController:
 
         try:
             for i, entry in enumerate(ready_items):
+                item_id = entry["item"]["id"]
+                cached_path = cached_paths.get(item_id)
                 try:
                     await translator.translate_item(
                         self._conn,
@@ -128,10 +143,18 @@ class RunController:
                         run_id,
                         num_ctx=self._settings.ollama_num_ctx,
                         batch_token_budget_override=batch_token_budget_override,
+                        cached_source_path=cached_path,
                     )
                 except Exception:  # noqa: BLE001 - one item's failure must not abort the batch
                     progress.failed += 1
-                    logger.exception("Translation failed for item %s", entry["item"]["id"])
+                    logger.exception("Translation failed for item %s", item_id)
+                else:
+                    # Only clean up the cached source on SUCCESS — a failed
+                    # item keeps its cached file so a retry can reuse it
+                    # without re-fetching from Bazarr, and so the failure
+                    # can be investigated against the exact source that
+                    # caused it.
+                    prefetch.cleanup_scratch_file(cached_path)
                 finally:
                     progress.processed += 1
                 # A short rest between items so a long batch doesn't peg the
@@ -153,6 +176,24 @@ class RunController:
         starting any translation — safe to call just to populate dashboard
         stats and the queue table."""
         return await poller.poll_once(self._conn, self._get_client())
+
+    async def warm_source_cache(self) -> dict:
+        """Resolves source language/path for every pending item and
+        pre-fetches its subtitle CONTENT into the local scratch cache —
+        same read-side machinery run_batch() uses internally, but with NO
+        translation, no provider calls, and no uploads. Lets the NAS's
+        one disk-wake-up burst happen ahead of time, independent of when a
+        translation run actually starts. Items resolve_and_gate() finds no
+        usable source for are marked skipped_no_source exactly as they
+        would be during a real run."""
+        client = self._get_client()
+        source_priority = repository.get_config(self._conn, "source_lang_priority", default=[])
+        items = selector.get_full_translatable_queue(self._conn)
+        ready_items = await selector.resolve_and_gate(self._conn, client, items, source_priority)
+        cached_paths = await prefetch.prefetch_source_subtitles(
+            client, ready_items, prefetch.DEFAULT_SCRATCH_ROOT
+        )
+        return {"resolved": len(ready_items), "cached": len(cached_paths)}
 
     async def run_now(self) -> RunProgress:
         await self.poll()

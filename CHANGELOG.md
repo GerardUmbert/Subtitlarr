@@ -6,6 +6,72 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 ## [0.3.0]
 
 ### Added
+- **New History page** (`/history`): every past translation run, newest
+  first, as an expandable card showing total files/succeeded/failed and
+  total elapsed time, tagged with the engine used (and a "+1 via gemini"
+  style note if a run's items used more than one engine, e.g. via
+  fallback). Expanding a run shows each individual item's status, engine,
+  per-item elapsed time, and error message. The Queue page is now
+  Queue-only (the "& History" framing didn't match what it actually
+  showed — a live/current-state table, not grouped past runs) and links
+  to the new page. New `GET /api/history`, `GET /api/history/{id}/items`,
+  `repository.list_run_history()`, `repository.get_run_items()`.
+- **Granular timing logs for NVIDIA translation steps**: source
+  read+parse, `chunk_cues()`, each individual batch's `translate()` call,
+  and each concurrent window's total time are now logged — added to
+  actually pin down a real, reproducible 60-135s gap observed live
+  between LLM requests that had no corresponding explanation in the
+  existing httpx-only request logging (which only logs AFTER a call
+  completes, so a slow DNS/TLS/connection-setup phase before the request
+  is even sent was completely invisible). Root cause not yet identified;
+  this instrumentation is the next step toward finding it.
+- **NVIDIA batches now translate concurrently** (window of 4 at a time),
+  instead of one at a time like every other engine. NVIDIA-only —
+  deliberately NOT applied to Ollama (local GPU contention would mean no
+  real speedup, and it fights the watchdog/timeout logic built around one
+  request at a time) or Gemini. Correctness is guaranteed two ways: each
+  cue carries its own real subtitle index baked into the LLM prompt, and
+  `reassemble()` maps translated content back onto the original cue list
+  by matching that index rather than by response order; and
+  `asyncio.gather()` itself always returns results in the same order as
+  its inputs regardless of which one resolves first. A batch that hits a
+  429 inside a concurrent window falls back to the fallback engine
+  independently, same as the existing sequential per-batch behavior — no
+  new coordination needed, since NVIDIA's rate limit responds near-
+  instantly rather than after a long wait.
+- **Jobs page: "Sync media" and "Sync subtitles" actions**: two new
+  on-demand jobs alongside the existing "Run now" — "Sync media" refreshes
+  Bazarr's wanted-list metadata only (no subtitle content, no
+  translation); "Sync subtitles" resolves source language and pre-fetches
+  subtitle content into the local scratch cache for every pending item
+  (see the caching feature below), without starting any translation. Lets
+  the cache be warmed ahead of time, decoupled from actually running a
+  translation.
+- **Page loading states**: every page now shows a brief loading spinner
+  while its initial data fetch is in flight, instead of rendering
+  default/empty content first and having the real data visibly pop in a
+  moment later.
+- **Pre-fetch source subtitles once per run, cached locally**: every run
+  (scheduled, manual full, filtered, single-item) fetches all its items'
+  source subtitle content from Bazarr in one concurrent burst up front,
+  caching it in a shared scratch directory in the container's own
+  ephemeral temp directory (`tempfile.gettempdir()/subtitlarr-scratch` —
+  never the persistent `/data` volume, and no extra Docker mount needed),
+  instead of hitting Bazarr (and therefore the NAS's disk) once per item
+  spread out over the whole run. Only the actual subtitle CONTENT read is
+  cached — polling and source-language resolution stay lightweight calls
+  against Bazarr's own database and don't touch the NAS's disk either way;
+  uploading a finished translation always writes through immediately, not
+  deferred. `translate_item()` reads from the cache when available and
+  transparently falls back to a live Bazarr fetch otherwise (e.g. a
+  prefetch that failed for one item). A successful item's cached file is
+  deleted right after upload; a FAILED item's cache is deliberately left
+  in place — and unlike an earlier version of this feature (which used a
+  per-run_id scratch subfolder, silently orphaning a failed item's cache
+  the moment the run that fetched it ended), the shared flat directory
+  means a LATER run's prefetch will actually find and reuse that leftover
+  file instead of re-fetching it. The Queue page shows a "cached" badge
+  next to any item whose source is currently sitting in the local cache.
 - **NVIDIA provider**: a new cloud engine option using NVIDIA's free-tier
   NIM API (`build.nvidia.com`), defaulting to DeepSeek V4 Flash. Up to 40
   requests/minute on the free tier. Must be a real instructable chat model —

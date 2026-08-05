@@ -408,6 +408,71 @@ def log_item_attempt(
         )
 
 
+def list_run_history(
+    conn: sqlite3.Connection, *, page: int = 1, page_size: int = 20
+) -> tuple[list[dict], int]:
+    """Past runs (finished or still open), newest first, each with a
+    per-run engine rollup derived from its items' logged engine_used
+    values — run_history itself doesn't store an engine, since a run can
+    mix engines (fallback triggered on some items, or settings changed
+    mid-run). 'primary_engine' is whichever engine the most items in that
+    run used; 'other_engines' lists any additional distinct engines seen,
+    for a '+1 via gemini' style note rather than hiding the mix."""
+    total = conn.execute("SELECT COUNT(*) FROM run_history").fetchone()[0]
+    rows = conn.execute(
+        """
+        SELECT * FROM run_history
+        ORDER BY started_at DESC
+        LIMIT ? OFFSET ?
+        """,
+        (page_size, (page - 1) * page_size),
+    ).fetchall()
+
+    runs = []
+    for row in rows:
+        engine_counts = conn.execute(
+            """
+            SELECT engine_used, COUNT(*) as n FROM item_run_log
+            WHERE run_id = ? AND engine_used IS NOT NULL
+            GROUP BY engine_used ORDER BY n DESC
+            """,
+            (row["id"],),
+        ).fetchall()
+        primary_engine = engine_counts[0]["engine_used"] if engine_counts else None
+        other_engines = [r["engine_used"] for r in engine_counts[1:]]
+
+        run = dict(row)
+        run["primary_engine"] = primary_engine
+        run["other_engines"] = other_engines
+        runs.append(run)
+
+    return runs, total
+
+
+def get_run_items(conn: sqlite3.Connection, run_id: int) -> list[dict]:
+    """Every item logged against this run, each with its per-item elapsed
+    translation time — same last_attempt_at/completed_at calculation the
+    Queue page's duration() already uses, just computed here for a
+    specific past run instead of live. Joins item_run_log (the historical
+    record — status/engine/error AS OF THAT ATTEMPT) with items (for
+    title/season_episode/timestamps), since an item can be re-run later
+    and items itself only reflects its CURRENT state, not this run's."""
+    rows = conn.execute(
+        """
+        SELECT
+            l.id AS log_id, l.status, l.engine_used, l.error_message, l.created_at,
+            i.id AS item_id, i.item_type, i.title, i.series_title, i.season_episode,
+            i.target_language, i.last_attempt_at, i.completed_at
+        FROM item_run_log l
+        JOIN items i ON i.id = l.item_id
+        WHERE l.run_id = ?
+        ORDER BY l.created_at ASC
+        """,
+        (run_id,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def get_config(conn: sqlite3.Connection, key: str, default=None):
     row = conn.execute("SELECT value_json FROM app_config WHERE key = ?", (key,)).fetchone()
     if row is None:

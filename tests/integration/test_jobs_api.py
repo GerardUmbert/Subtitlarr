@@ -104,3 +104,71 @@ def test_clear_database_refuses_while_a_run_is_active(client):
     assert resp.status_code == 409
 
     state.run_controller.current = None  # cleanup
+
+
+def test_sync_media_starts_a_poll(client, monkeypatch):
+    from app.engine.runner import RunController
+
+    called = {"count": 0}
+
+    async def fake_poll(self):
+        called["count"] += 1
+        return {}
+
+    monkeypatch.setattr(RunController, "poll", fake_poll)
+
+    resp = client.post("/api/jobs/sync-media")
+    assert resp.status_code == 200
+    assert resp.json()["started"] is True
+
+
+def test_sync_media_refuses_when_a_run_is_active(client):
+    from app import state
+    from app.engine.runner import RunProgress
+
+    state.run_controller.current = RunProgress(active=True)
+
+    resp = client.post("/api/jobs/sync-media")
+    body = resp.json()
+    assert body["started"] is False
+    assert "already in progress" in body["reason"]
+
+    state.run_controller.current = None  # cleanup
+
+
+def test_sync_subs_calls_warm_source_cache(client, monkeypatch):
+    from app.engine.runner import RunController
+
+    called = {"count": 0}
+
+    async def fake_warm(self):
+        called["count"] += 1
+        return {"resolved": 2, "cached": 2}
+
+    monkeypatch.setattr(RunController, "warm_source_cache", fake_warm)
+
+    resp = client.post("/api/jobs/sync-subs")
+    assert resp.status_code == 200
+    assert resp.json()["started"] is True
+
+
+def test_sync_subs_refuses_when_a_run_is_active(client):
+    from app import state
+    from app.engine.runner import RunProgress
+
+    state.run_controller.current = RunProgress(active=True)
+
+    resp = client.post("/api/jobs/sync-subs")
+    body = resp.json()
+    assert body["started"] is False
+    assert "already in progress" in body["reason"]
+
+    state.run_controller.current = None  # cleanup
+
+
+def test_get_jobs_reports_sync_states(client):
+    resp = client.get("/api/jobs")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["sync_media_active"] is False
+    assert body["sync_subs_active"] is False

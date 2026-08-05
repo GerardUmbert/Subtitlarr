@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import state
-from app.api import bazarr_conn, dashboard, engines, jobs, languages, queue, run, schedule
+from app.api import bazarr_conn, dashboard, engines, history, jobs, languages, queue, run, schedule
 from app.bazarr.client import BazarrClient
 from app.config import settings
 from app.db import database, repository, settings_store
@@ -69,6 +69,7 @@ app.include_router(languages.router)
 app.include_router(bazarr_conn.router)
 app.include_router(schedule.router)
 app.include_router(jobs.router)
+app.include_router(history.router)
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
@@ -100,3 +101,4 @@ app.get("/languages", response_class=HTMLResponse)(_page("languages", "languages
 app.get("/bazarr", response_class=HTMLResponse)(_page("bazarr", "bazarr"))
 app.get("/settings", response_class=HTMLResponse)(_page("settings", "settings"))
 app.get("/jobs", response_class=HTMLResponse)(_page("jobs", "jobs"))
+app.get("/history", response_class=HTMLResponse)(_page("history", "history"))

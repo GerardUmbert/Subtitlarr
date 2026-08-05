@@ -62,6 +62,15 @@ const Api = (() => {
     getJobs: () => request("GET", "/api/jobs"),
     runScheduledJobNow: () => request("POST", "/api/jobs/run-now"),
     clearDatabase: () => request("POST", "/api/jobs/clear-database"),
+    syncMedia: () => request("POST", "/api/jobs/sync-media"),
+    syncSubs: () => request("POST", "/api/jobs/sync-subs"),
+    getSyncStatus: () => request("GET", "/api/jobs/sync-status"),
+
+    getHistory: (params = {}) => {
+      const qs = new URLSearchParams(params).toString();
+      return request("GET", `/api/history${qs ? "?" + qs : ""}`);
+    },
+    getHistoryRunItems: (runId) => request("GET", `/api/history/${runId}/items`),
   };
 })();
 

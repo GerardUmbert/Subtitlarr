@@ -33,6 +33,7 @@ function timeAgo(isoString) {
 createApp({
   data() {
     return {
+      pageLoading: true,
       items: [],
       total: 0,
       page: 1,
@@ -272,6 +273,7 @@ createApp({
   async mounted() {
     await this.refreshRunState();
     await this.refresh();
+    this.pageLoading = false;
     this.schedulePoll();
     document.addEventListener("visibilitychange", this.onVisibilityChange);
   },

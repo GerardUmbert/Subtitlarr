@@ -9,7 +9,12 @@
     </div>
   </div>
 
-  <div class="engine-card">
+  <div class="panel-loading" v-if="pageLoading">
+    <div class="loading-spinner"></div>
+    <p>Loading connection settings…</p>
+  </div>
+
+  <div class="engine-card" v-else>
     <div class="panel-title">Connection</div>
     <div class="panel-title-sub">API key is found in Bazarr under Settings → General</div>
 

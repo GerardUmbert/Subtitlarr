@@ -3,6 +3,7 @@ const { createApp } = Vue;
 createApp({
   data() {
     return {
+      pageLoading: true,
       baseUrl: "",
       apiKey: "",
       keyMasked: "",
@@ -56,5 +57,6 @@ createApp({
   },
   async mounted() {
     await this.load();
+    this.pageLoading = false;
   },
 }).mount("#bazarr-app");

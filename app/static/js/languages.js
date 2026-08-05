@@ -3,6 +3,7 @@ const { createApp } = Vue;
 createApp({
   data() {
     return {
+      pageLoading: true,
       sourcePriority: [],
       managedLanguages: [],
       newSourceLang: "",
@@ -56,5 +57,6 @@ createApp({
   },
   async mounted() {
     await this.load();
+    this.pageLoading = false;
   },
 }).mount("#languages-app");
