@@ -16,11 +16,11 @@
 
   <template v-else>
   <div class="engine-card">
-    <div class="panel-title">Scheduled job</div>
-    <div class="panel-title-sub">Runs the same age-gated job as the cron, on demand</div>
+    <div class="panel-title">Translate next batch</div>
+    <div class="panel-title-sub">Runs the same age-gated job as the cron, on demand — translates up to today's remaining daily limit, not the full backlog</div>
 
     <div class="engine-config" style="margin-top:0; border-top:none;">
-      <p class="field-hint">Cron: <span class="mono">{% raw %}{{ cronExpression }}{% endraw %}</span> · Age threshold: {% raw %}{{ ageThresholdDays }}{% endraw %} days</p>
+      <p class="field-hint">Cron: <span class="mono">{% raw %}{{ cronExpression }}{% endraw %}</span> · Age threshold: {% raw %}{{ ageThresholdDays }}{% endraw %} days · Daily limit: {% raw %}{{ dailyTranslationLimit > 0 ? dailyTranslationLimit + ' items' : 'unlimited' }}{% endraw %} (<a href="/settings">change</a>)</p>
       <p class="field-hint" v-if="nextRun">Next scheduled run: {% raw %}{{ nextRun }}{% endraw %}</p>
       <div class="field-row">
         <button class="btn btn-primary" @click="runNow" :disabled="runActive || running">
@@ -32,13 +32,13 @@
   </div>
 
   <div class="engine-card" style="margin-top:16px;">
-    <div class="panel-title">Sync media from Bazarr</div>
+    <div class="panel-title">Sync wanted / missing from Bazarr</div>
     <div class="panel-title-sub">Refreshes the wanted-subtitle list — no subtitle content is fetched, no translation runs</div>
 
     <div class="engine-config" style="margin-top:0; border-top:none;">
       <div class="field-row">
         <button class="btn" @click="syncMedia" :disabled="syncMediaActive || syncingMedia || runActive">
-          {% raw %}{{ syncMediaActive ? 'Syncing…' : (syncingMedia ? 'Starting…' : 'Sync media') }}{% endraw %}
+          {% raw %}{{ syncMediaActive ? 'Syncing…' : (syncingMedia ? 'Starting…' : 'Sync wanted / missing') }}{% endraw %}
         </button>
         <span v-if="syncMediaStarted" class="test-result">● started</span>
       </div>
@@ -46,13 +46,13 @@
   </div>
 
   <div class="engine-card" style="margin-top:16px;">
-    <div class="panel-title">Sync subtitles from Bazarr</div>
+    <div class="panel-title">Pull pending subtitles (sources) from Bazarr</div>
     <div class="panel-title-sub">Pre-fetches source subtitle content for every pending item into the local cache — no translation, no uploads</div>
 
     <div class="engine-config" style="margin-top:0; border-top:none;">
       <div class="field-row">
         <button class="btn" @click="syncSubs" :disabled="syncSubsActive || syncingSubs || runActive">
-          {% raw %}{{ syncSubsActive ? 'Syncing…' : (syncingSubs ? 'Starting…' : 'Sync subtitles') }}{% endraw %}
+          {% raw %}{{ syncSubsActive ? 'Pulling…' : (syncingSubs ? 'Starting…' : 'Pull pending subtitles') }}{% endraw %}
         </button>
         <span v-if="syncSubsStarted" class="test-result">● started</span>
       </div>

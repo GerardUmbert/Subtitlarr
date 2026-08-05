@@ -93,3 +93,16 @@ const Api = (() => {
     label.textContent = "● not configured";
   }
 })();
+
+// Mobile nav toggle — sidebar collapses to a top bar below 980px, this
+// expands/collapses the nav links in place instead of leaving them
+// permanently hidden with no way to reach other pages.
+(function initNavToggle() {
+  const toggle = document.getElementById("nav-toggle");
+  const sidebar = document.getElementById("sidebar");
+  if (!toggle || !sidebar) return;
+  toggle.addEventListener("click", () => {
+    const open = sidebar.classList.toggle("nav-open");
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+})();

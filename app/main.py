@@ -42,6 +42,12 @@ async def lifespan(app: FastAPI):
             "Reset %d item(s) stuck in 'translating' from a previous run "
             "(interrupted by a restart) back to 'pending'.", reset_count,
         )
+    closed_runs = repository.close_stale_open_runs(state.db_conn)
+    if closed_runs:
+        logging.getLogger(__name__).warning(
+            "Closed %d run(s) left open (finished_at IS NULL) from a "
+            "previous process that was killed mid-batch.", closed_runs,
+        )
 
     state.bazarr_client = BazarrClient(
         base_url=settings.bazarr_base_url, api_key=settings.bazarr_api_key

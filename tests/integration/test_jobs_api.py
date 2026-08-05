@@ -106,6 +106,35 @@ def test_clear_database_refuses_while_a_run_is_active(client):
     state.run_controller.current = None  # cleanup
 
 
+def test_close_stale_runs_closes_open_runs(client):
+    conn = database.connect(settings.db_path)
+    stale_run = repository.start_run(conn, "manual_full")
+    conn.close()
+
+    resp = client.post("/api/jobs/close-stale-runs")
+    assert resp.status_code == 200
+    assert resp.json()["closed"] == 1
+
+    check_conn = database.connect(settings.db_path)
+    row = check_conn.execute(
+        "SELECT finished_at FROM run_history WHERE id = ?", (stale_run,)
+    ).fetchone()
+    assert row["finished_at"] is not None
+    check_conn.close()
+
+
+def test_close_stale_runs_refuses_while_a_run_is_active(client):
+    from app import state
+    from app.engine.runner import RunProgress
+
+    state.run_controller.current = RunProgress(active=True)
+
+    resp = client.post("/api/jobs/close-stale-runs")
+    assert resp.status_code == 409
+
+    state.run_controller.current = None  # cleanup
+
+
 def test_sync_media_starts_a_poll(client, monkeypatch):
     from app.engine.runner import RunController
 

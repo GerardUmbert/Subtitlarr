@@ -6,6 +6,7 @@ createApp({
       pageLoading: true,
       cronExpression: "",
       ageThresholdDays: 14,
+      dailyTranslationLimit: 100,
       nextRun: "",
       runActive: false,
       running: false,
@@ -30,6 +31,7 @@ createApp({
         const jobs = await Api.getJobs();
         this.cronExpression = jobs.cron_expression;
         this.ageThresholdDays = jobs.age_threshold_days;
+        this.dailyTranslationLimit = jobs.daily_translation_limit;
         this.nextRun = jobs.next_run ? new Date(jobs.next_run).toLocaleString() : "";
         this.runActive = jobs.run_active;
         this.syncMediaActive = jobs.sync_media_active;

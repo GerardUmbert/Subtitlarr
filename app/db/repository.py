@@ -27,6 +27,47 @@ def clear_queue_data(conn: sqlite3.Connection) -> dict:
     return {"items_cleared": items, "runs_cleared": runs, "logs_cleared": logs}
 
 
+def close_stale_open_runs(conn: sqlite3.Connection) -> int:
+    """run_history rows with finished_at IS NULL from a process that was
+    killed mid-batch (no checkpointing — finish_run() only runs in
+    run_batch()'s finally block, which a hard process kill skips
+    entirely) stay open forever otherwise, cluttering the History page
+    with runs that look permanently 'in progress'. Marks them finished
+    (using their own last-touched item_run_log timestamp as finished_at
+    when available, else started_at, so the run doesn't claim to have
+    ended before it started) with their items_processed/items_failed
+    counts backfilled from item_run_log — NOT a destructive wipe like
+    clear_queue_data(); the run and its item history stay intact, just
+    marked complete instead of stuck open. Returns the number of runs
+    closed. Companion to reset_stuck_translating_items() (the equivalent
+    fix for individual items) — called at startup the same way."""
+    with conn:
+        stale_runs = conn.execute(
+            "SELECT id, started_at FROM run_history WHERE finished_at IS NULL"
+        ).fetchall()
+        for run in stale_runs:
+            counts = conn.execute(
+                """
+                SELECT
+                    COUNT(*) AS processed,
+                    SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+                    MAX(created_at) AS last_activity
+                FROM item_run_log WHERE run_id = ?
+                """,
+                (run["id"],),
+            ).fetchone()
+            finished_at = counts["last_activity"] or run["started_at"]
+            conn.execute(
+                """
+                UPDATE run_history
+                SET finished_at = ?, items_processed = ?, items_failed = ?
+                WHERE id = ?
+                """,
+                (finished_at, counts["processed"] or 0, counts["failed"] or 0, run["id"]),
+            )
+        return len(stale_runs)
+
+
 def reset_stuck_translating_items(conn: sqlite3.Connection) -> int:
     """Items still marked 'translating' are always stale on startup — there
     is no checkpointing, so a process restart mid-batch means the in-flight

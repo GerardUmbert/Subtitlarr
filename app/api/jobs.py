@@ -16,6 +16,7 @@ async def get_jobs(scheduler=Depends(state.get_scheduler), runner=Depends(state.
     return {
         "cron_expression": settings.schedule_cron,
         "age_threshold_days": settings.age_threshold_days,
+        "daily_translation_limit": settings.daily_translation_limit,
         "next_run": next_run.isoformat() if next_run else None,
         "run_active": bool(current is not None and current.active),
         "sync_media_active": _sync_media_state["active"],
@@ -97,6 +98,22 @@ async def get_sync_status():
         "sync_media": dict(_sync_media_state),
         "sync_subs": dict(_sync_subs_state),
     }
+
+
+@router.post("/close-stale-runs")
+async def close_stale_runs(conn=Depends(state.get_conn), runner=Depends(state.get_runner)):
+    """Closes out run_history rows left open (finished_at IS NULL) by a
+    process that was killed mid-batch — NOT a destructive wipe like
+    clear-database. The run and its item history stay intact, just marked
+    finished instead of stuck open forever on the History page. Also runs
+    automatically on every server startup; this lets it be triggered
+    on-demand too."""
+    if runner.current is not None and runner.current.active:
+        raise HTTPException(
+            status_code=409, detail="Cannot close stale runs while a run is in progress"
+        )
+    closed = repository.close_stale_open_runs(conn)
+    return {"closed": closed}
 
 
 @router.post("/clear-database")

@@ -8,6 +8,7 @@ body {
   font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 .mono {
@@ -48,14 +49,15 @@ main {
   padding: 30px 36px 60px;
   width: 1180px;
   max-width: 100%;
+  min-width: 0;
   margin: 0 auto;
 }
 
 ::selection { background: var(--accent-soft); color: var(--accent); }
 
 @media (max-width: 980px) {
-  .shell { grid-template-columns: 1fr; }
-  .sidebar { display: none; }
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  main { width: 100%; padding: 20px 16px 40px; }
   .grid-2 { grid-template-columns: 1fr; }
   .stats { grid-template-columns: repeat(2, 1fr); }
 }
