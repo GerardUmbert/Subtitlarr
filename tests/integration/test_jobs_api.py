@@ -1,0 +1,106 @@
+import pytest
+from fastapi.testclient import TestClient
+
+from app.config import settings
+from app.db import database, repository
+from app.main import app
+
+
+@pytest.fixture
+def client(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "db_path", str(tmp_path / "test.db"))
+    monkeypatch.setattr(settings, "bazarr_base_url", "http://bazarr.test:6767")
+    monkeypatch.setattr(settings, "bazarr_api_key", "testkey")
+    with TestClient(app) as c:
+        yield c
+
+
+def test_get_jobs_reports_cron_and_run_state(client):
+    resp = client.get("/api/jobs")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["cron_expression"] == settings.schedule_cron
+    assert body["age_threshold_days"] == settings.age_threshold_days
+    assert body["run_active"] is False
+
+
+def test_run_now_starts_the_scheduled_job(client, monkeypatch):
+    from app.engine.runner import RunController
+
+    called = {"count": 0}
+
+    async def fake_run_scheduled(self):
+        called["count"] += 1
+
+    monkeypatch.setattr(RunController, "run_scheduled", fake_run_scheduled)
+
+    resp = client.post("/api/jobs/run-now")
+    assert resp.status_code == 200
+    assert resp.json()["started"] is True
+
+
+def test_run_now_refuses_when_a_run_is_already_active(client, monkeypatch):
+    from app.engine.runner import RunController, RunProgress
+
+    def fake_current(self):
+        return RunProgress(active=True)
+
+    # runner.current is a plain attribute set during run_batch; simulate an
+    # active run by setting it directly via the singleton instance.
+    from app import state
+
+    state.run_controller.current = RunProgress(active=True)
+
+    resp = client.post("/api/jobs/run-now")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["started"] is False
+    assert "already in progress" in body["reason"]
+
+    state.run_controller.current = None  # cleanup
+
+
+def test_clear_database_wipes_items_but_keeps_settings(tmp_path, monkeypatch):
+    db_path = str(tmp_path / "test_clear.db")
+    seed_conn = database.connect(db_path)
+    database.apply_migrations(seed_conn)
+    repository.upsert_item_seen(
+        seed_conn, item_type="movie", bazarr_id=1, series_id=None,
+        title="Fastball", series_title=None, season_episode=None,
+        target_language="it",
+    )
+    repository.set_config(seed_conn, "source_lang_priority", ["en"])
+    seed_conn.close()
+
+    monkeypatch.setattr(settings, "db_path", db_path)
+    monkeypatch.setattr(settings, "bazarr_base_url", "http://bazarr.test:6767")
+    monkeypatch.setattr(settings, "bazarr_api_key", "testkey")
+
+    with TestClient(app) as c:
+        assert c.get("/api/queue").json()["total"] == 1
+
+        resp = c.post("/api/jobs/clear-database")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["cleared"] is True
+        assert body["items_cleared"] == 1
+
+        assert c.get("/api/queue").json()["total"] == 0
+
+    # settings/app_config untouched — verified after the app shuts down its
+    # own connection, from a fresh read of the same file.
+    check_conn = database.connect(db_path)
+    assert repository.get_config(check_conn, "source_lang_priority") == ["en"]
+    check_conn.close()
+
+
+def test_clear_database_refuses_while_a_run_is_active(client):
+    from app import state
+    from app.engine.runner import RunProgress
+
+    state.run_controller.current = RunProgress(active=True)
+
+    resp = client.post("/api/jobs/clear-database")
+    assert resp.status_code == 409
+
+    state.run_controller.current = None  # cleanup

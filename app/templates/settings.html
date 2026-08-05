@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<div id="settings-app">
+  <div class="page-head">
+    <div>
+      <h1>Settings</h1>
+      <p class="page-sub">Scheduled runs check Bazarr's wanted list on this cron expression, and only translate items older than the age threshold — giving Bazarr's own providers first chance to find a real subtitle.</p>
+    </div>
+  </div>
+
+  <div class="engine-card">
+    <div class="panel-title">Schedule</div>
+    <div class="panel-title-sub">Standard 5-field cron expression</div>
+
+    <div class="engine-config" style="margin-top:0; border-top:none;">
+      <div class="field">
+        <label>Cron expression</label>
+        <input v-model="cronExpression" placeholder="0 3 * * *" />
+      </div>
+      <div class="field">
+        <label>Age threshold (days)</label>
+        <input v-model.number="ageThresholdDays" type="number" min="0" />
+      </div>
+      <div class="field">
+        <label>Daily translation limit</label>
+        <input v-model.number="dailyTranslationLimit" type="number" min="0" />
+        <p class="field-hint">Max items to translate per day (0 = unlimited). Applies to "Run now" and scheduled runs — per-item re-runs always bypass this.</p>
+      </div>
+      <div class="field">
+        <label>Pause between items (seconds)</label>
+        <input v-model.number="pauseBetweenItemsSeconds" type="number" min="0" />
+        <p class="field-hint">Brief rest between translations so the GPU isn't pegged non-stop for hours (0 = no pause).</p>
+      </div>
+      <p class="field-hint" v-if="nextRun">Next scheduled run: {% raw %}{{ nextRun }}{% endraw %}</p>
+      <div class="field-row">
+        <button class="btn btn-primary" @click="save" :disabled="saving">
+          {% raw %}{{ saving ? 'Saving…' : 'Save' }}{% endraw %}
+        </button>
+        <span v-if="saved" class="test-result">● saved</span>
+        <span v-if="error" class="test-result error">● {% raw %}{{ error }}{% endraw %}</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/settings.js?v={{ asset_version }}"></script>
+{% endblock %}

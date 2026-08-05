@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Jobs{% endblock %}
+{% block content %}
+<div id="jobs-app">
+  <div class="page-head">
+    <div>
+      <h1>Jobs</h1>
+      <p class="page-sub">Manually trigger the scheduled translation job, or reset local queue/run data if it's gotten out of sync.</p>
+    </div>
+  </div>
+
+  <div class="engine-card">
+    <div class="panel-title">Scheduled job</div>
+    <div class="panel-title-sub">Runs the same age-gated job as the cron, on demand</div>
+
+    <div class="engine-config" style="margin-top:0; border-top:none;">
+      <p class="field-hint">Cron: <span class="mono">{% raw %}{{ cronExpression }}{% endraw %}</span> · Age threshold: {% raw %}{{ ageThresholdDays }}{% endraw %} days</p>
+      <p class="field-hint" v-if="nextRun">Next scheduled run: {% raw %}{{ nextRun }}{% endraw %}</p>
+      <div class="field-row">
+        <button class="btn btn-primary" @click="runNow" :disabled="runActive || running">
+          {% raw %}{{ runActive ? 'Run in progress…' : (running ? 'Starting…' : 'Run now') }}{% endraw %}
+        </button>
+        <span v-if="runStarted" class="test-result">● started</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="engine-card" style="margin-top:16px;">
+    <div class="panel-title">Reset local data</div>
+    <div class="panel-title-sub">Clears queue and run history — does not touch any saved settings</div>
+
+    <div class="engine-config" style="margin-top:0; border-top:none;">
+      <p class="field-hint">
+        Wipes tracked items, run history, and per-item logs from this local database, then
+        re-populates from Bazarr on the next poll or run. Use this to fix mismatched or
+        confusing local state. Bazarr connection, engine, and schedule settings are untouched.
+      </p>
+      <div class="field-row" v-if="!confirmingClear">
+        <button class="btn" @click="confirmingClear = true" :disabled="runActive">Clear database</button>
+      </div>
+      <div class="field-row" v-else>
+        <span class="field-hint" style="margin:0;">Clear all queue/run history? This cannot be undone.</span>
+        <button class="btn" style="border-color:var(--bad); color:var(--bad);" @click="clearDatabase" :disabled="clearing">
+          {% raw %}{{ clearing ? 'Clearing…' : 'Yes, clear it' }}{% endraw %}
+        </button>
+        <button class="btn" @click="confirmingClear = false" :disabled="clearing">Cancel</button>
+      </div>
+      <p class="field-hint" v-if="clearResult">
+        ● cleared {% raw %}{{ clearResult.items_cleared }}{% endraw %} items,
+        {% raw %}{{ clearResult.runs_cleared }}{% endraw %} runs,
+        {% raw %}{{ clearResult.logs_cleared }}{% endraw %} log entries
+      </p>
+      <p class="field-hint error" v-if="error">● {% raw %}{{ error }}{% endraw %}</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/jobs.js?v={{ asset_version }}"></script>
+{% endblock %}

@@ -1,0 +1,32 @@
+services:
+  subtitlarr:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - BAZARR_BASE_URL=${BAZARR_BASE_URL}
+      - BAZARR_API_KEY=${BAZARR_API_KEY}
+      - ACTIVE_ENGINE=${ACTIVE_ENGINE:-ollama}
+      - FALLBACK_ENGINE=${FALLBACK_ENGINE:-}
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma3:4b}
+      - OLLAMA_NUM_CTX=${OLLAMA_NUM_CTX:-8192}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash}
+      - SCHEDULE_CRON=${SCHEDULE_CRON:-0 3 * * *}
+      - AGE_THRESHOLD_DAYS=${AGE_THRESHOLD_DAYS:-14}
+      - DB_PATH=/data/subtitlarr.db
+    volumes:
+      - ./data:/data
+    depends_on:
+      - ollama
+
+  # Local-dev convenience only. On the real Unraid deployment, Ollama already
+  # runs as its own existing container — point OLLAMA_BASE_URL at that
+  # container instead of defining a service here.
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama-data:/root/.ollama

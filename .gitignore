@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.claude/
+.venv/
+venv/
+.env
+data/
+ollama-data/
+*.db
+.pytest_cache/
+node_modules/

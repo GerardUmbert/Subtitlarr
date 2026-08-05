@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Translation Engine{% endblock %}
+{% block content %}
+<div id="engines-app">
+  <div class="page-head">
+    <div>
+      <h1>Translation Engine</h1>
+      <p class="page-sub">Choose which engine handles queued translations, and configure it.</p>
+    </div>
+  </div>
+
+  <div class="engine-card">
+    <div class="panel-title">Active engine</div>
+    <div class="panel-title-sub">Fallback engine is used if the active one rate-limits or fails</div>
+
+    <div :class="['engine-opt', { selected: active === 'ollama' }]" @click="active = 'ollama'">
+      <div class="engine-radio"><div class="fill" v-if="active === 'ollama'"></div></div>
+      <div class="engine-info">
+        <div class="engine-name">Ollama <span class="badge badge-local">local</span></div>
+        <div class="engine-meta">{% raw %}{{ ollamaModel }}{% endraw %} · {% raw %}{{ ollamaBaseUrl }}{% endraw %}</div>
+      </div>
+      <div :class="['engine-status', ollamaStatus.cls]"><span class="dot"></span>{% raw %}{{ ollamaStatus.label }}{% endraw %}</div>
+    </div>
+
+    <div class="engine-config" v-if="active === 'ollama'">
+      <div class="field">
+        <label>Model</label>
+        <input v-model="ollamaModel" placeholder="gemma3:4b" />
+      </div>
+      <div class="field">
+        <label>Base URL</label>
+        <input v-model="ollamaBaseUrl" placeholder="http://ollama:11434" />
+      </div>
+      <div class="field">
+        <label>Context window (tokens)</label>
+        <input v-model.number="ollamaNumCtx" type="number" min="512" step="512" />
+        <p class="field-hint">
+          Ollama defaults to 4096 regardless of what the model supports — long subtitle files can
+          exceed that and get silently truncated. Raise this if translations of longer files come
+          back incomplete. Higher values use more RAM.
+        </p>
+      </div>
+      <div class="field">
+        <label>Batch size override (dialogue tokens)</label>
+        <input v-model.number="ollamaBatchTokenBudget" type="number" min="0" step="100" />
+        <p class="field-hint">
+          By default, batch size auto-scales with the context window above — but small models can
+          lose reliable output formatting well before they run out of context (a batch that fits
+          doesn't mean the model can format that much output correctly). Set a fixed value here to
+          override the auto formula (0 = auto). If translations are coming back with most lines
+          untranslated or a "recovered N/M cues" failure, try lowering this — 900 was the reliable
+          value observed before batch auto-scaling was added.
+        </p>
+      </div>
+      <div class="field-row">
+        <button class="btn" @click="testEngine('ollama')" :disabled="testing === 'ollama'">
+          {% raw %}{{ testing === 'ollama' ? 'Testing…' : 'Test connection' }}{% endraw %}
+        </button>
+        <span v-if="testResults.ollama" :class="['test-result', { error: !testResults.ollama.ok }]">
+          ● {% raw %}{{ testResults.ollama.detail }}{% endraw %}
+        </span>
+      </div>
+
+      <div class="field-row">
+        <button class="btn" @click="pullModel" :disabled="pull.active">
+          {% raw %}{{ pull.active ? 'Pulling…' : 'Pull model' }}{% endraw %}
+        </button>
+        <span v-if="pull.active" class="test-result">
+          ● {% raw %}{{ pull.status }}{% endraw %}{% raw %}{{ pull.total ? ' — ' + pull.pct + '%' : '' }}{% endraw %}
+        </span>
+        <span v-else-if="pull.done" class="test-result">● model ready</span>
+        <span v-else-if="pull.error" class="test-result error">● {% raw %}{{ pull.error }}{% endraw %}</span>
+      </div>
+      <div class="progress-track" v-if="pull.active && pull.total" style="margin-top:8px;">
+        <div class="progress-fill" :style="{ width: pull.pct + '%' }"></div>
+      </div>
+    </div>
+
+    <div :class="['engine-opt', { selected: active === 'gemini' }]" style="margin-top:14px;" @click="active = 'gemini'">
+      <div class="engine-radio"><div class="fill" v-if="active === 'gemini'"></div></div>
+      <div class="engine-info">
+        <div class="engine-name">Gemini <span class="badge badge-free">free tier</span></div>
+        <div class="engine-meta">{% raw %}{{ geminiModel }}{% endraw %} · rate limited</div>
+      </div>
+      <div :class="['engine-status', geminiHasKey ? '' : 'off']">
+        <span class="dot"></span>{% raw %}{{ geminiHasKey ? 'configured' : 'no key' }}{% endraw %}
+      </div>
+    </div>
+
+    <div class="engine-config" v-if="active === 'gemini'">
+      <div class="field">
+        <label>Model</label>
+        <input v-model="geminiModel" placeholder="gemini-1.5-flash" />
+      </div>
+      <div class="field">
+        <label>API key {% raw %}{{ geminiKeyMasked ? '(' + geminiKeyMasked + ')' : '' }}{% endraw %}</label>
+        <input v-model="geminiApiKey" type="password" placeholder="leave blank to keep current key" />
+      </div>
+      <div class="field-row">
+        <button class="btn" @click="testEngine('gemini')" :disabled="testing === 'gemini'">
+          {% raw %}{{ testing === 'gemini' ? 'Testing…' : 'Test connection' }}{% endraw %}
+        </button>
+        <span v-if="testResults.gemini" :class="['test-result', { error: !testResults.gemini.ok }]">
+          ● {% raw %}{{ testResults.gemini.detail }}{% endraw %}
+        </span>
+      </div>
+    </div>
+
+    <div class="engine-opt disabled">
+      <div class="engine-radio"></div>
+      <div class="engine-info">
+        <div class="engine-name">Claude <span class="badge badge-paid">API key</span></div>
+        <div class="engine-meta">not available in this version</div>
+      </div>
+      <div class="engine-status off"><span class="dot"></span>off</div>
+    </div>
+
+    <div class="engine-opt disabled" style="margin-bottom:16px;">
+      <div class="engine-radio"></div>
+      <div class="engine-info">
+        <div class="engine-name">OpenAI <span class="badge badge-paid">API key</span></div>
+        <div class="engine-meta">not available in this version</div>
+      </div>
+      <div class="engine-status off"><span class="dot"></span>off</div>
+    </div>
+
+    <div class="engine-config">
+      <div class="field">
+        <label>Fallback engine</label>
+        <select v-model="fallback">
+          <option value="">None</option>
+          <option value="ollama">Ollama</option>
+          <option value="gemini">Gemini</option>
+        </select>
+      </div>
+      <div class="field-row">
+        <button class="btn btn-primary" @click="save" :disabled="saving">
+          {% raw %}{{ saving ? 'Saving…' : 'Save' }}{% endraw %}
+        </button>
+        <span v-if="saved" class="test-result">● saved</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/engines.js?v={{ asset_version }}"></script>
+{% endblock %}

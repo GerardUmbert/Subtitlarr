@@ -1,0 +1,83 @@
+import logging
+import sqlite3
+
+from app.bazarr.client import BazarrClient
+from app.db import repository
+from app.engine import selector
+
+logger = logging.getLogger(__name__)
+
+
+async def _resolve_and_preview_source(
+    conn: sqlite3.Connection, client: BazarrClient, item_type: str, bazarr_id: int,
+    target_language: str, source_priority: list[str],
+) -> None:
+    """Eagerly resolves and stores which source language WOULD be used for
+    this (item, target_language) pair, purely so the Queue UI can show a
+    real language instead of '?' before the item has ever been translated.
+    Costs one extra Bazarr detail call per wanted item per poll — accepted
+    tradeoff for always-visible source languages over poll speed/API load."""
+    item = repository.get_item_by_bazarr_id(conn, item_type, bazarr_id, target_language)
+    if item is None or item["status"] != "pending":
+        return
+    source_map = await selector.build_source_map(client, item_type, bazarr_id)
+    matched_lang = selector.pick_source_language(source_map, target_language, source_priority)
+    if matched_lang is None:
+        repository.mark_skipped_no_source(conn, item["id"])
+    else:
+        repository.set_resolved_source_language(conn, item["id"], matched_lang)
+
+
+async def poll_once(conn: sqlite3.Connection, client: BazarrClient) -> dict:
+    """Refreshes items from Bazarr's wanted lists: upserts newly-seen
+    (item, missing target language) pairs, stamping first_seen_wanted only on
+    first sight, resolves items Bazarr no longer lists as missing, and
+    eagerly previews each new item's source language for display."""
+    episodes_seen = 0
+    movies_seen = 0
+    source_priority = repository.get_config(conn, "source_lang_priority", default=[])
+
+    async for wanted in client.iter_all_wanted_episodes():
+        still_missing = {lang.code2 for lang in wanted.missing_subtitles}
+        for lang in wanted.missing_subtitles:
+            repository.upsert_item_seen(
+                conn,
+                item_type="episode",
+                bazarr_id=wanted.sonarrEpisodeId,
+                series_id=wanted.sonarrSeriesId,
+                title=wanted.episodeTitle,
+                series_title=wanted.seriesTitle,
+                season_episode=wanted.episode_number,
+                target_language=lang.code2,
+            )
+            await _resolve_and_preview_source(
+                conn, client, "episode", wanted.sonarrEpisodeId, lang.code2, source_priority
+            )
+        repository.mark_resolved_if_missing(
+            conn, "episode", wanted.sonarrEpisodeId, still_missing
+        )
+        episodes_seen += 1
+
+    async for wanted in client.iter_all_wanted_movies():
+        still_missing = {lang.code2 for lang in wanted.missing_subtitles}
+        for lang in wanted.missing_subtitles:
+            repository.upsert_item_seen(
+                conn,
+                item_type="movie",
+                bazarr_id=wanted.radarrId,
+                series_id=None,
+                title=wanted.title,
+                series_title=None,
+                season_episode=None,
+                target_language=lang.code2,
+            )
+            await _resolve_and_preview_source(
+                conn, client, "movie", wanted.radarrId, lang.code2, source_priority
+            )
+        repository.mark_resolved_if_missing(
+            conn, "movie", wanted.radarrId, still_missing
+        )
+        movies_seen += 1
+
+    logger.info("Poll complete: %d episodes, %d movies seen as wanted", episodes_seen, movies_seen)
+    return {"episodes_seen": episodes_seen, "movies_seen": movies_seen}

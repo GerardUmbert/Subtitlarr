@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Queue & History{% endblock %}
+{% block content %}
+<div id="queue-app">
+  <div class="page-head">
+    <div>
+      <h1>Queue &amp; History</h1>
+      <p class="page-sub">Every item Subtitlarr has tracked, and what happened to it. Any row — including done ones — can be run again individually.</p>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-bottom:0;">
+    <div class="queue-toolbar">
+      <span v-for="s in filters" :key="s.value"
+            :class="['chip', { active: statusFilter === s.value }]"
+            @click="setFilter(s.value)">{% raw %}{{ s.label }}{% endraw %}</span>
+      <span style="width:1px; background:var(--border); align-self:stretch; margin:0 2px;"></span>
+      <span v-for="t in typeFilters" :key="t.value"
+            :class="['chip', { active: typeFilter === t.value }]"
+            @click="setTypeFilter(t.value)">{% raw %}{{ t.label }}{% endraw %}</span>
+      <input v-model="searchInput" @input="onSearchInput" placeholder="Search by title…"
+             style="margin-left:auto; max-width:220px; padding:5px 11px; border-radius:99px; border:1px solid var(--border); background:var(--surface); font-size:12px; color:var(--ink);" />
+    </div>
+    <div class="queue-toolbar" style="justify-content:flex-end;">
+      <button class="btn" :disabled="runActive || runningFiltered || matchingCount === 0" @click="runFiltered">
+        {% raw %}{{ runningFiltered ? 'Starting…' : (runActive ? 'Run in progress…' : `Run all ${matchingCount} matching`) }}{% endraw %}
+      </button>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Language</th>
+            <th>Status</th>
+            <th>Updated</th>
+            <th>Duration</th>
+            <th>Error</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody v-if="items.length">
+          <tr v-for="item in items" :key="item.id">
+            <td>
+              <div class="title-cell">{% raw %}{{ item.series_title || item.title }}{% endraw %}</div>
+              <div class="title-type">{% raw %}{{ item.season_episode ? item.season_episode + ' · episode' : 'movie' }}{% endraw %}</div>
+            </td>
+            <td>
+              <span class="lang-tag">{% raw %}{{ (item.source_language || '?').toUpperCase() }}{% endraw %}</span>
+              <span class="arrow">→</span>
+              <span class="lang-tag">{% raw %}{{ item.target_language.toUpperCase() }}{% endraw %}</span>
+            </td>
+            <td><span :class="'status-pill status-' + item.status"><span class="dot"></span>{% raw %}{{ statusLabel(item.status) }}{% endraw %}</span></td>
+            <td class="row-time">{% raw %}{{ timeAgo(item.last_updated) }}{% endraw %}</td>
+            <td class="row-time">{% raw %}{{ duration(item) }}{% endraw %}</td>
+            <td class="row-time" :title="item.error_message || ''">{% raw %}{{ (item.error_message || '').slice(0, 40) }}{% endraw %}</td>
+            <td class="row-action">
+              <button class="link-btn" :disabled="!canRunItem(item)"
+                      @click="runItem(item)">
+                {% raw %}{{ runningItemId === item.id ? 'running…' : (runActive ? 'run in progress…' : (item.status === 'done' ? 're-run' : 'run now')) }}{% endraw %}
+              </button>
+            </td>
+          </tr>
+        </tbody>
+        <tbody v-else>
+          <tr><td colspan="6" class="empty-state">No items match this filter.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <span>Page {% raw %}{{ page }}{% endraw %} of {% raw %}{{ totalPages }}{% endraw %} ({% raw %}{{ total }}{% endraw %} items)</span>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" :disabled="page <= 1" @click="prevPage">Previous</button>
+        <button class="btn" :disabled="page >= totalPages" @click="nextPage">Next</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/queue.js?v={{ asset_version }}"></script>
+{% endblock %}

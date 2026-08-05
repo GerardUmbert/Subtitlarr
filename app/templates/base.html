@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Subtitlarr — {% block title %}Dashboard{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/tokens.css?v={{ asset_version }}" />
+  <link rel="stylesheet" href="/static/css/base.css?v={{ asset_version }}" />
+  <link rel="stylesheet" href="/static/css/components.css?v={{ asset_version }}" />
+  <script src="/static/js/vue.global.prod.js?v={{ asset_version }}"></script>
+</head>
+<body>
+  <div class="shell">
+    {% include "partials/sidebar.html" %}
+    <main id="app">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  <script src="/static/js/api.js?v={{ asset_version }}"></script>
+  <script src="/static/js/toast.js?v={{ asset_version }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div id="dashboard-app">
+  <div class="page-head">
+    <div>
+      <h1>Dashboard</h1>
+      <p class="page-sub">Translating missing subtitles from languages you already have.</p>
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button class="btn" @click="triggerPoll" :disabled="polling || runActive">
+        {% raw %}{{ polling ? 'Refreshing…' : 'Refresh from Bazarr' }}{% endraw %}
+      </button>
+      <button class="btn btn-primary" @click="triggerRunNow" :disabled="runActive">
+        {% raw %}{{ runActive ? 'Running…' : 'Run now' }}{% endraw %}
+      </button>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-label">Wanted (Bazarr)</div>
+      <div class="stat-value">{% raw %}{{ stats.wanted ?? '—' }}{% endraw %}</div>
+      <div class="stat-hint">tracked missing-subtitle items</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Translatable</div>
+      <div class="stat-value accent">{% raw %}{{ stats.translatable ?? '—' }}{% endraw %}</div>
+      <div class="stat-hint">have a usable source language</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Completed</div>
+      <div class="stat-value good">{% raw %}{{ stats.completed ?? '—' }}{% endraw %}</div>
+      <div class="stat-hint">written back to Bazarr</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">No source available</div>
+      <div class="stat-value faint">{% raw %}{{ stats.no_source ?? '—' }}{% endraw %}</div>
+      <div class="stat-hint">needs speech-to-text, not translation</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="panel-title">Current run</div>
+        <div class="panel-title-sub" v-if="run.active">
+          Triggered: {% raw %}{{ run.triggered_by }}{% endraw %}
+        </div>
+        <div class="panel-title-sub" v-else>No run in progress</div>
+      </div>
+      <span class="pill pill-running" v-if="run.active"><span class="dot"></span>running</span>
+      <span class="pill pill-idle" v-else>idle</span>
+    </div>
+    <div class="panel-body" v-if="run.active">
+      <div class="progress-row">
+        <div class="progress-track">
+          <div class="progress-fill" :style="{ width: progressPct + '%' }"></div>
+        </div>
+        <div class="progress-figs"><b>{% raw %}{{ run.processed }}{% endraw %}</b> / {% raw %}{{ run.total }}{% endraw %}</div>
+      </div>
+      <div class="progress-meta">
+        <div>Rate <span>{% raw %}{{ run.rate_per_min }}{% endraw %} files/min</span></div>
+        <div>Failed <span :style="run.failed > 0 ? 'color:var(--bad)' : ''">{% raw %}{{ run.failed }}{% endraw %}</span></div>
+        <div>Est. remaining <span>{% raw %}{{ etaLabel }}{% endraw %}</span></div>
+      </div>
+    </div>
+    <div class="panel-body" v-else>
+      <p class="progress-empty">Trigger a manual run, or wait for the next scheduled run.</p>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="engine-card">
+      <div class="panel-title">Translation engine</div>
+      <div class="panel-title-sub">Configure in <a href="/engines">Translation Engine</a></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:0;">
+      <div class="queue-toolbar">
+        <span class="chip active">Recent activity</span>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Language</th>
+              <th>Status</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody v-if="recentItems.length">
+            <tr v-for="item in recentItems" :key="item.id">
+              <td>
+                <div class="title-cell">{% raw %}{{ item.series_title || item.title }}{% endraw %}</div>
+                <div class="title-type">{% raw %}{{ item.season_episode ? item.season_episode + ' · episode' : 'movie' }}{% endraw %}</div>
+              </td>
+              <td>
+                <span class="lang-tag">{% raw %}{{ (item.source_language || '?').toUpperCase() }}{% endraw %}</span>
+                <span class="arrow">→</span>
+                <span class="lang-tag">{% raw %}{{ item.target_language.toUpperCase() }}{% endraw %}</span>
+              </td>
+              <td><span :class="'status-pill status-' + item.status"><span class="dot"></span>{% raw %}{{ statusLabel(item.status) }}{% endraw %}</span></td>
+              <td class="row-time">{% raw %}{{ timeAgo(item.last_updated) }}{% endraw %}</td>
+            </tr>
+          </tbody>
+          <tbody v-else>
+            <tr><td colspan="4" class="empty-state">No items yet — click "Refresh from Bazarr" above, or wait for the next scheduled run.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/dashboard.js?v={{ asset_version }}"></script>
+{% endblock %}

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Bazarr Connection{% endblock %}
+{% block content %}
+<div id="bazarr-app">
+  <div class="page-head">
+    <div>
+      <h1>Bazarr Connection</h1>
+      <p class="page-sub">Subtitlarr reads and writes subtitles entirely through Bazarr's API — no media folder is ever mounted.</p>
+    </div>
+  </div>
+
+  <div class="engine-card">
+    <div class="panel-title">Connection</div>
+    <div class="panel-title-sub">API key is found in Bazarr under Settings → General</div>
+
+    <div class="engine-config" style="margin-top:0; border-top:none;">
+      <div class="field">
+        <label>Bazarr URL</label>
+        <input v-model="baseUrl" placeholder="http://192.168.1.10:6767" />
+      </div>
+      <div class="field">
+        <label>API key</label>
+        <input v-model="apiKey" type="password"
+               :placeholder="hasKey ? 'leave blank to keep current key' : 'paste your Bazarr API key'" />
+        <p class="field-hint" v-if="hasKey">
+          A key is saved (ends in {% raw %}{{ keyMasked }}{% endraw %}). This field clears itself after saving — that's expected, not an error.
+        </p>
+      </div>
+      <div class="field-row">
+        <button class="btn" @click="test" :disabled="testing">
+          {% raw %}{{ testing ? 'Testing…' : 'Test connection' }}{% endraw %}
+        </button>
+        <span v-if="testResult" :class="['test-result', { error: !testResult.ok }]">
+          ● {% raw %}{{ testResult.ok ? 'connected' : 'could not connect' }}{% endraw %}
+        </span>
+      </div>
+      <div class="field-row">
+        <button class="btn btn-primary" @click="save" :disabled="saving">
+          {% raw %}{{ saving ? 'Saving…' : 'Save' }}{% endraw %}
+        </button>
+        <span v-if="saved" class="test-result">● saved</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/bazarr.js?v={{ asset_version }}"></script>
+{% endblock %}

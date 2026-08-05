@@ -1,0 +1,97 @@
+import asyncio
+
+from fastapi import APIRouter, Depends, HTTPException
+
+from app import state
+from app.db import repository
+from app.engine import selector
+
+router = APIRouter(prefix="/api/queue", tags=["queue"])
+
+
+@router.get("")
+async def list_queue(
+    status: str | None = None,
+    item_type: str | None = None,
+    search: str | None = None,
+    page: int = 1,
+    page_size: int = 50,
+    sort: str = "title",
+    conn=Depends(state.get_conn),
+):
+    rows, total = repository.list_queue(
+        conn, status=status, item_type=item_type, search=search,
+        page=page, page_size=page_size, sort=sort,
+    )
+    return {"data": [dict(row) for row in rows], "total": total, "page": page, "page_size": page_size}
+
+
+@router.get("/matching-count")
+async def get_matching_count(
+    status: str | None = None,
+    item_type: str | None = None,
+    search: str | None = None,
+    conn=Depends(state.get_conn),
+):
+    """How many currently-translatable (pending/queued) items match this
+    filter — used by the Queue page's 'Run all N matching' bulk action to
+    show an accurate count before the user commits to it."""
+    items = selector.get_filtered_translatable_queue(
+        conn, status=status, item_type=item_type, search=search
+    )
+    return {"count": len(items)}
+
+
+@router.post("/run-filtered")
+async def run_filtered(
+    status: str | None = None,
+    item_type: str | None = None,
+    search: str | None = None,
+    runner=Depends(state.get_runner),
+):
+    """Runs every translatable item matching the given filter (same
+    status/item_type/search params as GET /api/queue) — e.g. 'all TV',
+    'everything matching a title search'. Respects the normal daily
+    cap/age gate, same as a scheduled run."""
+    if runner.current is not None and runner.current.active:
+        return {"started": False, "reason": "A run is already in progress"}
+    asyncio.create_task(runner.run_filtered(status, item_type, search))
+    return {"started": True}
+
+
+@router.get("/{item_id}")
+async def get_item(item_id: int, conn=Depends(state.get_conn)):
+    row = repository.get_item(conn, item_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return dict(row)
+
+
+@router.post("/{item_id}/run")
+async def run_item(
+    item_id: int,
+    conn=Depends(state.get_conn),
+    runner=Depends(state.get_runner),
+    client=Depends(state.get_client),
+):
+    row = repository.get_item(conn, item_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    if runner.current is not None and runner.current.active:
+        return {"started": False, "reason": "A run is already in progress"}
+
+    # Re-resolve the source language fresh against Bazarr right now, rather
+    # than trusting whatever was last recorded — the point of a manual
+    # re-run is often exactly that something changed on Bazarr's end since
+    # the last attempt/poll. This is purely for the immediate response
+    # (so the UI can show an accurate "Translating from X to Y" toast);
+    # run_single_item -> resolve_and_gate does its own independent
+    # resolution right before actually translating.
+    source_priority = repository.get_config(conn, "source_lang_priority", default=[])
+    source_map = await selector.build_source_map(client, row["item_type"], row["bazarr_id"])
+    resolved_source = selector.pick_source_language(
+        source_map, row["target_language"], source_priority
+    )
+
+    asyncio.create_task(runner.run_single_item(item_id))
+    return {"started": True, "source_language": resolved_source}
