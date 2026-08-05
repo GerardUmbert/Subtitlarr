@@ -39,6 +39,7 @@ const Api = (() => {
       const qs = new URLSearchParams(params).toString();
       return request("GET", `/api/queue${qs ? "?" + qs : ""}`);
     },
+    getCurrentRunItems: () => request("GET", "/api/queue/current-run"),
 
     getEngineConfig: () => request("GET", "/api/config/engines"),
     setEngineConfig: (cfg) => request("POST", "/api/config/engines", cfg),

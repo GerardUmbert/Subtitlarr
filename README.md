@@ -68,7 +68,7 @@ Translation Engine / Language Rules / Bazarr Connection pages).
 |---|---|---|
 | `BAZARR_BASE_URL` | Bazarr root URL | *(required)* |
 | `BAZARR_API_KEY` | Bazarr API key | *(required)* |
-| `ACTIVE_ENGINE` | `ollama` or `gemini` | `ollama` |
+| `ACTIVE_ENGINE` | `ollama`, `gemini`, or `nvidia` | `ollama` |
 | `FALLBACK_ENGINE` | Same values, used if the active engine fails/rate-limits | *(none)* |
 | `OLLAMA_BASE_URL` | Ollama server URL | `http://localhost:11434` |
 | `OLLAMA_MODEL` | Model name | `gemma3:4b` |
@@ -89,10 +89,15 @@ in Subtitlarr's own database.
 
 ## Translation engines
 
-Only Ollama (local, free, no rate limits, CPU inference works but is slow on
-modest hardware) and Gemini (cloud, has a usable free tier, rate-limited) are
-wired up currently. The provider interface is written so OpenAI, Anthropic,
-and Grok can be added later without changes to the rest of the app.
+Ollama (local, free, no rate limits, CPU inference works but is slow on
+modest hardware), Gemini (cloud, has a usable free tier, rate-limited), and
+NVIDIA's free-tier NIM API (cloud, up to 40 requests/minute) are wired up
+currently. The NVIDIA engine must be pointed at a real instructable chat
+model (defaults to DeepSeek V4 Flash) — NVIDIA also hosts dedicated
+translation-only models (e.g. Riva Translate) which don't support the
+formatting instructions this app relies on and aren't compatible. The
+provider interface is written so OpenAI, Anthropic, and Grok can be added
+later without changes to the rest of the app.
 
 ## Development
 

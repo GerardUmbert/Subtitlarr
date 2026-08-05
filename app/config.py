@@ -33,6 +33,37 @@ class Settings(BaseSettings):
     # it explicitly via the Engine page or GEMINI_MODEL env var.
     gemini_model: str = "gemini-2.0-flash"
 
+    nvidia_api_key: str = ""
+    # NVIDIA's build.nvidia.com free tier (integrate.api.nvidia.com), an
+    # OpenAI-compatible endpoint. MUST be a real instructable chat model —
+    # this provider reuses the same numbered-index prompt scheme as
+    # Ollama/Gemini. NVIDIA also hosts a dedicated Riva Translate model,
+    # which was tried first and dropped: it has no instructable system
+    # prompt and proved unreliable at any real batch size (confirmed live:
+    # it merges/drops joined lines instead of translating them
+    # individually, even in small batches).
+    nvidia_model: str = "deepseek-ai/deepseek-v4-flash"
+    # Separate from ollama_batch_token_budget: NVIDIA's cloud model has no
+    # local VRAM/GPU constraint driving a small batch size, and confirmed
+    # live that DeepSeek V4 Flash returns 100% of indices in order at up to
+    # 400 cues (~9700 chars) in a SINGLE request.
+    #
+    # 12000 was tried as the default first and failed live on an unusually
+    # large episode (1481 cues — roughly 2-3x normal — packed into ONE
+    # ~29,500-char request): got a real 504 Gateway Timeout from NVIDIA's
+    # own servers on one attempt, and a repetition-loop failure (the model
+    # degenerating into repeating one line 10+ times) on another.
+    #
+    # 6000 was tried next and STILL hit the same repetition-loop failure —
+    # twice, including on a NORMAL-sized batch, not just the oversized
+    # episode — so this isn't purely a "batch too large" problem. Root
+    # cause not yet confirmed (investigation blocked by a separate logging
+    # bug that drops the raw LLM response text from server.log). Cut
+    # further as a precaution while that's investigated — closer to the
+    # ~50-cue scale that was cleanly reliable across repeated small-scale
+    # tests earlier in the same investigation.
+    nvidia_batch_token_budget: int = 2000
+
     # Scheduling
     schedule_cron: str = "0 3 * * *"
     age_threshold_days: int = 14

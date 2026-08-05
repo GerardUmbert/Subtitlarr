@@ -221,7 +221,10 @@ _QUEUE_SORTS = {
 
 
 def _build_queue_filter(
-    status: str | None, item_type: str | None, search: str | None
+    status: str | None,
+    item_type: str | None,
+    search: str | None,
+    exclude_no_source: bool = False,
 ) -> tuple[list[str], list]:
     conditions: list[str] = []
     params: list = []
@@ -235,6 +238,12 @@ def _build_queue_filter(
         conditions.append("COALESCE(series_title, title) LIKE ? ESCAPE '\\'")
         escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         params.append(f"%{escaped}%")
+    # A standalone toggle, independent of (and stacks with) status/type/
+    # search — but ignored when the user explicitly asked for
+    # 'skipped_no_source' itself, since excluding it would directly
+    # contradict that explicit request.
+    if exclude_no_source and status != "skipped_no_source":
+        conditions.append("status != 'skipped_no_source'")
     return conditions, params
 
 
@@ -244,12 +253,13 @@ def list_queue(
     status: str | None = None,
     item_type: str | None = None,
     search: str | None = None,
+    exclude_no_source: bool = False,
     page: int = 1,
     page_size: int = 50,
     sort: str = "title",
 ) -> tuple[list[sqlite3.Row], int]:
     order_by = _QUEUE_SORTS.get(sort, _QUEUE_SORTS["title"])
-    conditions, params = _build_queue_filter(status, item_type, search)
+    conditions, params = _build_queue_filter(status, item_type, search, exclude_no_source)
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
     total = conn.execute(
@@ -266,6 +276,25 @@ def list_queue(
     return rows, total
 
 
+def list_items_by_ids(conn: sqlite3.Connection, item_ids: list[int]) -> list[sqlite3.Row]:
+    """Every item in the given id list, in current status (queued/
+    translating/done/failed) — for the Queue page's 'current batch' view.
+    item_ids must come from RunController.current.item_ids (the full set
+    captured once at run_batch() start), NOT reconstructed from the DB —
+    an item queued but not yet started has no DB trace linking it to a
+    run_id (item_run_log only gains a row on a terminal outcome, and
+    items.status only reaches 'translating' once its turn in the
+    sequential loop arrives), so a DB-only query would miss every
+    not-yet-started item in the batch (confirmed live)."""
+    if not item_ids:
+        return []
+    placeholders = ",".join("?" for _ in item_ids)
+    return conn.execute(
+        f"SELECT * FROM items WHERE id IN ({placeholders}) ORDER BY last_updated DESC",
+        item_ids,
+    ).fetchall()
+
+
 def get_translatable_queue_filtered(
     conn: sqlite3.Connection,
     *,
@@ -273,13 +302,29 @@ def get_translatable_queue_filtered(
     item_type: str | None = None,
     search: str | None = None,
 ) -> list[sqlite3.Row]:
-    """Same filters as list_queue, but restricted to items that are actually
-    translatable (pending/queued) and returning the FULL matched set, not a
-    page — used by 'run all matching this filter' bulk actions. A status
-    filter for something other than pending/queued (e.g. 'done', 'failed')
-    correctly yields nothing, since those items aren't in a runnable state."""
+    """Same filters as list_queue, but returns the FULL matched set (not a
+    page) restricted to items a bulk run can actually act on — used by
+    'run all matching this filter' bulk actions on the Queue page, where any
+    row (including done/failed) can be manually re-run.
+
+    An explicit status filter is trusted as-is, AS LONG AS it's one of the
+    re-runnable statuses — e.g. filtering to 'Failed' and clicking bulk-run
+    is clearly an intent to retry those, not a request that should be
+    silently ignored. With no status filter ('All' tab), defaults to
+    pending/queued/failed — a live case: filtering to type=TV + a title
+    search on the 'All' tab showed 2 failed + 1 pending, and the bulk-run
+    button only grabbed the 1 pending, silently skipping the 2 failed rows
+    visibly sitting right there in the same table. 'done' items are still
+    excluded from this default (not from an explicit 'Done' filter),
+    since indiscriminately re-translating everything already finished
+    would be surprising/wasteful for an unfiltered bulk action."""
+    RERUNNABLE_STATUSES = {"pending", "queued", "failed", "done", "skipped_no_source"}
     conditions, params = _build_queue_filter(status, item_type, search)
-    conditions.append("status IN ('pending', 'queued')")
+    if status:
+        if status not in RERUNNABLE_STATUSES:
+            return []
+    else:
+        conditions.append("status IN ('pending', 'queued', 'failed')")
     where = f"WHERE {' AND '.join(conditions)}"
     return conn.execute(
         f"SELECT * FROM items {where} ORDER BY first_seen_wanted ASC", params

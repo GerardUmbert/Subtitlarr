@@ -133,22 +133,10 @@
 
 ## Not started
 
-- **Pre-fetch source subtitles from Bazarr before translating, to a local scratch dir.**
-  NAS disks spin down when idle; fetching one subtitle file every ~4 min (per item,
-  spread across a run — especially with the new pause-between-items setting) keeps
-  them spinning. Plan:
-  - At the start of `RunController.run_batch()`, after `resolve_and_gate()` picks
-    `ready_items`, fetch all their source subtitle contents from Bazarr in one tight
-    burst and write each to a local scratch dir (e.g. `{db_path parent}/scratch/run_{run_id}/`).
-  - `translator.translate_item()` gets an optional `source_content` param — use it
-    directly instead of fetching from Bazarr when provided (falls back to live fetch
-    otherwise, e.g. for single-item manual re-runs which don't need batching benefit).
-  - Uploads back to Bazarr still happen immediately per-item as each translation
-    finishes (not deferred/batched) — decided against batching uploads since they're
-    quick writes, not the disk-spin-down concern.
-  - Clean up the scratch dir after the batch finishes (success or failure).
-  - Written to disk (not memory-only) so a mid-batch crash doesn't force re-fetching
-    everything from Bazarr again on retry.
+- **Pre-fetch source subtitles from Bazarr** — superseded by the more
+  detailed writeup in `plans/prefetch-source-subtitles.md` (now tied to the
+  10am scheduled-sync cron rather than every run_batch() call).
+- **Per-batch translation history view** — see `plans/batch-history-view.md`.
 
 - [x] **Watchdog for stuck/slow Ollama requests** — implemented in
   `OllamaProvider.translate()` (ollama_provider.py). `WATCHDOG_TIMEOUT_SECONDS = 300`

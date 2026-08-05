@@ -45,6 +45,9 @@ createApp({
       runActive: false,
       matchingCount: 0,
       runningFiltered: false,
+      currentRunItems: [],
+      currentBatchOnly: false,
+      excludeNoSource: false,
       filters: [
         { label: "All", value: "" },
         { label: "Queued", value: "pending" },
@@ -62,9 +65,30 @@ createApp({
       _searchDebounceHandle: null,
     };
   },
+  created() {
+    // Read filter/page state from the URL BEFORE mount's first refresh(),
+    // so a page reload lands back on the same tab/filters/page instead of
+    // always resetting to defaults.
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("status")) this.statusFilter = params.get("status");
+    if (params.has("item_type")) this.typeFilter = params.get("item_type");
+    if (params.has("search")) {
+      this.search = params.get("search");
+      this.searchInput = this.search;
+    }
+    if (params.has("page")) {
+      const p = parseInt(params.get("page"), 10);
+      if (Number.isFinite(p) && p > 0) this.page = p;
+    }
+    if (params.get("batch") === "1") this.currentBatchOnly = true;
+    if (params.get("exclude_no_source") === "1") this.excludeNoSource = true;
+  },
   computed: {
     totalPages() {
       return Math.max(1, Math.ceil(this.total / this.pageSize));
+    },
+    displayedItems() {
+      return this.currentBatchOnly ? this.currentRunItems : this.items;
     },
   },
   methods: {
@@ -78,13 +102,26 @@ createApp({
       return item.status !== "translating"; // done/failed/pending/skipped can all be (re-)run manually
     },
     setFilter(value) {
+      this.currentBatchOnly = false;
       this.statusFilter = value;
       this.page = 1;
+      this.syncUrl();
       this.refresh();
     },
     setTypeFilter(value) {
+      this.currentBatchOnly = false;
       this.typeFilter = value;
       this.page = 1;
+      this.syncUrl();
+      this.refresh();
+    },
+    toggleCurrentBatch() {
+      this.currentBatchOnly = !this.currentBatchOnly;
+      this.syncUrl();
+    },
+    onExcludeNoSourceChange() {
+      this.page = 1;
+      this.syncUrl();
       this.refresh();
     },
     onSearchInput() {
@@ -92,20 +129,37 @@ createApp({
       this._searchDebounceHandle = setTimeout(() => {
         this.search = this.searchInput.trim();
         this.page = 1;
+        this.syncUrl();
         this.refresh();
       }, 300);
     },
     prevPage() {
       if (this.page > 1) {
         this.page -= 1;
+        this.syncUrl();
         this.refresh();
       }
     },
     nextPage() {
       if (this.page < this.totalPages) {
         this.page += 1;
+        this.syncUrl();
         this.refresh();
       }
+    },
+    syncUrl() {
+      const params = new URLSearchParams();
+      if (this.statusFilter) params.set("status", this.statusFilter);
+      if (this.typeFilter) params.set("item_type", this.typeFilter);
+      if (this.search) params.set("search", this.search);
+      if (this.page > 1) params.set("page", String(this.page));
+      if (this.currentBatchOnly) params.set("batch", "1");
+      if (this.excludeNoSource) params.set("exclude_no_source", "1");
+      const qs = params.toString();
+      const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+      // replaceState (not pushState) — filter changes shouldn't pile up
+      // separate entries in the browser's back-button history.
+      window.history.replaceState(null, "", newUrl);
     },
     filterParams() {
       const params = {};
@@ -116,7 +170,9 @@ createApp({
     },
     async refresh() {
       try {
-        const result = await Api.getQueue({ ...this.filterParams(), page: this.page, page_size: this.pageSize });
+        const params = { ...this.filterParams(), page: this.page, page_size: this.pageSize };
+        if (this.excludeNoSource) params.exclude_no_source = true;
+        const result = await Api.getQueue(params);
         this.items = result.data;
         this.total = result.total;
       } catch (_) {
@@ -179,7 +235,18 @@ createApp({
         this.runActive = !!run.active;
         if (!this.runActive) {
           this.runningItemId = null; // the job that was running has finished — release the button
+          this.currentRunItems = [];
         }
+      } catch (_) {
+        // keep last known state on transient failure
+      }
+      await this.refreshCurrentRunItems();
+    },
+    async refreshCurrentRunItems() {
+      if (!this.runActive) return;
+      try {
+        const result = await Api.getCurrentRunItems();
+        this.currentRunItems = result.active ? result.data : [];
       } catch (_) {
         // keep last known state on transient failure
       }

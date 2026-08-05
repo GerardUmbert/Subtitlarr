@@ -11,15 +11,23 @@
 
   <div class="panel" style="margin-bottom:0;">
     <div class="queue-toolbar">
+      <span v-if="runActive" :class="['chip', { active: currentBatchOnly }]"
+            @click="toggleCurrentBatch">Current batch{% raw %}{{ currentRunItems.length ? ` (${currentRunItems.length})` : '' }}{% endraw %}</span>
       <span v-for="s in filters" :key="s.value"
-            :class="['chip', { active: statusFilter === s.value }]"
+            :class="['chip', { active: !currentBatchOnly && statusFilter === s.value }]"
             @click="setFilter(s.value)">{% raw %}{{ s.label }}{% endraw %}</span>
       <span style="width:1px; background:var(--border); align-self:stretch; margin:0 2px;"></span>
       <span v-for="t in typeFilters" :key="t.value"
-            :class="['chip', { active: typeFilter === t.value }]"
+            :class="['chip', { active: !currentBatchOnly && typeFilter === t.value }]"
             @click="setTypeFilter(t.value)">{% raw %}{{ t.label }}{% endraw %}</span>
       <input v-model="searchInput" @input="onSearchInput" placeholder="Search by title…"
              style="margin-left:auto; max-width:220px; padding:5px 11px; border-radius:99px; border:1px solid var(--border); background:var(--surface); font-size:12px; color:var(--ink);" />
+    </div>
+    <div class="queue-toolbar">
+      <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink); cursor:pointer;">
+        <input type="checkbox" v-model="excludeNoSource" @change="onExcludeNoSourceChange" />
+        Hide items with no source subtitle
+      </label>
     </div>
     <div class="queue-toolbar" style="justify-content:flex-end;">
       <button class="btn" :disabled="runActive || runningFiltered || matchingCount === 0" @click="runFiltered">
@@ -39,8 +47,8 @@
             <th></th>
           </tr>
         </thead>
-        <tbody v-if="items.length">
-          <tr v-for="item in items" :key="item.id">
+        <tbody v-if="displayedItems.length">
+          <tr v-for="item in displayedItems" :key="item.id">
             <td>
               <div class="title-cell">{% raw %}{{ item.series_title || item.title }}{% endraw %}</div>
               <div class="title-type">{% raw %}{{ item.season_episode ? item.season_episode + ' · episode' : 'movie' }}{% endraw %}</div>
@@ -67,7 +75,7 @@
         </tbody>
       </table>
     </div>
-    <div class="pagination">
+    <div class="pagination" v-if="!currentBatchOnly">
       <span>Page {% raw %}{{ page }}{% endraw %} of {% raw %}{{ totalPages }}{% endraw %} ({% raw %}{{ total }}{% endraw %} items)</span>
       <div style="display:flex; gap:8px;">
         <button class="btn" :disabled="page <= 1" @click="prevPage">Previous</button>

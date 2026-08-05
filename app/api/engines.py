@@ -8,6 +8,7 @@ from app.config import settings
 from app.db import settings_store
 from app.providers import pull_state
 from app.providers.gemini_provider import GeminiProvider
+from app.providers.nvidia_provider import NvidiaProvider
 from app.providers.ollama_provider import OllamaProvider
 
 router = APIRouter(prefix="/api/config/engines", tags=["engines"])
@@ -30,6 +31,9 @@ class EngineConfig(BaseModel):
     ollama_batch_token_budget: int = 0
     gemini_model: str
     gemini_api_key: str | None = None  # only set to overwrite; omitted = unchanged
+    nvidia_model: str = "deepseek-ai/deepseek-v4-flash"
+    nvidia_api_key: str | None = None  # only set to overwrite; omitted = unchanged
+    nvidia_batch_token_budget: int = 2000
 
 
 @router.get("")
@@ -44,6 +48,10 @@ async def get_engine_config():
         "gemini_model": settings.gemini_model,
         "gemini_api_key_masked": _mask(settings.gemini_api_key),
         "gemini_has_key": bool(settings.gemini_api_key),
+        "nvidia_model": settings.nvidia_model,
+        "nvidia_api_key_masked": _mask(settings.nvidia_api_key),
+        "nvidia_has_key": bool(settings.nvidia_api_key),
+        "nvidia_batch_token_budget": settings.nvidia_batch_token_budget,
     }
 
 
@@ -53,6 +61,8 @@ async def set_engine_config(config: EngineConfig, conn=Depends(state.get_conn)):
         raise HTTPException(status_code=422, detail="ollama_num_ctx must be at least 512")
     if config.ollama_batch_token_budget < 0:
         raise HTTPException(status_code=422, detail="ollama_batch_token_budget must be >= 0")
+    if config.nvidia_batch_token_budget < 400:
+        raise HTTPException(status_code=422, detail="nvidia_batch_token_budget must be at least 400")
     settings.active_engine = config.active_engine
     settings_store.save_one(conn, "active_engine", config.active_engine)
     settings.fallback_engine = config.fallback_engine
@@ -70,13 +80,20 @@ async def set_engine_config(config: EngineConfig, conn=Depends(state.get_conn)):
     if config.gemini_api_key:
         settings.gemini_api_key = config.gemini_api_key
         settings_store.save_one(conn, "gemini_api_key", config.gemini_api_key)
+    settings.nvidia_model = config.nvidia_model
+    settings_store.save_one(conn, "nvidia_model", config.nvidia_model)
+    if config.nvidia_api_key:
+        settings.nvidia_api_key = config.nvidia_api_key
+        settings_store.save_one(conn, "nvidia_api_key", config.nvidia_api_key)
+    settings.nvidia_batch_token_budget = config.nvidia_batch_token_budget
+    settings_store.save_one(conn, "nvidia_batch_token_budget", config.nvidia_batch_token_budget)
     return {"saved": True}
 
 
 class TestEngineRequest(BaseModel):
     base_url: str | None = None  # ollama only; blank = use currently saved value
     model: str | None = None  # blank = use currently saved value
-    api_key: str | None = None  # gemini only; blank = use currently saved value
+    api_key: str | None = None  # gemini/nvidia only; blank = use currently saved value
 
 
 @router.post("/{name}/test")
@@ -94,6 +111,12 @@ async def test_engine(name: str, req: TestEngineRequest | None = None):
         if not api_key:
             raise HTTPException(status_code=400, detail="No Gemini API key configured")
         provider = GeminiProvider(api_key=api_key, model=model)
+    elif name == "nvidia":
+        api_key = (req.api_key if req and req.api_key else settings.nvidia_api_key)
+        model = (req.model if req and req.model else settings.nvidia_model)
+        if not api_key:
+            raise HTTPException(status_code=400, detail="No NVIDIA API key configured")
+        provider = NvidiaProvider(api_key=api_key, model=model)
     else:
         raise HTTPException(status_code=400, detail=f"Unknown or unimplemented engine: {name}")
 

@@ -9,10 +9,20 @@ createApp({
       ollamaBaseUrl: "",
       ollamaNumCtx: 8192,
       ollamaBatchTokenBudget: 0,
+      // Standard power-of-2 context sizes, matching the convention used by
+      // Ollama's own UI and most model docs — not an enforced hard limit,
+      // but covers every value anyone would realistically want and avoids
+      // invalid/oddball entries (e.g. a value the model doesn't support).
+      numCtxOptions: [4096, 8192, 16384, 32768, 65536, 131072, 262144],
       geminiModel: "",
       geminiApiKey: "",
       geminiKeyMasked: "",
       geminiHasKey: false,
+      nvidiaModel: "",
+      nvidiaApiKey: "",
+      nvidiaKeyMasked: "",
+      nvidiaHasKey: false,
+      nvidiaBatchTokenBudget: 2000,
       testing: null,
       testResults: {},
       saving: false,
@@ -29,25 +39,43 @@ createApp({
     },
   },
   methods: {
+    formatNumCtx(value) {
+      return value >= 1024 ? `${value / 1024}k` : String(value);
+    },
     async load() {
       const cfg = await Api.getEngineConfig();
       this.active = cfg.active_engine;
       this.fallback = cfg.fallback_engine;
       this.ollamaModel = cfg.ollama_model;
       this.ollamaBaseUrl = cfg.ollama_base_url;
+      // If a saved value isn't one of the standard dropdown options (e.g.
+      // set via an older free-text input, or a custom env var), add it so
+      // the dropdown still shows the actual current value rather than
+      // silently falling back to nothing selected.
+      if (!this.numCtxOptions.includes(cfg.ollama_num_ctx)) {
+        this.numCtxOptions = [...this.numCtxOptions, cfg.ollama_num_ctx].sort((a, b) => a - b);
+      }
       this.ollamaNumCtx = cfg.ollama_num_ctx;
       this.ollamaBatchTokenBudget = cfg.ollama_batch_token_budget;
       this.geminiModel = cfg.gemini_model;
       this.geminiKeyMasked = cfg.gemini_api_key_masked;
       this.geminiHasKey = cfg.gemini_has_key;
+      this.nvidiaModel = cfg.nvidia_model;
+      this.nvidiaKeyMasked = cfg.nvidia_api_key_masked;
+      this.nvidiaHasKey = cfg.nvidia_has_key;
+      this.nvidiaBatchTokenBudget = cfg.nvidia_batch_token_budget;
     },
     async testEngine(name) {
       this.testing = name;
       try {
-        const cfg =
-          name === "ollama"
-            ? { base_url: this.ollamaBaseUrl, model: this.ollamaModel }
-            : { model: this.geminiModel, api_key: this.geminiApiKey || null };
+        let cfg;
+        if (name === "ollama") {
+          cfg = { base_url: this.ollamaBaseUrl, model: this.ollamaModel };
+        } else if (name === "gemini") {
+          cfg = { model: this.geminiModel, api_key: this.geminiApiKey || null };
+        } else {
+          cfg = { model: this.nvidiaModel, api_key: this.nvidiaApiKey || null };
+        }
         const result = await Api.testEngine(name, cfg);
         this.testResults = { ...this.testResults, [name]: result };
       } catch (err) {
@@ -69,8 +97,12 @@ createApp({
           ollama_batch_token_budget: this.ollamaBatchTokenBudget,
           gemini_model: this.geminiModel,
           gemini_api_key: this.geminiApiKey || null,
+          nvidia_model: this.nvidiaModel,
+          nvidia_api_key: this.nvidiaApiKey || null,
+          nvidia_batch_token_budget: this.nvidiaBatchTokenBudget,
         });
         this.geminiApiKey = "";
+        this.nvidiaApiKey = "";
         await this.load();
         this.saved = true;
         setTimeout(() => (this.saved = false), 3000);

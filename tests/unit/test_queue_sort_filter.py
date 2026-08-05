@@ -96,3 +96,44 @@ def test_filters_combine(conn):
     rows, total = repository.list_queue(conn, item_type="movie", search="apple")
     assert total == 1
     assert rows[0]["title"] == "Apple Movie"
+
+
+def test_exclude_no_source_hides_skipped_no_source_items(conn):
+    """A standalone toggle, independent of status/type/search — hides
+    skipped_no_source items regardless of what else is filtered."""
+    _seed(conn)
+    no_source_item = conn.execute("SELECT id FROM items WHERE bazarr_id = 1").fetchone()
+    repository.update_item_status(conn, no_source_item["id"], "skipped_no_source")
+
+    rows, total = repository.list_queue(conn)
+    assert total == 3  # default: no exclusion, everything shows
+
+    rows, total = repository.list_queue(conn, exclude_no_source=True)
+    assert total == 2
+    assert all(r["status"] != "skipped_no_source" for r in rows)
+
+
+def test_exclude_no_source_stacks_with_other_filters(conn):
+    _seed(conn)
+    no_source_item = conn.execute("SELECT id FROM items WHERE bazarr_id = 2").fetchone()
+    repository.update_item_status(conn, no_source_item["id"], "skipped_no_source")
+
+    # both movies match item_type=movie; excluding no-source should drop
+    # the skipped one, leaving just the other movie
+    rows, total = repository.list_queue(conn, item_type="movie", exclude_no_source=True)
+    assert total == 1
+    assert rows[0]["title"] == "Zebra Movie"
+
+
+def test_exclude_no_source_ignored_when_explicitly_filtering_to_that_status(conn):
+    """Explicitly selecting the 'No source' status filter must still show
+    those items even if the exclude toggle is somehow also on — an
+    explicit status filter always wins."""
+    _seed(conn)
+    no_source_item = conn.execute("SELECT id FROM items WHERE bazarr_id = 1").fetchone()
+    repository.update_item_status(conn, no_source_item["id"], "skipped_no_source")
+
+    rows, total = repository.list_queue(
+        conn, status="skipped_no_source", exclude_no_source=True
+    )
+    assert total == 1

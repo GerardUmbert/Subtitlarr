@@ -14,6 +14,7 @@ async def list_queue(
     status: str | None = None,
     item_type: str | None = None,
     search: str | None = None,
+    exclude_no_source: bool = False,
     page: int = 1,
     page_size: int = 50,
     sort: str = "title",
@@ -21,7 +22,7 @@ async def list_queue(
 ):
     rows, total = repository.list_queue(
         conn, status=status, item_type=item_type, search=search,
-        page=page, page_size=page_size, sort=sort,
+        exclude_no_source=exclude_no_source, page=page, page_size=page_size, sort=sort,
     )
     return {"data": [dict(row) for row in rows], "total": total, "page": page, "page_size": page_size}
 
@@ -33,9 +34,10 @@ async def get_matching_count(
     search: str | None = None,
     conn=Depends(state.get_conn),
 ):
-    """How many currently-translatable (pending/queued) items match this
-    filter — used by the Queue page's 'Run all N matching' bulk action to
-    show an accurate count before the user commits to it."""
+    """How many currently-translatable (pending/queued/failed, or an
+    explicitly-filtered status) items match this filter — used by the
+    Queue page's 'Run all N matching' bulk action to show an accurate
+    count before the user commits to it."""
     items = selector.get_filtered_translatable_queue(
         conn, status=status, item_type=item_type, search=search
     )
@@ -57,6 +59,19 @@ async def run_filtered(
         return {"started": False, "reason": "A run is already in progress"}
     asyncio.create_task(runner.run_filtered(status, item_type, search))
     return {"started": True}
+
+
+@router.get("/current-run")
+async def get_current_run_items(conn=Depends(state.get_conn), runner=Depends(state.get_runner)):
+    """Every item touched by the currently-active run, in ANY status
+    (queued/translating/done/failed) — the Queue page's 'current batch'
+    view, so a running batch is visible as a whole rather than only
+    through the regular status-filtered table."""
+    progress = runner.current
+    if progress is None or not progress.active or progress.run_id is None:
+        return {"active": False, "data": []}
+    rows = repository.list_items_by_ids(conn, progress.item_ids)
+    return {"active": True, "run_id": progress.run_id, "data": [dict(row) for row in rows]}
 
 
 @router.get("/{item_id}")

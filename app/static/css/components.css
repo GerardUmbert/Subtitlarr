@@ -264,8 +264,7 @@ nav { display: flex; flex-direction: column; gap: 2px; }
   border-radius: var(--radius);
   box-shadow: var(--mono-shadow);
   padding: 18px 18px 8px;
-  width: 480px;
-  max-width: 100%;
+  width: 100%;
 }
 
 .engine-card .panel-title { margin-bottom: 2px; }

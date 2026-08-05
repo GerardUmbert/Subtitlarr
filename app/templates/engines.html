@@ -33,11 +33,14 @@
       </div>
       <div class="field">
         <label>Context window (tokens)</label>
-        <input v-model.number="ollamaNumCtx" type="number" min="512" step="512" />
+        <select v-model.number="ollamaNumCtx">
+          <option v-for="opt in numCtxOptions" :key="opt" :value="opt">{% raw %}{{ formatNumCtx(opt) }}{% endraw %}</option>
+        </select>
         <p class="field-hint">
-          Ollama defaults to 4096 regardless of what the model supports — long subtitle files can
-          exceed that and get silently truncated. Raise this if translations of longer files come
-          back incomplete. Higher values use more RAM.
+          Ollama defaults to 4096 regardless of what the model supports — long or verbose (e.g.
+          dual-language, heavily formatted) subtitle content can exceed that and get silently
+          truncated mid-response. Raise this if translations of longer or denser files come back
+          incomplete. Higher values use more RAM.
         </p>
       </div>
       <div class="field">
@@ -106,6 +109,54 @@
       </div>
     </div>
 
+    <div :class="['engine-opt', { selected: active === 'nvidia' }]" style="margin-top:14px;" @click="active = 'nvidia'">
+      <div class="engine-radio"><div class="fill" v-if="active === 'nvidia'"></div></div>
+      <div class="engine-info">
+        <div class="engine-name">NVIDIA (DeepSeek V4 Flash) <span class="badge badge-free">free tier</span></div>
+        <div class="engine-meta">{% raw %}{{ nvidiaModel }}{% endraw %}</div>
+      </div>
+      <div :class="['engine-status', nvidiaHasKey ? '' : 'off']">
+        <span class="dot"></span>{% raw %}{{ nvidiaHasKey ? 'configured' : 'no key' }}{% endraw %}
+      </div>
+    </div>
+
+    <div class="engine-config" v-if="active === 'nvidia'">
+      <div class="field">
+        <label>Model</label>
+        <input v-model="nvidiaModel" placeholder="deepseek-ai/deepseek-v4-flash" />
+        <p class="field-hint">
+          Must be a real instructable chat model (like this default) — NVIDIA also hosts
+          dedicated translation-only models (e.g. Riva Translate) which don't support the
+          formatting instructions this app relies on and are not compatible here.
+        </p>
+      </div>
+      <div class="field">
+        <label>API key {% raw %}{{ nvidiaKeyMasked ? '(' + nvidiaKeyMasked + ')' : '' }}{% endraw %}</label>
+        <input v-model="nvidiaApiKey" type="password" placeholder="leave blank to keep current key" />
+        <p class="field-hint">
+          Get a free key at <span class="mono">build.nvidia.com</span>.
+        </p>
+      </div>
+      <div class="field">
+        <label>Batch size (dialogue tokens)</label>
+        <input v-model.number="nvidiaBatchTokenBudget" type="number" min="400" step="500" />
+        <p class="field-hint">
+          Separate from Ollama's batch size — NVIDIA's cloud model has no local GPU/VRAM
+          constraint, but larger batches have shown repeated/degenerate output on real
+          content even at moderate sizes. Kept conservative by default; raise it only if
+          you confirm your content translates reliably at a bigger size.
+        </p>
+      </div>
+      <div class="field-row">
+        <button class="btn" @click="testEngine('nvidia')" :disabled="testing === 'nvidia'">
+          {% raw %}{{ testing === 'nvidia' ? 'Testing…' : 'Test connection' }}{% endraw %}
+        </button>
+        <span v-if="testResults.nvidia" :class="['test-result', { error: !testResults.nvidia.ok }]">
+          ● {% raw %}{{ testResults.nvidia.detail }}{% endraw %}
+        </span>
+      </div>
+    </div>
+
     <div class="engine-opt disabled">
       <div class="engine-radio"></div>
       <div class="engine-info">
@@ -131,6 +182,7 @@
           <option value="">None</option>
           <option value="ollama">Ollama</option>
           <option value="gemini">Gemini</option>
+          <option value="nvidia">NVIDIA (DeepSeek V4 Flash)</option>
         </select>
       </div>
       <div class="field-row">

@@ -23,6 +23,15 @@ class RunProgress:
     failed: int = 0
     started_at: float = field(default_factory=time.monotonic)
     active: bool = False
+    # The full set of item ids this run WILL touch, captured once at
+    # run_batch() start. Needed because an item queued but not yet started
+    # has no DB trace linking it to this run_id — item_run_log only gains a
+    # row on a terminal outcome, and items.status only reaches 'translating'
+    # once its turn in the sequential loop actually arrives. Without this,
+    # the Queue page's "current batch" view couldn't show queued-but-not-
+    # yet-started items at all (confirmed live: it only showed the single
+    # item actively translating, not the other items still waiting).
+    item_ids: list[int] = field(default_factory=list)
 
     @property
     def rate_per_min(self) -> float:
@@ -79,7 +88,11 @@ class RunController:
 
         run_id = repository.start_run(self._conn, triggered_by)
         progress = RunProgress(
-            run_id=run_id, triggered_by=triggered_by, total=len(ready_items), active=True
+            run_id=run_id,
+            triggered_by=triggered_by,
+            total=len(ready_items),
+            active=True,
+            item_ids=[entry["item"]["id"] for entry in ready_items],
         )
         self.current = progress
 
@@ -87,6 +100,19 @@ class RunController:
         fallback_provider = get_fallback_provider(self._settings)
 
         pause_seconds = self._settings.pause_between_items_seconds
+
+        # Each engine's batch-size settings are tuned for fundamentally
+        # different constraints: Ollama's small default protects local
+        # VRAM/GPU, while NVIDIA's cloud model has no such limit and was
+        # confirmed live to reliably handle a full ~400-cue episode in one
+        # request. Sharing one budget between them (as an earlier version
+        # of this code did) meant NVIDIA silently inherited Ollama's
+        # GPU-safe default and ran far more sequential batches than it
+        # needed to.
+        if active_provider.name == "nvidia":
+            batch_token_budget_override = self._settings.nvidia_batch_token_budget
+        else:
+            batch_token_budget_override = self._settings.ollama_batch_token_budget
 
         try:
             for i, entry in enumerate(ready_items):
@@ -101,7 +127,7 @@ class RunController:
                         fallback_provider,
                         run_id,
                         num_ctx=self._settings.ollama_num_ctx,
-                        batch_token_budget_override=self._settings.ollama_batch_token_budget,
+                        batch_token_budget_override=batch_token_budget_override,
                     )
                 except Exception:  # noqa: BLE001 - one item's failure must not abort the batch
                     progress.failed += 1

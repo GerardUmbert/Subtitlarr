@@ -41,6 +41,16 @@ def test_matching_count_respects_item_type_filter(client):
     assert resp.json()["count"] == 1
 
 
+def test_matching_count_with_explicit_done_filter_includes_done_items(client):
+    """Regression test: filtering the Queue page to 'Done' and checking the
+    bulk-run count must reflect actual done items, not always 0 — an
+    explicit status filter is trusted, unlike the no-filter default which
+    excludes done/failed."""
+    resp = client.get("/api/queue/matching-count", params={"status": "done"})
+    assert resp.status_code == 200
+    assert resp.json()["count"] == 1
+
+
 def test_run_filtered_starts_a_run(client, monkeypatch):
     from app.engine.runner import RunController
 

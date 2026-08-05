@@ -116,3 +116,9 @@ def test_registry_no_fallback_when_same_as_active():
 def test_registry_no_fallback_when_unset():
     settings = Settings(active_engine="ollama", fallback_engine="")
     assert get_fallback_provider(settings) is None
+
+
+def test_registry_builds_nvidia():
+    settings = Settings(active_engine="nvidia", nvidia_api_key="testkey")
+    active = get_active_provider(settings)
+    assert active.name == "nvidia"

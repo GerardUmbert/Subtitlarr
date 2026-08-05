@@ -12,6 +12,16 @@ _CUE_HEADER_RE = re.compile(r"^(\d+)\s*$", re.MULTILINE)
 # trusted — better to fail loudly than upload a badly mangled subtitle.
 MIN_RECOVERABLE_FRACTION = 0.5
 
+# A live run got stuck in a degenerate-generation loop, repeating the exact
+# same line ("Evita a los peatones ya que te atacan.") across 53 CONSECUTIVE
+# cue indices before recovering. Each repeated line parsed correctly and
+# counted toward "recovered" cues — nothing previously checked whether the
+# recovered content was actually distinct per cue, so this garbage could
+# have silently passed the recovery-fraction gate and been uploaded. A real
+# translation of genuinely different dialogue lines essentially never
+# repeats the identical non-trivial line this many times in a row.
+MAX_CONSECUTIVE_REPEATS = 10
+
 
 class TranslationAlignmentError(Exception):
     pass
@@ -148,6 +158,54 @@ def _parse_llm_response(text: str) -> dict[int, str]:
     return result
 
 
+def _detect_repetition_loop(
+    original_subs: list[srt.Subtitle], translated_by_index: dict[int, str]
+) -> str | None:
+    """Scans recovered translations in original cue order for the same
+    non-trivial content repeated too many times consecutively — a
+    degenerate-generation loop, not a real translation of distinct dialogue.
+    Short lines (e.g. a repeated "Yeah!" or "No!") are excluded from
+    counting, since those can legitimately repeat in real dialogue; only
+    longer lines are checked, where repetition is essentially never
+    legitimate.
+
+    Confirmed live: a real source SRT had 50 CONSECUTIVE identical cues
+    ("Seat height\\nWeight" — a HUD/spec-overlay quirk in the rip), and the
+    LLM translated it correctly and IDENTICALLY every time, which this
+    check originally flagged as a false-positive degenerate loop. If the
+    ORIGINAL source content was already repeated for that same run, a
+    matching repeated translation is expected and correct, not evidence of
+    hallucination — the check only trips when the TRANSLATED output
+    repeats but the source cues underneath it did NOT.
+
+    Returns the repeated text if a genuine loop is found, else None."""
+    MIN_CONTENT_LENGTH_TO_CHECK = 15
+    run_content: str | None = None
+    run_length = 0
+    run_source_all_identical = True
+    run_source_content: str | None = None
+    for sub in original_subs:
+        content = translated_by_index.get(sub.index)
+        if content is None or len(content) < MIN_CONTENT_LENGTH_TO_CHECK:
+            run_content = None
+            run_length = 0
+            run_source_all_identical = True
+            run_source_content = None
+            continue
+        if content == run_content:
+            run_length += 1
+            if sub.content != run_source_content:
+                run_source_all_identical = False
+            if run_length >= MAX_CONSECUTIVE_REPEATS and not run_source_all_identical:
+                return content
+        else:
+            run_content = content
+            run_length = 1
+            run_source_all_identical = True
+            run_source_content = sub.content
+    return None
+
+
 def reassemble(original_subs: list[srt.Subtitle], llm_response: str) -> list[srt.Subtitle]:
     """Reattaches the LLM's translated dialogue onto the ORIGINAL cue timing
     and index structure — never trusts the LLM to reproduce timestamps.
@@ -155,6 +213,20 @@ def reassemble(original_subs: list[srt.Subtitle], llm_response: str) -> list[srt
     than being dropped, so cue count/timing integrity is never broken.
     Raises TranslationAlignmentError if too little of the response is usable."""
     translated_by_index = _parse_llm_response(llm_response)
+
+    repeated_content = _detect_repetition_loop(original_subs, translated_by_index)
+    if repeated_content is not None:
+        logger.error(
+            "Alignment failure — degenerate-generation loop detected "
+            "(%d+ consecutive cues repeating the same content). "
+            "Repeated content: %r. Raw LLM response follows:\n%s",
+            MAX_CONSECUTIVE_REPEATS, repeated_content, llm_response,
+        )
+        raise TranslationAlignmentError(
+            "LLM response contains a repetition loop "
+            f"({MAX_CONSECUTIVE_REPEATS}+ consecutive cues with identical content); "
+            "translation is too unreliable to trust."
+        )
 
     recovered = sum(1 for sub in original_subs if sub.index in translated_by_index)
     if original_subs and recovered / len(original_subs) < MIN_RECOVERABLE_FRACTION:

@@ -1,12 +1,14 @@
 from app.config import Settings
 from app.providers.base import TranslationProvider
 from app.providers.gemini_provider import GeminiProvider
+from app.providers.nvidia_provider import NvidiaProvider
 from app.providers.ollama_provider import OllamaProvider
 
-# Only Ollama and Gemini are instantiable in v1. OpenAI/Anthropic/Grok exist
-# as stub classes (see their modules) proving the interface needs no rework
-# to add them later — they're intentionally left out of this factory map.
-_FACTORIES = {"ollama", "gemini"}
+# Only Ollama, Gemini, and NVIDIA are instantiable in v1. OpenAI/Anthropic/
+# Grok exist as stub classes (see their modules) proving the interface
+# needs no rework to add them later — they're intentionally left out of
+# this factory map.
+_FACTORIES = {"ollama", "gemini", "nvidia"}
 
 
 def _build(name: str, settings: Settings) -> TranslationProvider:
@@ -18,6 +20,8 @@ def _build(name: str, settings: Settings) -> TranslationProvider:
         )
     if name == "gemini":
         return GeminiProvider(api_key=settings.gemini_api_key, model=settings.gemini_model)
+    if name == "nvidia":
+        return NvidiaProvider(api_key=settings.nvidia_api_key, model=settings.nvidia_model)
     raise ValueError(f"Unknown or unimplemented provider: {name!r}")
 
 
