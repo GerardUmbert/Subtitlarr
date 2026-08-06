@@ -122,3 +122,9 @@ def test_registry_builds_nvidia():
     settings = Settings(active_engine="nvidia", nvidia_api_key="testkey")
     active = get_active_provider(settings)
     assert active.name == "nvidia"
+
+
+def test_registry_builds_openrouter():
+    settings = Settings(active_engine="openrouter", openrouter_api_key="testkey")
+    active = get_active_provider(settings)
+    assert active.name == "openrouter"

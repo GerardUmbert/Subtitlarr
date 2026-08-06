@@ -166,3 +166,20 @@ class OllamaProvider(TranslationProvider):
                 ok=False, detail=f"Model '{self._model}' not found. Available: {models}"
             )
         return ProviderStatus(ok=True, detail=f"responded, model '{self._model}' available")
+
+    async def list_models(self) -> list[dict]:
+        """Returns every model already pulled on this Ollama server — lets
+        the Engine page offer a dropdown of what's actually available
+        instead of a bare free-text field, distinct from pulling a NEW
+        model by name."""
+        resp = await self._client.get("/api/tags")
+        resp.raise_for_status()
+        return [
+            {
+                "name": m.get("name"),
+                "parameter_size": m.get("details", {}).get("parameter_size"),
+                "quantization": m.get("details", {}).get("quantization_level"),
+                "size_bytes": m.get("size"),
+            }
+            for m in resp.json().get("models", [])
+        ]

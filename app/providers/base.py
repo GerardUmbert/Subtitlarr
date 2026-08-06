@@ -13,8 +13,21 @@ class ProviderError(Exception):
 
 
 class ProviderRateLimitedError(Exception):
-    """Raised for retryable failures (429, timeout) — the runner may fall
-    back to a secondary provider on this specific exception."""
+    """Raised for retryable failures (429, timeout, transient 5xx server
+    errors) — the runner retries the same provider once before falling
+    back to a secondary provider on this specific exception.
+
+    retry_after_seconds overrides how long that one retry waits: a real
+    429 means the per-minute rate-limit window needs to roll over, so it
+    should wait close to a full minute regardless of the configured
+    pause_between_items_seconds; other retryable errors (timeouts,
+    transient 5xx) are usually gone within seconds, so they use the
+    caller's own short pause instead. None means "use the caller's
+    default"."""
+
+    def __init__(self, message: str, retry_after_seconds: float | None = None):
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
 
 
 class TranslationProvider(ABC):

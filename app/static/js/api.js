@@ -22,6 +22,8 @@ const Api = (() => {
   return {
     getStats: () => request("GET", "/api/stats"),
     getRunCurrent: () => request("GET", "/api/run/current"),
+    getRunEvents: (since = 0) => request("GET", `/api/run/events?since=${since}`),
+    getLatestRunEventId: () => request("GET", "/api/run/events/latest_id"),
     runNow: () => request("POST", "/api/run/now"),
     pollNow: () => request("POST", "/api/run/poll"),
     getPollNowStatus: () => request("GET", "/api/run/poll/status"),
@@ -47,6 +49,10 @@ const Api = (() => {
     pullOllamaModel: (model, base_url) =>
       request("POST", "/api/config/engines/ollama/pull", { model, base_url }),
     getPullStatus: () => request("GET", "/api/config/engines/ollama/pull"),
+    listOllamaModels: (base_url) => {
+      const qs = base_url ? `?base_url=${encodeURIComponent(base_url)}` : "";
+      return request("GET", `/api/config/engines/ollama/models${qs}`);
+    },
 
     getLanguageConfig: () => request("GET", "/api/config/languages"),
     setLanguageConfig: (cfg) => request("POST", "/api/config/languages", cfg),
@@ -62,6 +68,7 @@ const Api = (() => {
     getJobs: () => request("GET", "/api/jobs"),
     runScheduledJobNow: () => request("POST", "/api/jobs/run-now"),
     clearDatabase: () => request("POST", "/api/jobs/clear-database"),
+    closeStaleRuns: () => request("POST", "/api/jobs/close-stale-runs"),
     syncMedia: () => request("POST", "/api/jobs/sync-media"),
     syncSubs: () => request("POST", "/api/jobs/sync-subs"),
     pushUploads: () => request("POST", "/api/jobs/push-uploads"),

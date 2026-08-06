@@ -1,3 +1,6 @@
+import asyncio
+import time
+
 import httpx
 
 from app.providers.base import (
@@ -69,9 +72,25 @@ class NvidiaProvider(TranslationProvider):
             headers={"Authorization": f"Bearer {api_key}"},
             timeout=timeout,
         )
+        # Shared across every translate() call on this ONE provider
+        # instance — the same instance is reused for a whole run (see
+        # registry.get_active_provider), across every item and every
+        # concurrent batch window, since NVIDIA's 40 req/min ceiling is
+        # per API key/account, not per item or per batch. When any request
+        # hits a 429, this is set to "now + cooldown", and every OTHER
+        # request (already-running ones excluded — they're left to finish
+        # naturally) waits here before firing, instead of each one
+        # independently hitting its own 429 and retrying in an
+        # uncoordinated pile-up.
+        self._rate_limited_until: float = 0.0
 
     async def aclose(self) -> None:
         await self._client.aclose()
+
+    async def _wait_for_rate_limit_clear(self) -> None:
+        remaining = self._rate_limited_until - time.monotonic()
+        if remaining > 0:
+            await asyncio.sleep(remaining)
 
     async def translate(
         self,
@@ -80,6 +99,7 @@ class NvidiaProvider(TranslationProvider):
         target_lang: str,
         catalan_vegeta_insults: bool = False,
     ) -> str:
+        await self._wait_for_rate_limit_clear()
         system_prompt = build_system_prompt(source_lang, target_lang, catalan_vegeta_insults)
         try:
             resp = await self._client.post(
@@ -98,7 +118,33 @@ class NvidiaProvider(TranslationProvider):
             raise ProviderRateLimitedError(f"NVIDIA connection failed: {exc}") from exc
 
         if resp.status_code == 429:
-            raise ProviderRateLimitedError("NVIDIA rate limit hit (429)")
+            # A 429 means the per-minute request ceiling was hit — retrying
+            # immediately (or after only a few seconds) would almost
+            # certainly hit another 429, since the window hasn't rolled
+            # over yet. Prefer the server's own Retry-After header when
+            # present; otherwise wait a bit over a minute (not exactly
+            # 60s) — landing right on the window boundary risks a second
+            # 429 from clock skew or the request's own latency eating into
+            # the margin. Sets the SHARED gate so every other batch (this
+            # item's remaining ones, and every later item's) waits too —
+            # one account-wide rate limit, not something a single batch
+            # can wait out alone while its siblings keep firing into the
+            # same wall.
+            retry_after = resp.headers.get("Retry-After")
+            wait_seconds = float(retry_after) if retry_after else 62.0
+            self._rate_limited_until = time.monotonic() + wait_seconds
+            raise ProviderRateLimitedError(
+                "NVIDIA rate limit hit (429)", retry_after_seconds=wait_seconds
+            )
+        if resp.status_code >= 500:
+            # Transient server-side failure on NVIDIA's own infrastructure
+            # (confirmed live: 504 Gateway Timeout and 529 Site Overloaded,
+            # both while NVIDIA's backend was clearly struggling, not
+            # anything wrong with the request itself) — retryable, same as
+            # a rate limit, rather than a hard failure.
+            raise ProviderRateLimitedError(
+                f"NVIDIA server error ({resp.status_code}): {resp.text}"
+            )
         if resp.status_code != 200:
             raise ProviderError(f"NVIDIA request failed ({resp.status_code}): {resp.text}")
 

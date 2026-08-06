@@ -23,8 +23,11 @@ class Settings(BaseSettings):
     # output formatting well before they run out of raw context — a batch
     # that technically fits doesn't mean the model can format that much
     # output correctly. Set explicitly to override the auto formula with a
-    # fixed batch size regardless of context window.
-    ollama_batch_token_budget: int = 0
+    # fixed batch size regardless of context window. 400 confirmed live as
+    # a reliable default for gemma3:4b — near-baseline speed (0.154s/cue vs
+    # 0.132s/cue at 900 tokens) while avoiding the repetition-loop failures
+    # 900-token batches reproducibly hit.
+    ollama_batch_token_budget: int = 400
 
     gemini_api_key: str = ""
     # Gemini's model lineup changes over time (1.5-flash has been retired,
@@ -62,7 +65,54 @@ class Settings(BaseSettings):
     # further as a precaution while that's investigated — closer to the
     # ~50-cue scale that was cleanly reliable across repeated small-scale
     # tests earlier in the same investigation.
-    nvidia_batch_token_budget: int = 2000
+    #
+    # 700 confirmed live afterward as a further-validated default: same
+    # 0.154s/cue as 400 tokens, while cutting request count roughly in
+    # half (25 requests vs 44 for a 1555-cue movie) — 900 tokens still
+    # reproducibly failed on the same cue twice at that scale.
+    nvidia_batch_token_budget: int = 700
+    # How many batches run concurrently at once via asyncio.gather() before
+    # waiting for that window to finish and starting the next one — NOT a
+    # literal requests-per-minute limiter. NVIDIA's free-tier NIM account
+    # allows up to RATE_LIMIT_RPM=40 req/min (see nvidia_provider.py), but
+    # since each request typically takes multiple seconds, a small
+    # concurrent window naturally stays well under that ceiling — the
+    # actual backstop against a real 429 is the provider's own shared
+    # cooldown gate (NvidiaProvider._rate_limited_until), not this number.
+    # Raising this increases how many requests can be in flight at once.
+    nvidia_concurrent_batch_window: int = 4
+
+    openrouter_api_key: str = ""
+    # OpenRouter is a router in front of many underlying models (OpenAI,
+    # Anthropic, Meta, etc.) via one OpenAI-compatible endpoint. MUST be a
+    # real instructable chat model — same requirement as Ollama/Gemini/
+    # NVIDIA, since this provider reuses the same numbered-index prompt
+    # scheme. See https://openrouter.ai/models for the full lineup. Defaults
+    # to a free-tier model (Gemma) so a fresh install works with just an
+    # OpenRouter account and no spend — switch to a paid model for better
+    # reliability/quality if needed.
+    openrouter_model: str = "google/gemma-4-26b-a4b-it:free"
+    # Free ":free" model variants are capped at 20 requests/minute AND a
+    # DAILY quota (50/day under $10 purchased credits, 1000/day at $10+ —
+    # confirmed via https://openrouter.ai/docs/api_reference/limits). The
+    # daily cap makes request COUNT matter far more here than for NVIDIA
+    # (which has no daily cap): a small batch size that produces 16
+    # requests for one episode can burn a third of the whole day's quota
+    # on a SINGLE file. No local GPU/VRAM constraint driving a small
+    # batch, so raise this well above Ollama's small-model-safe default —
+    # fewer, bigger requests directly trade off against the daily cap.
+    # Lower it only if translations come back with low cue-recovery
+    # counts (the free Gemma model can still lose formatting reliability
+    # on very large batches, same as any small model).
+    openrouter_batch_token_budget: int = 4000
+    # Mirrors nvidia_concurrent_batch_window — how many batches run
+    # concurrently via asyncio.gather() before waiting for that window to
+    # finish. Kept well under the confirmed 20 RPM ceiling (see
+    # RATE_LIMIT_RPM in openrouter_provider.py); a 429 from the per-minute
+    # limit is retried automatically, but a 429 from the DAILY cap is not
+    # (see OpenRouterDailyLimitError) — concurrency only helps you get
+    # through the day's quota faster, it doesn't raise the quota itself.
+    openrouter_concurrent_batch_window: int = 4
 
     # Scheduling
     schedule_cron: str = "0 3 * * *"

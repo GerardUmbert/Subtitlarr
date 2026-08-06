@@ -31,6 +31,8 @@ createApp({
       confirmingClear: false,
       clearing: false,
       clearResult: null,
+      fixingStaleRuns: false,
+      fixStaleRunsResult: null,
       error: "",
       _pollHandle: null,
     };
@@ -179,6 +181,18 @@ createApp({
         this.error = err.message;
       } finally {
         this.clearing = false;
+      }
+    },
+    async fixStaleRuns() {
+      this.fixingStaleRuns = true;
+      this.error = "";
+      this.fixStaleRunsResult = null;
+      try {
+        this.fixStaleRunsResult = await Api.closeStaleRuns();
+      } catch (err) {
+        this.error = err.message;
+      } finally {
+        this.fixingStaleRuns = false;
       }
     },
     schedulePoll() {

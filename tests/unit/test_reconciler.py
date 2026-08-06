@@ -47,6 +47,94 @@ def test_reassemble_raises_on_severe_misalignment():
         reassemble(original, llm_response)
 
 
+def test_reassemble_single_cue_uses_response_positionally_on_index_mismatch():
+    """Regression test: confirmed live that a single-cue batch's response
+    can come back well-formed and correctly parseable, but with an index
+    that doesn't match the original cue's index — root cause not pinned
+    down, but with exactly one cue and exactly one translated block on
+    each side, there's no real ambiguity about which is which."""
+    original = [
+        srt.Subtitle(
+            index=141, start=timedelta(seconds=1), end=timedelta(seconds=3),
+            content="But he must always be ready for her.",
+        )
+    ]
+    # Model echoed a DIFFERENT index than the original cue's 141.
+    llm_response = "99\nPerò sempre ha d'estar preparat per a ella."
+    result = reassemble(original, llm_response)
+    assert len(result) == 1
+    assert result[0].index == 141  # original index preserved, not the model's
+    assert result[0].content == "Però sempre ha d'estar preparat per a ella."
+    assert result[0].start == original[0].start
+    assert result[0].end == original[0].end
+
+
+def test_reassemble_single_cue_matching_index_still_works_normally():
+    """The positional fallback must not change behavior for the common
+    case where the index DOES match."""
+    original = [
+        srt.Subtitle(
+            index=5, start=timedelta(seconds=1), end=timedelta(seconds=3),
+            content="Hello.",
+        )
+    ]
+    result = reassemble(original, "5\nHola.")
+    assert result[0].content == "Hola."
+
+
+def test_reassemble_multi_cue_batch_uses_positional_fallback_on_full_index_shift():
+    """Regression test: confirmed live on a real 20-cue batch — the model
+    can return exactly as many well-formed blocks as there were original
+    cues, in the same order, but under a completely different set of
+    index numbers (e.g. it restarted numbering from 1 instead of
+    continuing the original sequence). An exact count match with ZERO
+    index overlap is strong evidence the response corresponds cue-for-cue
+    despite the mislabeling, so it's used positionally rather than
+    rejected outright."""
+    original = [
+        srt.Subtitle(index=141, start=timedelta(seconds=1), end=timedelta(seconds=2), content="One."),
+        srt.Subtitle(index=142, start=timedelta(seconds=2), end=timedelta(seconds=3), content="Two."),
+    ]
+    llm_response = "99\nUno.\n\n100\nDos."
+    result = reassemble(original, llm_response)
+    assert [s.content for s in result] == ["Uno.", "Dos."]
+    assert [s.index for s in result] == [141, 142]  # original indices preserved
+
+
+def test_reassemble_multi_cue_batch_still_fails_on_partial_index_mismatch():
+    """The positional fallback requires ZERO index overlap AND an exact
+    count match — a PARTIAL mismatch (some indices match the originals,
+    some don't) is genuine ambiguity about which block goes where, and
+    must still fail rather than guess (once recovery drops below
+    MIN_RECOVERABLE_FRACTION — a single matching index among many isn't
+    enough overlap to trust the rest positionally, but also isn't the
+    "some fell back to original text" case a smaller mismatch would be)."""
+    original = [
+        srt.Subtitle(index=i, start=timedelta(seconds=i), end=timedelta(seconds=i + 1), content=f"Line {i}")
+        for i in range(1, 11)  # 10 cues
+    ]
+    # Only index 1 matches an original; the other 9 are shifted — 1/10
+    # recovered is well under MIN_RECOVERABLE_FRACTION (0.5), and the
+    # partial overlap disqualifies the positional fallback.
+    llm_response = "1\nUno.\n\n" + "\n\n".join(f"{100+i}\nLinia {i}" for i in range(9))
+    with pytest.raises(TranslationAlignmentError):
+        reassemble(original, llm_response)
+
+
+def test_reassemble_still_fails_when_counts_dont_match_even_with_no_overlap():
+    """Positional fallback requires an EXACT count match — a response
+    with a different number of blocks than original cues (even with zero
+    index overlap) is still genuinely ambiguous and must fail."""
+    original = [
+        srt.Subtitle(index=1, start=timedelta(seconds=1), end=timedelta(seconds=2), content="One."),
+        srt.Subtitle(index=2, start=timedelta(seconds=2), end=timedelta(seconds=3), content="Two."),
+        srt.Subtitle(index=3, start=timedelta(seconds=3), end=timedelta(seconds=4), content="Three."),
+    ]
+    llm_response = "99\nUno.\n\n100\nDos."  # only 2 blocks for 3 original cues
+    with pytest.raises(TranslationAlignmentError):
+        reassemble(original, llm_response)
+
+
 def test_reassemble_tolerant_of_extra_whitespace():
     original = _original_subs()
     llm_response = "\n\n1\nHola.\n\n\n2\n¿Cómo estás hoy?\n\n3\nEstoy bien, gracias.\n\n\n"

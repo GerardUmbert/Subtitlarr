@@ -114,18 +114,23 @@ class RunController:
 
         pause_seconds = self._settings.pause_between_items_seconds
 
-        # Each engine's batch-size settings are tuned for fundamentally
-        # different constraints: Ollama's small default protects local
-        # VRAM/GPU, while NVIDIA's cloud model has no such limit and was
-        # confirmed live to reliably handle a full ~400-cue episode in one
-        # request. Sharing one budget between them (as an earlier version
-        # of this code did) meant NVIDIA silently inherited Ollama's
-        # GPU-safe default and ran far more sequential batches than it
-        # needed to.
+        # Each engine's batch-size and concurrency settings are tuned for
+        # fundamentally different constraints: Ollama's small default
+        # protects local VRAM/GPU, while NVIDIA/OpenRouter's cloud models
+        # have no such limit. Sharing one budget between them (as an
+        # earlier version of this code did) meant NVIDIA silently
+        # inherited Ollama's GPU-safe default and ran far more sequential
+        # batches than it needed to — the same gap existed for OpenRouter
+        # until this was generalized.
         if active_provider.name == "nvidia":
             batch_token_budget_override = self._settings.nvidia_batch_token_budget
+            concurrent_batch_window = self._settings.nvidia_concurrent_batch_window
+        elif active_provider.name == "openrouter":
+            batch_token_budget_override = self._settings.openrouter_batch_token_budget
+            concurrent_batch_window = self._settings.openrouter_concurrent_batch_window
         else:
             batch_token_budget_override = self._settings.ollama_batch_token_budget
+            concurrent_batch_window = 1  # unused for non-concurrent providers
 
         try:
             for i, entry in enumerate(ready_items):
@@ -145,6 +150,8 @@ class RunController:
                         batch_token_budget_override=batch_token_budget_override,
                         cached_source_path=cached_path,
                         queue_uploads=self._settings.queue_uploads_enabled,
+                        retry_pause_seconds=pause_seconds,
+                        concurrent_batch_window=concurrent_batch_window,
                     )
                 except Exception:  # noqa: BLE001 - one item's failure must not abort the batch
                     progress.failed += 1

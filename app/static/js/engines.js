@@ -24,12 +24,22 @@ createApp({
       nvidiaKeyMasked: "",
       nvidiaHasKey: false,
       nvidiaBatchTokenBudget: 2000,
+      nvidiaConcurrentBatchWindow: 4,
+      openrouterModel: "",
+      openrouterApiKey: "",
+      openrouterKeyMasked: "",
+      openrouterHasKey: false,
+      openrouterBatchTokenBudget: 4000,
+      openrouterConcurrentBatchWindow: 4,
       testing: null,
       testResults: {},
       saving: false,
       saved: false,
       pull: { active: false, status: "", completed: 0, total: 0, pct: 0, done: false, error: null },
       _pullPollHandle: null,
+      ollamaModels: [],
+      ollamaModelsError: null,
+      loadingOllamaModels: false,
     };
   },
   computed: {
@@ -65,6 +75,25 @@ createApp({
       this.nvidiaKeyMasked = cfg.nvidia_api_key_masked;
       this.nvidiaHasKey = cfg.nvidia_has_key;
       this.nvidiaBatchTokenBudget = cfg.nvidia_batch_token_budget;
+      this.nvidiaConcurrentBatchWindow = cfg.nvidia_concurrent_batch_window;
+      this.openrouterModel = cfg.openrouter_model;
+      this.openrouterKeyMasked = cfg.openrouter_api_key_masked;
+      this.openrouterHasKey = cfg.openrouter_has_key;
+      this.openrouterBatchTokenBudget = cfg.openrouter_batch_token_budget;
+      this.openrouterConcurrentBatchWindow = cfg.openrouter_concurrent_batch_window;
+    },
+    async refreshOllamaModels() {
+      this.loadingOllamaModels = true;
+      this.ollamaModelsError = null;
+      try {
+        const result = await Api.listOllamaModels(this.ollamaBaseUrl);
+        this.ollamaModels = result.models;
+      } catch (err) {
+        this.ollamaModels = [];
+        this.ollamaModelsError = err.message;
+      } finally {
+        this.loadingOllamaModels = false;
+      }
     },
     async testEngine(name) {
       this.testing = name;
@@ -74,8 +103,10 @@ createApp({
           cfg = { base_url: this.ollamaBaseUrl, model: this.ollamaModel };
         } else if (name === "gemini") {
           cfg = { model: this.geminiModel, api_key: this.geminiApiKey || null };
-        } else {
+        } else if (name === "nvidia") {
           cfg = { model: this.nvidiaModel, api_key: this.nvidiaApiKey || null };
+        } else {
+          cfg = { model: this.openrouterModel, api_key: this.openrouterApiKey || null };
         }
         const result = await Api.testEngine(name, cfg);
         this.testResults = { ...this.testResults, [name]: result };
@@ -101,9 +132,15 @@ createApp({
           nvidia_model: this.nvidiaModel,
           nvidia_api_key: this.nvidiaApiKey || null,
           nvidia_batch_token_budget: this.nvidiaBatchTokenBudget,
+          nvidia_concurrent_batch_window: this.nvidiaConcurrentBatchWindow,
+          openrouter_model: this.openrouterModel,
+          openrouter_api_key: this.openrouterApiKey || null,
+          openrouter_batch_token_budget: this.openrouterBatchTokenBudget,
+          openrouter_concurrent_batch_window: this.openrouterConcurrentBatchWindow,
         });
         this.geminiApiKey = "";
         this.nvidiaApiKey = "";
+        this.openrouterApiKey = "";
         await this.load();
         this.saved = true;
         setTimeout(() => (this.saved = false), 3000);
@@ -140,12 +177,14 @@ createApp({
           this.pollPullStatus();
         } else if (this.pull.done) {
           await this.testEngine("ollama");
+          await this.refreshOllamaModels();
         }
       }, 1500);
     },
   },
   async mounted() {
     await this.load();
+    this.refreshOllamaModels();
     // pick up an in-progress pull if the page was reloaded mid-download
     try {
       const status = await Api.getPullStatus();

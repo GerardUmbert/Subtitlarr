@@ -10,15 +10,36 @@ const STATUS_LABELS = {
   skipped_no_source: "no source",
 };
 
-function duration(item) {
-  if (!item.last_attempt_at || !item.completed_at) return "—";
-  const started = new Date(item.last_attempt_at).getTime();
-  const finished = new Date(item.completed_at).getTime();
-  const secs = Math.max(0, Math.round((finished - started) / 1000));
+function formatSecs(secs) {
   if (secs < 60) return `${secs}s`;
   const mins = Math.floor(secs / 60);
   const rem = secs % 60;
   return `${mins}m ${rem}s`;
+}
+
+function duration(item) {
+  if (!item.last_attempt_at) return "—";
+  const started = new Date(item.last_attempt_at).getTime();
+  if (item.status === "translating") {
+    // Checked BEFORE completed_at on purpose: a re-run of an already-done
+    // item still carries its PREVIOUS run's completed_at (never cleared
+    // when a new attempt starts) — trusting it here would compute
+    // finished-started against a stale timestamp from before this
+    // attempt even began, instead of showing the live count-up.
+    return formatSecs(Math.max(0, Math.round((Date.now() - started) / 1000))) + "…";
+  }
+  if (item.completed_at) {
+    const finished = new Date(item.completed_at).getTime();
+    return formatSecs(Math.max(0, Math.round((finished - started) / 1000)));
+  }
+  if (item.status === "failed" && item.last_updated) {
+    // No completed_at on a failure, but last_updated is stamped at the
+    // exact moment the failure was recorded — close enough to "when it
+    // stopped" to show real elapsed time instead of a dash.
+    const failedAt = new Date(item.last_updated).getTime();
+    return formatSecs(Math.max(0, Math.round((failedAt - started) / 1000)));
+  }
+  return "—";
 }
 
 function timeAgo(isoString) {

@@ -65,3 +65,47 @@ def test_pull_uses_unsaved_form_values_not_saved_settings(client):
     )
     assert resp.status_code == 200
     assert resp.json()["started"] is True
+
+
+@respx.mock
+def test_list_ollama_models_uses_unsaved_base_url(client):
+    """Regression pattern from the test/pull endpoints above: switching the
+    base_url field must list models from THAT server, not the saved one."""
+    respx.get("http://form-entered.test:11434/api/tags").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "models": [
+                    {"name": "gemma3:4b", "size": 100, "details": {"parameter_size": "4.3B", "quantization_level": "Q4_K_M"}},
+                    {"name": "gemma3:12b", "size": 200, "details": {"parameter_size": "12.2B", "quantization_level": "Q4_K_M"}},
+                ]
+            },
+        )
+    )
+    resp = client.get(
+        "/api/config/engines/ollama/models",
+        params={"base_url": "http://form-entered.test:11434"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["models"]) == 2
+    assert body["models"][0]["name"] == "gemma3:4b"
+    assert body["models"][1]["name"] == "gemma3:12b"
+
+
+@respx.mock
+def test_list_ollama_models_falls_back_to_saved_base_url_when_not_provided(client):
+    respx.get("http://stale-saved.test:11434/api/tags").mock(
+        return_value=httpx.Response(200, json={"models": []})
+    )
+    resp = client.get("/api/config/engines/ollama/models")
+    assert resp.status_code == 200
+    assert resp.json()["models"] == []
+
+
+def test_list_ollama_models_returns_502_when_server_unreachable(client):
+    resp = client.get(
+        "/api/config/engines/ollama/models",
+        params={"base_url": "http://nonexistent.invalid:11434"},
+    )
+    assert resp.status_code == 502

@@ -6,6 +6,21 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 ## [0.5.0]
 
 ### Added
+- **OpenRouter translation engine** (Engines page): a new provider option
+  alongside Ollama/Gemini/NVIDIA, reached via OpenRouter's OpenAI-
+  compatible `/chat/completions` endpoint (`app.providers.openrouter_provider`).
+  Defaults to the free-tier `google/gemma-4-26b-a4b-it:free` model so a
+  fresh install needs no spend to try it. Gets the same NVIDIA-style
+  windowed-concurrency batching (`openrouter_concurrent_batch_window`,
+  default 4) and its own batch-token-budget setting
+  (`openrouter_batch_token_budget`, default 4000 — kept high since free
+  models are capped at 50 requests/DAY in addition to 20/minute, so
+  request count matters far more here than for NVIDIA). A 429 from the
+  per-minute cap is retried automatically like any other provider; a 429
+  from the daily cap raises a distinct, non-retryable
+  `OpenRouterDailyLimitError` instead, so the runner fails that item
+  immediately rather than looping retries against a quota that won't
+  reset until the next day.
 - **Catalan "Vegeta-style" insult translation** (Language Rules page): an
   optional toggle that, when translating into Catalan, adapts insults and
   profanity into the proud, colorful, non-literal style of Vegeta's
@@ -22,6 +37,23 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   Language Rules' saved config (not locked in at run start).
 
 ### Fixed
+- **Live toast notifications no longer replay the entire historical event
+  backlog on every page load.** `run_events.py`'s in-memory buffer
+  (up to 500 events, survives across page loads for the life of the
+  server process) was always polled starting from event id 0, so opening
+  Dashboard/Queue would immediately fire a toast for every retry/failure
+  from old runs, not just new ones. The frontend (`run-events.js`) now
+  calls a new `GET /api/run/events/latest_id` endpoint to seek to the
+  current tip before starting to poll, so only events emitted after the
+  page opened produce a toast.
+- **OpenRouter items no longer silently ran with Ollama's small,
+  GPU-safe batch-token-budget and no concurrency**, even after the
+  OpenRouter engine was added — `runner.py`'s per-engine batch-budget
+  selection only special-cased `"nvidia"`, and `translator.py`'s
+  windowed-concurrency path was hardcoded to NVIDIA only. Both are now
+  generalized (`_CONCURRENT_PROVIDERS` in `translator.py`) so OpenRouter
+  gets its own configured batch size and concurrent-batch window, same as
+  NVIDIA.
 - **"Push queued uploads" no longer blocked while a translation run is
   active** — it only touches items that already finished translating and
   are sitting in the upload queue, which a live run never writes to

@@ -10,6 +10,7 @@ from app.providers import pull_state
 from app.providers.gemini_provider import GeminiProvider
 from app.providers.nvidia_provider import NvidiaProvider
 from app.providers.ollama_provider import OllamaProvider
+from app.providers.openrouter_provider import OpenRouterProvider
 
 router = APIRouter(prefix="/api/config/engines", tags=["engines"])
 
@@ -28,12 +29,17 @@ class EngineConfig(BaseModel):
     ollama_base_url: str
     ollama_model: str
     ollama_num_ctx: int = 8192
-    ollama_batch_token_budget: int = 0
+    ollama_batch_token_budget: int = 400
     gemini_model: str
     gemini_api_key: str | None = None  # only set to overwrite; omitted = unchanged
     nvidia_model: str = "deepseek-ai/deepseek-v4-flash"
     nvidia_api_key: str | None = None  # only set to overwrite; omitted = unchanged
-    nvidia_batch_token_budget: int = 2000
+    nvidia_batch_token_budget: int = 700
+    nvidia_concurrent_batch_window: int = 4
+    openrouter_model: str = "google/gemma-4-26b-a4b-it:free"
+    openrouter_api_key: str | None = None  # only set to overwrite; omitted = unchanged
+    openrouter_batch_token_budget: int = 4000
+    openrouter_concurrent_batch_window: int = 4
 
 
 @router.get("")
@@ -52,6 +58,12 @@ async def get_engine_config():
         "nvidia_api_key_masked": _mask(settings.nvidia_api_key),
         "nvidia_has_key": bool(settings.nvidia_api_key),
         "nvidia_batch_token_budget": settings.nvidia_batch_token_budget,
+        "nvidia_concurrent_batch_window": settings.nvidia_concurrent_batch_window,
+        "openrouter_model": settings.openrouter_model,
+        "openrouter_api_key_masked": _mask(settings.openrouter_api_key),
+        "openrouter_has_key": bool(settings.openrouter_api_key),
+        "openrouter_batch_token_budget": settings.openrouter_batch_token_budget,
+        "openrouter_concurrent_batch_window": settings.openrouter_concurrent_batch_window,
     }
 
 
@@ -61,8 +73,18 @@ async def set_engine_config(config: EngineConfig, conn=Depends(state.get_conn)):
         raise HTTPException(status_code=422, detail="ollama_num_ctx must be at least 512")
     if config.ollama_batch_token_budget < 0:
         raise HTTPException(status_code=422, detail="ollama_batch_token_budget must be >= 0")
-    if config.nvidia_batch_token_budget < 400:
-        raise HTTPException(status_code=422, detail="nvidia_batch_token_budget must be at least 400")
+    if config.nvidia_batch_token_budget < 1:
+        raise HTTPException(status_code=422, detail="nvidia_batch_token_budget must be at least 1")
+    if config.nvidia_concurrent_batch_window < 1:
+        raise HTTPException(status_code=422, detail="nvidia_concurrent_batch_window must be at least 1")
+    if config.openrouter_batch_token_budget < 1:
+        raise HTTPException(
+            status_code=422, detail="openrouter_batch_token_budget must be at least 1"
+        )
+    if config.openrouter_concurrent_batch_window < 1:
+        raise HTTPException(
+            status_code=422, detail="openrouter_concurrent_batch_window must be at least 1"
+        )
     settings.active_engine = config.active_engine
     settings_store.save_one(conn, "active_engine", config.active_engine)
     settings.fallback_engine = config.fallback_engine
@@ -87,6 +109,23 @@ async def set_engine_config(config: EngineConfig, conn=Depends(state.get_conn)):
         settings_store.save_one(conn, "nvidia_api_key", config.nvidia_api_key)
     settings.nvidia_batch_token_budget = config.nvidia_batch_token_budget
     settings_store.save_one(conn, "nvidia_batch_token_budget", config.nvidia_batch_token_budget)
+    settings.nvidia_concurrent_batch_window = config.nvidia_concurrent_batch_window
+    settings_store.save_one(
+        conn, "nvidia_concurrent_batch_window", config.nvidia_concurrent_batch_window
+    )
+    settings.openrouter_model = config.openrouter_model
+    settings_store.save_one(conn, "openrouter_model", config.openrouter_model)
+    if config.openrouter_api_key:
+        settings.openrouter_api_key = config.openrouter_api_key
+        settings_store.save_one(conn, "openrouter_api_key", config.openrouter_api_key)
+    settings.openrouter_batch_token_budget = config.openrouter_batch_token_budget
+    settings_store.save_one(
+        conn, "openrouter_batch_token_budget", config.openrouter_batch_token_budget
+    )
+    settings.openrouter_concurrent_batch_window = config.openrouter_concurrent_batch_window
+    settings_store.save_one(
+        conn, "openrouter_concurrent_batch_window", config.openrouter_concurrent_batch_window
+    )
     return {"saved": True}
 
 
@@ -117,6 +156,12 @@ async def test_engine(name: str, req: TestEngineRequest | None = None):
         if not api_key:
             raise HTTPException(status_code=400, detail="No NVIDIA API key configured")
         provider = NvidiaProvider(api_key=api_key, model=model)
+    elif name == "openrouter":
+        api_key = (req.api_key if req and req.api_key else settings.openrouter_api_key)
+        model = (req.model if req and req.model else settings.openrouter_model)
+        if not api_key:
+            raise HTTPException(status_code=400, detail="No OpenRouter API key configured")
+        provider = OpenRouterProvider(api_key=api_key, model=model)
     else:
         raise HTTPException(status_code=400, detail=f"Unknown or unimplemented engine: {name}")
 
@@ -125,6 +170,23 @@ async def test_engine(name: str, req: TestEngineRequest | None = None):
     finally:
         await provider.aclose()
     return {"ok": status.ok, "detail": status.detail}
+
+
+@router.get("/ollama/models")
+async def list_ollama_models(base_url: str | None = None):
+    """Lists models already pulled on the Ollama server — for the Engine
+    page's model picker. Accepts an optional (possibly unsaved) base_url
+    query param, same pattern as /test, so switching the URL field updates
+    the list before the form is saved."""
+    resolved_base_url = base_url or settings.ollama_base_url
+    provider = OllamaProvider(base_url=resolved_base_url, model="")
+    try:
+        models = await provider.list_models()
+    except Exception as exc:  # noqa: BLE001 - surface to the UI, don't crash the app
+        raise HTTPException(status_code=502, detail=f"Could not reach Ollama: {exc}") from exc
+    finally:
+        await provider.aclose()
+    return {"models": models}
 
 
 class PullModelRequest(BaseModel):

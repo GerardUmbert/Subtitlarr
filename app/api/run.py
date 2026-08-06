@@ -3,6 +3,7 @@ import asyncio
 from fastapi import APIRouter, Depends
 
 from app import state
+from app.engine import run_events
 
 router = APIRouter(prefix="/api/run", tags=["run"])
 
@@ -60,4 +61,34 @@ async def get_current(runner=Depends(state.get_runner)):
         "failed": progress.failed,
         "rate_per_min": progress.rate_per_min,
         "eta_seconds": progress.eta_seconds,
+    }
+
+
+@router.get("/events/latest_id")
+async def get_latest_event_id():
+    """Lets a freshly loaded page seek to "now" before polling /events, so
+    it doesn't replay the whole buffered backlog as toasts."""
+    return {"id": run_events.latest_id()}
+
+
+@router.get("/events")
+async def get_run_events(since: int = 0):
+    """Ephemeral per-batch events (retries, fallbacks, item failures) for
+    live toast notifications — poll with `since` set to the highest `id`
+    already seen; returns only newer events. In-memory only, lost on
+    restart, not a substitute for item_run_log's durable history."""
+    events = run_events.events_since(since)
+    return {
+        "events": [
+            {
+                "id": e.id,
+                "run_id": e.run_id,
+                "item_id": e.item_id,
+                "batch_index": e.batch_index,
+                "batch_total": e.batch_total,
+                "event_type": e.event_type,
+                "detail": e.detail,
+            }
+            for e in events
+        ]
     }

@@ -30,11 +30,19 @@
     <div class="engine-config" v-if="active === 'ollama'">
       <div class="field">
         <label>Model</label>
-        <input v-model="ollamaModel" placeholder="gemma3:4b" />
+        <input v-model="ollamaModel" placeholder="gemma3:4b" list="ollama-models-list" />
+        <datalist id="ollama-models-list">
+          <option v-for="m in ollamaModels" :key="m.name" :value="m.name">
+            {% raw %}{{ m.parameter_size }} · {{ m.quantization }}{% endraw %}
+          </option>
+        </datalist>
+        <p class="field-hint" v-if="loadingOllamaModels">Checking installed models…</p>
+        <p class="field-hint" v-else-if="ollamaModelsError">Could not list installed models: {% raw %}{{ ollamaModelsError }}{% endraw %} — you can still type a model name to pull.</p>
+        <p class="field-hint" v-else-if="ollamaModels.length">{% raw %}{{ ollamaModels.length }}{% endraw %} model{% raw %}{{ ollamaModels.length === 1 ? '' : 's' }}{% endraw %} installed — start typing to pick one, or enter a new name to pull it.</p>
       </div>
       <div class="field">
         <label>Base URL</label>
-        <input v-model="ollamaBaseUrl" placeholder="http://ollama:11434" />
+        <input v-model="ollamaBaseUrl" placeholder="http://ollama:11434" @blur="refreshOllamaModels" />
       </div>
       <div class="field">
         <label>Context window (tokens)</label>
@@ -52,12 +60,20 @@
         <label>Batch size override (dialogue tokens)</label>
         <input v-model.number="ollamaBatchTokenBudget" type="number" min="0" step="100" />
         <p class="field-hint">
-          By default, batch size auto-scales with the context window above — but small models can
-          lose reliable output formatting well before they run out of context (a batch that fits
-          doesn't mean the model can format that much output correctly). Set a fixed value here to
-          override the auto formula (0 = auto). If translations are coming back with most lines
-          untranslated or a "recovered N/M cues" failure, try lowering this — 900 was the reliable
-          value observed before batch auto-scaling was added.
+          How many dialogue tokens go into one translation request. Small models can lose reliable
+          formatting on a big batch even though it technically fits the context window — a batch
+          that fits isn't a batch the model can format correctly.
+        </p>
+        <p class="field-hint">
+          <strong>0</strong> = auto (derives the batch size from the context window above — usually
+          the LARGEST setting, not the smallest). <strong>1</strong> = one cue per request, the most
+          reliable option but the slowest, since per-request overhead adds up. <strong>400–900</strong>
+          is the sweet spot — all land at roughly the same per-cue speed, but 900 has been seen to
+          drop into repeated/garbled output on some content, while 400 has not. <strong>400 (default)</strong>
+          is the safer pick; raise it once you've confirmed your content is fine at a bigger size.
+        </p>
+        <p class="field-hint">
+          Seeing untranslated lines or a "recovered N/M cues" failure? Lower this value.
         </p>
       </div>
       <div class="field-row">
@@ -144,12 +160,29 @@
       </div>
       <div class="field">
         <label>Batch size (dialogue tokens)</label>
-        <input v-model.number="nvidiaBatchTokenBudget" type="number" min="400" step="500" />
+        <input v-model.number="nvidiaBatchTokenBudget" type="number" min="1" step="100" />
         <p class="field-hint">
           Separate from Ollama's batch size — NVIDIA's cloud model has no local GPU/VRAM
-          constraint, but larger batches have shown repeated/degenerate output on real
-          content even at moderate sizes. Kept conservative by default; raise it only if
-          you confirm your content translates reliably at a bigger size.
+          constraint, but larger batches have still shown repeated/degenerate output on real
+          content at moderate sizes.
+        </p>
+        <p class="field-hint">
+          <strong>1</strong> = one cue per request, the most reliable option but far more requests
+          for a long file (more likely to hit NVIDIA's rate limit). <strong>700 (default)</strong>
+          is confirmed reliable — same per-cue speed as 400, at roughly half the request count —
+          while 900 has reproducibly failed on real content. Raise it only after confirming your
+          content translates reliably at a bigger size.
+        </p>
+      </div>
+      <div class="field">
+        <label>Concurrent batches</label>
+        <input v-model.number="nvidiaConcurrentBatchWindow" type="number" min="1" step="1" />
+        <p class="field-hint">
+          How many batches are sent to NVIDIA at once before waiting for that group to finish
+          and starting the next. NVIDIA's free tier allows up to 40 requests/minute — since each
+          request typically takes several seconds, a small number here naturally stays well
+          under that limit without needing to be a literal requests-per-minute counter. Raising
+          this speeds up long files at the cost of more requests in flight simultaneously.
         </p>
       </div>
       <div class="field-row">
@@ -158,6 +191,66 @@
         </button>
         <span v-if="testResults.nvidia" :class="['test-result', { error: !testResults.nvidia.ok }]">
           ● {% raw %}{{ testResults.nvidia.detail }}{% endraw %}
+        </span>
+      </div>
+    </div>
+
+    <div :class="['engine-opt', { selected: active === 'openrouter' }]" style="margin-top:14px;" @click="active = 'openrouter'">
+      <div class="engine-radio"><div class="fill" v-if="active === 'openrouter'"></div></div>
+      <div class="engine-info">
+        <div class="engine-name">OpenRouter <span class="badge badge-paid">API key</span></div>
+        <div class="engine-meta">{% raw %}{{ openrouterModel }}{% endraw %}</div>
+      </div>
+      <div :class="['engine-status', openrouterHasKey ? '' : 'off']">
+        <span class="dot"></span>{% raw %}{{ openrouterHasKey ? 'configured' : 'no key' }}{% endraw %}
+      </div>
+    </div>
+
+    <div class="engine-config" v-if="active === 'openrouter'">
+      <div class="field">
+        <label>Model</label>
+        <input v-model="openrouterModel" placeholder="google/gemma-4-26b-a4b-it:free" />
+        <p class="field-hint">
+          Must be a real instructable chat model — OpenRouter routes to many different
+          underlying providers (OpenAI, Anthropic, Meta, etc.) under one API. See
+          <span class="mono">openrouter.ai/models</span> for the full lineup and model IDs.
+        </p>
+      </div>
+      <div class="field">
+        <label>API key {% raw %}{{ openrouterKeyMasked ? '(' + openrouterKeyMasked + ')' : '' }}{% endraw %}</label>
+        <input v-model="openrouterApiKey" type="password" placeholder="leave blank to keep current key" />
+        <p class="field-hint">
+          Get a key at <span class="mono">openrouter.ai/keys</span>.
+        </p>
+      </div>
+      <div class="field">
+        <label>Batch size (dialogue tokens)</label>
+        <input v-model.number="openrouterBatchTokenBudget" type="number" min="1" step="100" />
+        <p class="field-hint">
+          Same idea as NVIDIA/Ollama's batch size — how many dialogue tokens go into one
+          translation request. <strong>Free ":free" models are capped at 50 requests/DAY</strong>
+          (1000/day at $10+ purchased credits) on top of 20 requests/minute — keep this high so
+          one file doesn't burn a large chunk of the day's quota by itself. Lower it only if
+          translations come back with a low "recovered N/M cues" count.
+        </p>
+      </div>
+      <div class="field">
+        <label>Concurrent batches</label>
+        <input v-model.number="openrouterConcurrentBatchWindow" type="number" min="1" step="1" />
+        <p class="field-hint">
+          How many batches are sent to OpenRouter at once before waiting for that group to
+          finish and starting the next — same windowed-concurrency treatment as NVIDIA. Kept
+          well under the confirmed 20 requests/minute ceiling for free models. Concurrency
+          only speeds up getting through the day's quota faster — it doesn't raise the quota
+          itself, and once the daily cap is hit, further requests fail until it resets.
+        </p>
+      </div>
+      <div class="field-row">
+        <button class="btn" @click="testEngine('openrouter')" :disabled="testing === 'openrouter'">
+          {% raw %}{{ testing === 'openrouter' ? 'Testing…' : 'Test connection' }}{% endraw %}
+        </button>
+        <span v-if="testResults.openrouter" :class="['test-result', { error: !testResults.openrouter.ok }]">
+          ● {% raw %}{{ testResults.openrouter.detail }}{% endraw %}
         </span>
       </div>
     </div>
@@ -188,6 +281,7 @@
           <option value="ollama">Ollama</option>
           <option value="gemini">Gemini</option>
           <option value="nvidia">NVIDIA (DeepSeek V4 Flash)</option>
+          <option value="openrouter">OpenRouter</option>
         </select>
       </div>
       <div class="field-row">

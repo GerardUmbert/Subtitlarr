@@ -16,9 +16,16 @@ async def _resolve_and_preview_source(
     this (item, target_language) pair, purely so the Queue UI can show a
     real language instead of '?' before the item has ever been translated.
     Costs one extra Bazarr detail call per wanted item per poll — accepted
-    tradeoff for always-visible source languages over poll speed/API load."""
+    tradeoff for always-visible source languages over poll speed/API load.
+
+    Also re-checks skipped_no_source items, not just pending ones — Bazarr's
+    library can gain a usable source after an item was first skipped (e.g. a
+    new-language subtitle appears later), and without this the item would
+    stay invisible to every future run forever, even once a real source
+    exists (confirmed live: an EN subtitle became available after the item
+    was already marked skipped_no_source, and nothing ever re-checked it)."""
     item = repository.get_item_by_bazarr_id(conn, item_type, bazarr_id, target_language)
-    if item is None or item["status"] != "pending":
+    if item is None or item["status"] not in ("pending", "skipped_no_source"):
         return
     source_map = await selector.build_source_map(client, item_type, bazarr_id)
     matched_lang = selector.pick_source_language(source_map, target_language, source_priority)

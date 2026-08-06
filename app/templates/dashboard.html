@@ -46,7 +46,7 @@
     </a>
   </div>
 
-  <div class="panel">
+  <component :is="run.active ? 'a' : 'div'" class="panel" :href="run.active ? '/queue?batch=1&exclude_no_source=1' : undefined">
     <div class="panel-head">
       <div>
         <div class="panel-title">Current run</div>
@@ -74,7 +74,7 @@
     <div class="panel-body" v-else>
       <p class="progress-empty">Trigger a manual run, or wait for the next scheduled run.</p>
     </div>
-  </div>
+  </component>
 
   <div class="grid-2">
     <div class="engine-card">

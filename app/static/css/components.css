@@ -227,6 +227,21 @@ a.stat:hover {
   overflow: hidden;
 }
 
+a.panel,
+a.panel:hover,
+a.panel:visited,
+a.panel * {
+  text-decoration: none;
+  color: inherit;
+}
+a.panel {
+  display: block;
+  transition: border-color 0.15s ease;
+}
+a.panel:hover {
+  border-color: var(--accent);
+}
+
 .panel-head {
   display: flex;
   align-items: center;

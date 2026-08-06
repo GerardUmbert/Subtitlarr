@@ -6,7 +6,7 @@ from pathlib import Path
 
 from app.bazarr.client import BazarrClient
 from app.db import repository
-from app.engine import upload_queue
+from app.engine import run_events, upload_queue
 from app.providers.base import ProviderError, ProviderRateLimitedError, TranslationProvider
 from app.subtitles import srt_io
 from app.subtitles.reconciler import (
@@ -47,9 +47,28 @@ async def _translate_batch(
     fallback_provider: TranslationProvider | None,
     item_id: int,
     catalan_vegeta_insults: bool = False,
+    retry_pause_seconds: float = 0,
+    run_id: int | None = None,
+    batch_index: int = 1,
+    batch_total: int = 1,
 ) -> tuple[list, str]:
     """Translates and reconciles ONE batch of cues, with fallback-provider
-    handling. Returns (reassembled_subs_for_this_batch, engine_used)."""
+    handling. Returns (reassembled_subs_for_this_batch, engine_used).
+
+    A ProviderRateLimitedError (429, timeout, connection failure, or a
+    transient 5xx server error — see nvidia_provider.py) gets ONE retry
+    against the SAME provider first, since these are often gone within
+    seconds and don't warrant abandoning the configured engine. Only if
+    that retry ALSO fails does it fall back to the fallback provider (if
+    configured) or give up.
+
+    A real 429 (retry_after_seconds set) is NOT slept on here — the
+    provider itself (see NvidiaProvider._rate_limited_until) already
+    blocks every call, across every batch and every item in the run, until
+    the shared per-minute cooldown clears, so sleeping again here would
+    just double the wait. Everything else (timeouts, transient 5xx, no
+    shared gate to rely on) sleeps for pause_between_items_seconds before
+    its one retry."""
     dialogue_text = srt_io.extract_dialogue_text(batch)
 
     engine_used = active_provider.name
@@ -67,34 +86,70 @@ async def _translate_batch(
             "translate() call for item %d (%s) took %.2fs",
             item_id, active_provider.name, time.monotonic() - call_started,
         )
-    except ProviderRateLimitedError:
-        if fallback_provider is None:
-            raise
+    except ProviderRateLimitedError as exc:
+        # A real rate limit (retry_after_seconds set) relies entirely on
+        # the provider's own shared gate — sleeping here too would wait
+        # twice. Anything else sleeps for pause_between_items_seconds.
+        wait_seconds = 0 if exc.retry_after_seconds is not None else retry_pause_seconds
+        actual_wait = exc.retry_after_seconds if exc.retry_after_seconds is not None else wait_seconds
         logger.warning(
-            "Provider %s rate-limited/unreachable for item %d; falling back to %s",
-            active_provider.name, item_id, fallback_provider.name,
+            "Provider %s rate-limited/unreachable for item %d (%s); retrying once after %.0fs",
+            active_provider.name, item_id, exc, actual_wait,
         )
-        engine_used = fallback_provider.name
-        llm_response = await fallback_provider.translate(
-            dialogue_text, source_lang, target_lang, catalan_vegeta_insults
-        )
+        if run_id is not None:
+            run_events.emit(
+                run_id, item_id, batch_index, batch_total, "retrying",
+                f"{active_provider.name}: {exc} — retrying in {actual_wait:.0f}s",
+            )
+        if wait_seconds > 0:
+            await asyncio.sleep(wait_seconds)
+        try:
+            llm_response = await active_provider.translate(
+                dialogue_text, source_lang, target_lang, catalan_vegeta_insults
+            )
+            if run_id is not None:
+                run_events.emit(
+                    run_id, item_id, batch_index, batch_total, "retry_succeeded",
+                    f"{active_provider.name}: succeeded on retry",
+                )
+        except ProviderRateLimitedError:
+            if fallback_provider is None:
+                raise
+            logger.warning(
+                "Provider %s failed again for item %d; falling back to %s",
+                active_provider.name, item_id, fallback_provider.name,
+            )
+            if run_id is not None:
+                run_events.emit(
+                    run_id, item_id, batch_index, batch_total, "fell_back",
+                    f"{active_provider.name} failed again — falling back to {fallback_provider.name}",
+                )
+            engine_used = fallback_provider.name
+            llm_response = await fallback_provider.translate(
+                dialogue_text, source_lang, target_lang, catalan_vegeta_insults
+            )
 
     return reassemble(batch, llm_response), engine_used
 
 
-# NVIDIA-only: its cloud endpoint has no local VRAM/GPU contention (unlike
-# Ollama, where concurrent requests would just serialize against the same
-# model instance anyway — no real speedup, and it fights the watchdog/
-# timeout logic that assumes one request at a time). Kept well under
-# NVIDIA's documented 40 requests/minute ceiling. Confirmed safe: each
-# batch's cues carry their own real subtitle index baked into the prompt
-# (srt_io.extract_dialogue_text), and reassemble() maps translated content
-# back onto the ORIGINAL cue list by matching that index, never by
-# position/arrival order — and asyncio.gather() itself returns results in
-# the same order as its input regardless of which one resolves first. So
-# concurrent batches can't misorder cues even though responses can arrive
-# out of order.
+# Cloud-provider-only (NVIDIA, OpenRouter): their endpoints have no local
+# VRAM/GPU contention (unlike Ollama, where concurrent requests would just
+# serialize against the same model instance anyway — no real speedup, and
+# it fights the watchdog/timeout logic that assumes one request at a
+# time). Kept well under each provider's own documented per-minute request
+# ceiling (see RATE_LIMIT_RPM in nvidia_provider.py / openrouter_provider.py).
+# Confirmed safe: each batch's cues carry their own real subtitle index
+# baked into the prompt (srt_io.extract_dialogue_text), and reassemble()
+# maps translated content back onto the ORIGINAL cue list by matching that
+# index, never by position/arrival order — and asyncio.gather() itself
+# returns results in the same order as its input regardless of which one
+# resolves first. So concurrent batches can't misorder cues even though
+# responses can arrive out of order.
 NVIDIA_CONCURRENT_BATCH_WINDOW = 4
+
+# Set of provider names that get the windowed-concurrency treatment above
+# instead of translating batches strictly sequentially.
+_CONCURRENT_PROVIDERS = {"nvidia", "openrouter"}
 
 
 async def _translate_batches(
@@ -105,40 +160,46 @@ async def _translate_batches(
     fallback_provider: TranslationProvider | None,
     item_id: int,
     catalan_vegeta_insults: bool = False,
+    retry_pause_seconds: float = 0,
+    run_id: int | None = None,
+    concurrent_batch_window: int = NVIDIA_CONCURRENT_BATCH_WINDOW,
 ) -> tuple[list, str]:
     """Runs all of an item's batches, sequentially for every provider
-    except NVIDIA (windowed concurrency there — see
-    NVIDIA_CONCURRENT_BATCH_WINDOW). Returns (all translated subs in
-    original order, engine_used — the last batch's engine wins if a
-    fallback occurred partway)."""
+    except the cloud ones in _CONCURRENT_PROVIDERS (windowed concurrency
+    there — see NVIDIA_CONCURRENT_BATCH_WINDOW). Returns (all translated
+    subs in original order, engine_used — the last batch's engine wins if
+    a fallback occurred partway)."""
     translated_subs: list = []
     engine_used = active_provider.name
+    batch_total = len(batches)
 
-    if active_provider.name != "nvidia":
-        for batch in batches:
+    if active_provider.name not in _CONCURRENT_PROVIDERS:
+        for i, batch in enumerate(batches):
             batch_result, batch_engine = await _translate_batch(
                 batch, source_lang, target_lang, active_provider, fallback_provider, item_id,
-                catalan_vegeta_insults,
+                catalan_vegeta_insults, retry_pause_seconds, run_id, i + 1, batch_total,
             )
             translated_subs.extend(batch_result)
             engine_used = batch_engine
         return translated_subs, engine_used
 
-    for window_start in range(0, len(batches), NVIDIA_CONCURRENT_BATCH_WINDOW):
-        window = batches[window_start : window_start + NVIDIA_CONCURRENT_BATCH_WINDOW]
+    for window_start in range(0, len(batches), concurrent_batch_window):
+        window = batches[window_start : window_start + concurrent_batch_window]
         window_started = time.monotonic()
         results = await asyncio.gather(
             *(
                 _translate_batch(
                     batch, source_lang, target_lang, active_provider, fallback_provider, item_id,
-                    catalan_vegeta_insults,
+                    catalan_vegeta_insults, retry_pause_seconds, run_id,
+                    window_start + offset + 1, batch_total,
                 )
-                for batch in window
+                for offset, batch in enumerate(window)
             )
         )
         logger.info(
-            "Item %d: NVIDIA window of %d batch(es) (starting at batch %d) took %.2fs",
-            item_id, len(window), window_start + 1, time.monotonic() - window_started,
+            "Item %d: %s window of %d batch(es) (starting at batch %d) took %.2fs",
+            item_id, active_provider.name, len(window), window_start + 1,
+            time.monotonic() - window_started,
         )
         for batch_result, batch_engine in results:  # gather() preserves input order
             translated_subs.extend(batch_result)
@@ -186,6 +247,8 @@ async def translate_item(
     batch_token_budget_override: int = 0,
     cached_source_path: Path | None = None,
     queue_uploads: bool = False,
+    retry_pause_seconds: float = 0,
+    concurrent_batch_window: int = NVIDIA_CONCURRENT_BATCH_WINDOW,
 ) -> None:
     """Fetches the source subtitle (via Bazarr's API, or from a local
     scratch-cache file when cached_source_path is provided — see
@@ -239,7 +302,7 @@ async def translate_item(
         translate_started = time.monotonic()
         translated_subs, engine_used = await _translate_batches(
             batches, source_lang, target_lang, active_provider, fallback_provider, item_id,
-            catalan_vegeta_insults,
+            catalan_vegeta_insults, retry_pause_seconds, run_id, concurrent_batch_window,
         )
         logger.info(
             "Item %d: all batches took %.2fs total (item started %.2fs ago)",
@@ -307,6 +370,8 @@ async def translate_item(
             conn, item_id, run_id, "failed",
             error_message=str(exc), settings_snapshot=settings_snapshot,
         )
+        if run_id is not None:
+            run_events.emit(run_id, item_id, 0, 0, "item_failed", str(exc))
         raise
     except Exception as exc:  # noqa: BLE001 - any unexpected failure must not crash the batch
         repository.update_item_status(conn, item_id, "failed", error_message=str(exc))
@@ -314,4 +379,6 @@ async def translate_item(
             conn, item_id, run_id, "failed",
             error_message=str(exc), settings_snapshot=settings_snapshot,
         )
+        if run_id is not None:
+            run_events.emit(run_id, item_id, 0, 0, "item_failed", str(exc))
         raise

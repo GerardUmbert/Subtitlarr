@@ -87,6 +87,28 @@
   </div>
 
   <div class="engine-card" style="margin-top:16px;">
+    <div class="panel-title">Fix broken runs</div>
+    <div class="panel-title-sub">Closes out run history entries left stuck "in progress" by a process that was killed mid-batch — does not delete anything</div>
+
+    <div class="engine-config" style="margin-top:0; border-top:none;">
+      <p class="field-hint">
+        Safe to run any time. Runs automatically on every server startup already; this lets you
+        trigger it on demand instead of waiting for a restart. Items and their history stay
+        exactly as they are — this only marks abandoned runs as finished so they stop showing
+        as active on the History page.
+      </p>
+      <div class="field-row">
+        <button class="btn" @click="fixStaleRuns" :disabled="fixingStaleRuns || runActive">
+          {% raw %}{{ fixingStaleRuns ? 'Fixing…' : 'Fix broken runs' }}{% endraw %}
+        </button>
+      </div>
+      <p class="field-hint" v-if="fixStaleRunsResult">
+        {% raw %}{{ fixStaleRunsResult.closed > 0 ? `● closed ${fixStaleRunsResult.closed} stuck run(s)` : '● nothing to fix — no broken runs found' }}{% endraw %}
+      </p>
+    </div>
+  </div>
+
+  <div class="engine-card" style="margin-top:16px;">
     <div class="panel-title">Reset local data</div>
     <div class="panel-title-sub">Clears queue and run history — does not touch any saved settings</div>
 

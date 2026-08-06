@@ -144,17 +144,24 @@ def _parse_llm_response(text: str) -> dict[int, str]:
     Tolerant of markdown code fences, stray wrapper tags, literal \n escape
     sequences in place of real line breaks, and headers whose content
     starts on the same line rather than the next one."""
+    return {index: content for index, content in _parse_llm_response_ordered(text)}
+
+
+def _parse_llm_response_ordered(text: str) -> list[tuple[int, str]]:
+    """Same parsing as _parse_llm_response, but preserves response ORDER
+    (a dict loses this if the model echoes duplicate or out-of-sequence
+    indices) — needed for the positional-fallback path in reassemble()."""
     text = _normalize_literal_newlines(text)
     text = _strip_markdown_fences(text)
     matches = _find_header_matches(text)
-    result: dict[int, str] = {}
+    result: list[tuple[int, str]] = []
     for i, m in enumerate(matches):
         index = int(m.group(1))
         content_start = m.end()
         content_end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
         content = _strip_wrapper_tags(text[content_start:content_end])
         if content:
-            result[index] = content
+            result.append((index, content))
     return result
 
 
@@ -227,6 +234,36 @@ def reassemble(original_subs: list[srt.Subtitle], llm_response: str) -> list[srt
             f"({MAX_CONSECUTIVE_REPEATS}+ consecutive cues with identical content); "
             "translation is too unreliable to trust."
         )
+
+    # Positional fallback: if the response contains exactly as many
+    # translated blocks as there are original cues, and NONE of the
+    # echoed indices match the originals (a wholesale index shift/reset,
+    # not a partial mismatch), match them 1:1 by order instead of by
+    # index. Confirmed live: a real response came back fully-formed, in
+    # order, one block per original cue, but under different index
+    # numbers — root cause not pinned down, but an exact count match with
+    # zero index overlap is itself strong evidence the response DOES
+    # correspond cue-for-cue, just mislabeled, and rejecting it outright
+    # would throw away a very likely correct translation. A PARTIAL index
+    # mismatch (some match, some don't) is deliberately NOT covered here
+    # — that's genuine ambiguity about which block goes where, and must
+    # still fail rather than guess.
+    original_indices = [sub.index for sub in original_subs]
+    parsed_ordered = _parse_llm_response_ordered(llm_response)
+    if (
+        original_subs
+        and len(parsed_ordered) == len(original_subs)
+        and not (set(idx for idx, _ in parsed_ordered) & set(original_indices))
+    ):
+        logger.warning(
+            "Positional fallback: response had %d block(s) matching the "
+            "%d original cue(s) in count, but NONE of the echoed indices "
+            "matched — using response order instead of index matching.",
+            len(parsed_ordered), len(original_subs),
+        )
+        translated_by_index = {
+            original_indices[i]: content for i, (_, content) in enumerate(parsed_ordered)
+        }
 
     recovered = sum(1 for sub in original_subs if sub.index in translated_by_index)
     if original_subs and recovered / len(original_subs) < MIN_RECOVERABLE_FRACTION:

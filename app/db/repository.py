@@ -168,11 +168,20 @@ def set_resolved_source_language(conn: sqlite3.Connection, item_id: int, source_
     show a real language instead of '?' before any translation attempt has
     happened. The actual translate-time resolution in selector.resolve_and_gate
     re-checks fresh and is the one that's trusted; this is not a cache it
-    reads from."""
+    reads from. Also un-skips a previously skipped_no_source item — Bazarr's
+    library can gain a usable source after the item was first marked
+    unskippable (e.g. a new-language subtitle appears later), and without
+    this the item would stay permanently invisible to every future run even
+    though a source now genuinely exists."""
     now = _now()
     with conn:
         conn.execute(
-            "UPDATE items SET source_language = ?, last_updated = ? WHERE id = ? AND status = 'pending'",
+            """
+            UPDATE items
+            SET source_language = ?, last_updated = ?,
+                status = CASE WHEN status = 'skipped_no_source' THEN 'pending' ELSE status END
+            WHERE id = ? AND status IN ('pending', 'skipped_no_source')
+            """,
             (source_language, now, item_id),
         )
 
@@ -254,6 +263,14 @@ def update_item_status(
     if mark_attempt:
         fields.append("last_attempt_at = ?")
         values.append(now)
+        # A re-run of an already-done/failed item must not carry its
+        # PREVIOUS attempt's completed_at into the new attempt — left
+        # uncleared, the Queue page's duration column would compute
+        # elapsed time against a timestamp from before this attempt even
+        # started (confirmed live: a re-run of a done item showed no
+        # live-counting duration because completed_at was still set from
+        # the earlier run).
+        fields.append("completed_at = NULL")
     if mark_completed:
         fields.append("completed_at = ?")
         values.append(now)

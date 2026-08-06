@@ -84,7 +84,7 @@
       </table>
     </div>
     <div class="pagination" v-if="!currentBatchOnly">
-      <span>Page {% raw %}{{ page }}{% endraw %} of {% raw %}{{ totalPages }}{% endraw %} ({% raw %}{{ total }}{% endraw %} items)</span>
+      <span>Page {% raw %}{{ page }}{% endraw %} of {% raw %}{{ totalPages }}{% endraw %} ({% raw %}{{ total }}{% endraw %} items total)</span>
       <div style="display:flex; gap:8px;">
         <button class="btn" :disabled="page <= 1" @click="prevPage">Previous</button>
         <button class="btn" :disabled="page >= totalPages" @click="nextPage">Next</button>
