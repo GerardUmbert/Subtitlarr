@@ -19,6 +19,8 @@ createApp({
       geminiApiKey: "",
       geminiKeyMasked: "",
       geminiHasKey: false,
+      geminiBatchTokenBudget: 4000,
+      geminiConcurrentBatchWindow: 4,
       nvidiaModel: "",
       nvidiaApiKey: "",
       nvidiaKeyMasked: "",
@@ -31,6 +33,12 @@ createApp({
       openrouterHasKey: false,
       openrouterBatchTokenBudget: 4000,
       openrouterConcurrentBatchWindow: 4,
+      groqModel: "",
+      groqApiKey: "",
+      groqKeyMasked: "",
+      groqHasKey: false,
+      groqBatchTokenBudget: 4000,
+      groqConcurrentBatchWindow: 4,
       testing: null,
       testResults: {},
       saving: false,
@@ -71,6 +79,8 @@ createApp({
       this.geminiModel = cfg.gemini_model;
       this.geminiKeyMasked = cfg.gemini_api_key_masked;
       this.geminiHasKey = cfg.gemini_has_key;
+      this.geminiBatchTokenBudget = cfg.gemini_batch_token_budget;
+      this.geminiConcurrentBatchWindow = cfg.gemini_concurrent_batch_window;
       this.nvidiaModel = cfg.nvidia_model;
       this.nvidiaKeyMasked = cfg.nvidia_api_key_masked;
       this.nvidiaHasKey = cfg.nvidia_has_key;
@@ -81,6 +91,11 @@ createApp({
       this.openrouterHasKey = cfg.openrouter_has_key;
       this.openrouterBatchTokenBudget = cfg.openrouter_batch_token_budget;
       this.openrouterConcurrentBatchWindow = cfg.openrouter_concurrent_batch_window;
+      this.groqModel = cfg.groq_model;
+      this.groqKeyMasked = cfg.groq_api_key_masked;
+      this.groqHasKey = cfg.groq_has_key;
+      this.groqBatchTokenBudget = cfg.groq_batch_token_budget;
+      this.groqConcurrentBatchWindow = cfg.groq_concurrent_batch_window;
     },
     async refreshOllamaModels() {
       this.loadingOllamaModels = true;
@@ -105,8 +120,10 @@ createApp({
           cfg = { model: this.geminiModel, api_key: this.geminiApiKey || null };
         } else if (name === "nvidia") {
           cfg = { model: this.nvidiaModel, api_key: this.nvidiaApiKey || null };
-        } else {
+        } else if (name === "openrouter") {
           cfg = { model: this.openrouterModel, api_key: this.openrouterApiKey || null };
+        } else {
+          cfg = { model: this.groqModel, api_key: this.groqApiKey || null };
         }
         const result = await Api.testEngine(name, cfg);
         this.testResults = { ...this.testResults, [name]: result };
@@ -129,6 +146,8 @@ createApp({
           ollama_batch_token_budget: this.ollamaBatchTokenBudget,
           gemini_model: this.geminiModel,
           gemini_api_key: this.geminiApiKey || null,
+          gemini_batch_token_budget: this.geminiBatchTokenBudget,
+          gemini_concurrent_batch_window: this.geminiConcurrentBatchWindow,
           nvidia_model: this.nvidiaModel,
           nvidia_api_key: this.nvidiaApiKey || null,
           nvidia_batch_token_budget: this.nvidiaBatchTokenBudget,
@@ -137,10 +156,15 @@ createApp({
           openrouter_api_key: this.openrouterApiKey || null,
           openrouter_batch_token_budget: this.openrouterBatchTokenBudget,
           openrouter_concurrent_batch_window: this.openrouterConcurrentBatchWindow,
+          groq_model: this.groqModel,
+          groq_api_key: this.groqApiKey || null,
+          groq_batch_token_budget: this.groqBatchTokenBudget,
+          groq_concurrent_batch_window: this.groqConcurrentBatchWindow,
         });
         this.geminiApiKey = "";
         this.nvidiaApiKey = "";
         this.openrouterApiKey = "";
+        this.groqApiKey = "";
         await this.load();
         this.saved = true;
         setTimeout(() => (this.saved = false), 3000);

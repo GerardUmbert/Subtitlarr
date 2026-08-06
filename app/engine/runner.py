@@ -116,21 +116,35 @@ class RunController:
 
         # Each engine's batch-size and concurrency settings are tuned for
         # fundamentally different constraints: Ollama's small default
-        # protects local VRAM/GPU, while NVIDIA/OpenRouter's cloud models
-        # have no such limit. Sharing one budget between them (as an
-        # earlier version of this code did) meant NVIDIA silently
-        # inherited Ollama's GPU-safe default and ran far more sequential
-        # batches than it needed to — the same gap existed for OpenRouter
-        # until this was generalized.
-        if active_provider.name == "nvidia":
-            batch_token_budget_override = self._settings.nvidia_batch_token_budget
-            concurrent_batch_window = self._settings.nvidia_concurrent_batch_window
-        elif active_provider.name == "openrouter":
-            batch_token_budget_override = self._settings.openrouter_batch_token_budget
-            concurrent_batch_window = self._settings.openrouter_concurrent_batch_window
-        else:
-            batch_token_budget_override = self._settings.ollama_batch_token_budget
-            concurrent_batch_window = 1  # unused for non-concurrent providers
+        # protects local VRAM/GPU, while the cloud providers below have no
+        # such limit. Sharing one budget between them (as an earlier
+        # version of this code did) meant a newly added cloud provider
+        # silently inherited Ollama's GPU-safe default and ran far more
+        # sequential batches than it needed to — this table is the single
+        # place that gap gets closed for every current and future cloud
+        # provider, instead of a growing if/elif chain.
+        _CLOUD_ENGINE_SETTINGS = {
+            "nvidia": (
+                self._settings.nvidia_batch_token_budget,
+                self._settings.nvidia_concurrent_batch_window,
+            ),
+            "openrouter": (
+                self._settings.openrouter_batch_token_budget,
+                self._settings.openrouter_concurrent_batch_window,
+            ),
+            "groq": (
+                self._settings.groq_batch_token_budget,
+                self._settings.groq_concurrent_batch_window,
+            ),
+            "gemini": (
+                self._settings.gemini_batch_token_budget,
+                self._settings.gemini_concurrent_batch_window,
+            ),
+        }
+        batch_token_budget_override, concurrent_batch_window = _CLOUD_ENGINE_SETTINGS.get(
+            active_provider.name,
+            (self._settings.ollama_batch_token_budget, 1),  # 1 = unused, non-concurrent
+        )
 
         try:
             for i, entry in enumerate(ready_items):

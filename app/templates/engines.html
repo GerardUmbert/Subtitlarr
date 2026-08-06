@@ -120,6 +120,25 @@
         <label>API key {% raw %}{{ geminiKeyMasked ? '(' + geminiKeyMasked + ')' : '' }}{% endraw %}</label>
         <input v-model="geminiApiKey" type="password" placeholder="leave blank to keep current key" />
       </div>
+      <div class="field">
+        <label>Batch size (dialogue tokens)</label>
+        <input v-model.number="geminiBatchTokenBudget" type="number" min="1" step="100" />
+        <p class="field-hint">
+          Same idea as NVIDIA/OpenRouter's batch size — how many dialogue tokens go into one
+          translation request. Google doesn't publish a fixed free-tier RPM/RPD number (it
+          varies by account/usage tier — check <span class="mono">aistudio.google.com</span>),
+          so this starts at a moderate default. Lower it if translations come back with a low
+          "recovered N/M cues" count.
+        </p>
+      </div>
+      <div class="field">
+        <label>Concurrent batches</label>
+        <input v-model.number="geminiConcurrentBatchWindow" type="number" min="1" step="1" />
+        <p class="field-hint">
+          Same windowed-concurrency treatment as NVIDIA/OpenRouter/Groq. Kept modest by default
+          since Gemini's actual per-account rate limit isn't known ahead of time.
+        </p>
+      </div>
       <div class="field-row">
         <button class="btn" @click="testEngine('gemini')" :disabled="testing === 'gemini'">
           {% raw %}{{ testing === 'gemini' ? 'Testing…' : 'Test connection' }}{% endraw %}
@@ -255,6 +274,65 @@
       </div>
     </div>
 
+    <div :class="['engine-opt', { selected: active === 'groq' }]" style="margin-top:14px;" @click="active = 'groq'">
+      <div class="engine-radio"><div class="fill" v-if="active === 'groq'"></div></div>
+      <div class="engine-info">
+        <div class="engine-name">Groq <span class="badge badge-free">free tier</span></div>
+        <div class="engine-meta">{% raw %}{{ groqModel }}{% endraw %}</div>
+      </div>
+      <div :class="['engine-status', groqHasKey ? '' : 'off']">
+        <span class="dot"></span>{% raw %}{{ groqHasKey ? 'configured' : 'no key' }}{% endraw %}
+      </div>
+    </div>
+
+    <div class="engine-config" v-if="active === 'groq'">
+      <div class="field">
+        <label>Model</label>
+        <input v-model="groqModel" placeholder="llama-3.1-8b-instant" />
+        <p class="field-hint">
+          Must be a real instructable chat model — Groq serves a fixed lineup on its own LPU
+          hardware (Llama, GPT-OSS, Qwen, etc. — no Gemma or DeepSeek). See
+          <span class="mono">console.groq.com/docs/models</span> for the full lineup. Larger
+          models typically get a LOWER per-model rate limit than the default.
+        </p>
+      </div>
+      <div class="field">
+        <label>API key {% raw %}{{ groqKeyMasked ? '(' + groqKeyMasked + ')' : '' }}{% endraw %}</label>
+        <input v-model="groqApiKey" type="password" placeholder="leave blank to keep current key" />
+        <p class="field-hint">
+          Get a free key at <span class="mono">console.groq.com/keys</span>.
+        </p>
+      </div>
+      <div class="field">
+        <label>Batch size (dialogue tokens)</label>
+        <input v-model.number="groqBatchTokenBudget" type="number" min="1" step="100" />
+        <p class="field-hint">
+          Same idea as NVIDIA/OpenRouter's batch size. Groq's free tier for the default model is
+          confirmed at <strong>30 requests/minute and 14,400 requests/day</strong> — far more
+          generous than OpenRouter's free-tier models, so there's less pressure to maximize this
+          purely to conserve daily quota. Lower it only if translations come back with a low
+          "recovered N/M cues" count.
+        </p>
+      </div>
+      <div class="field">
+        <label>Concurrent batches</label>
+        <input v-model.number="groqConcurrentBatchWindow" type="number" min="1" step="1" />
+        <p class="field-hint">
+          How many batches are sent to Groq at once before waiting for that group to finish and
+          starting the next — same windowed-concurrency treatment as NVIDIA/OpenRouter. Kept
+          well under the confirmed 30 requests/minute ceiling for the default model.
+        </p>
+      </div>
+      <div class="field-row">
+        <button class="btn" @click="testEngine('groq')" :disabled="testing === 'groq'">
+          {% raw %}{{ testing === 'groq' ? 'Testing…' : 'Test connection' }}{% endraw %}
+        </button>
+        <span v-if="testResults.groq" :class="['test-result', { error: !testResults.groq.ok }]">
+          ● {% raw %}{{ testResults.groq.detail }}{% endraw %}
+        </span>
+      </div>
+    </div>
+
     <div class="engine-opt disabled">
       <div class="engine-radio"></div>
       <div class="engine-info">
@@ -282,6 +360,7 @@
           <option value="gemini">Gemini</option>
           <option value="nvidia">NVIDIA (DeepSeek V4 Flash)</option>
           <option value="openrouter">OpenRouter</option>
+          <option value="groq">Groq</option>
         </select>
       </div>
       <div class="field-row">

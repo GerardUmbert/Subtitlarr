@@ -35,6 +35,16 @@ class Settings(BaseSettings):
     # https://aistudio.google.com/ before relying on it, and prefer setting
     # it explicitly via the Engine page or GEMINI_MODEL env var.
     gemini_model: str = "gemini-2.0-flash"
+    # No local GPU/VRAM constraint. Google doesn't publish a fixed
+    # free-tier RPM/RPD number (varies by account/usage tier — see
+    # ai.google.dev/gemini-api/docs/rate-limits), so this starts at the
+    # same conservative-but-not-tiny value as NVIDIA/OpenRouter/Groq
+    # rather than a guessed number; lower it if translations come back
+    # with low cue-recovery counts.
+    gemini_batch_token_budget: int = 4000
+    # Mirrors nvidia_concurrent_batch_window. Kept modest since Gemini's
+    # actual per-account RPM isn't known ahead of time.
+    gemini_concurrent_batch_window: int = 4
 
     nvidia_api_key: str = ""
     # NVIDIA's build.nvidia.com free tier (integrate.api.nvidia.com), an
@@ -113,6 +123,26 @@ class Settings(BaseSettings):
     # (see OpenRouterDailyLimitError) — concurrency only helps you get
     # through the day's quota faster, it doesn't raise the quota itself.
     openrouter_concurrent_batch_window: int = 4
+
+    groq_api_key: str = ""
+    # Groq serves a fixed lineup of models on its own LPU hardware (Llama,
+    # GPT-OSS, Qwen, etc. — no Gemma or DeepSeek, unlike NVIDIA/OpenRouter).
+    # MUST be a real instructable chat model — same requirement as every
+    # other provider. See https://console.groq.com/docs/models for the
+    # full lineup. llama-3.1-8b-instant confirmed to handle Catalan
+    # translation and has Groq's most generous documented free-tier limits
+    # (30 RPM / 14,400 per day — see RATE_LIMIT_RPM in groq_provider.py);
+    # larger models on Groq typically get a LOWER per-model cap.
+    groq_model: str = "llama-3.1-8b-instant"
+    # No local GPU/VRAM constraint. Groq's free tier is far more generous
+    # than OpenRouter's (30 RPM / 14,400 per day vs OpenRouter's 20 RPM /
+    # 50 per day), so there's less pressure to maximize batch size purely
+    # to conserve daily quota. Starts at the same value as OpenRouter's
+    # for consistency; lower it if translations come back with low
+    # cue-recovery counts.
+    groq_batch_token_budget: int = 4000
+    # Mirrors nvidia_concurrent_batch_window / openrouter_concurrent_batch_window.
+    groq_concurrent_batch_window: int = 4
 
     # Scheduling
     schedule_cron: str = "0 3 * * *"

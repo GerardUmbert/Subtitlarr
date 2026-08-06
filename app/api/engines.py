@@ -8,6 +8,7 @@ from app.config import settings
 from app.db import settings_store
 from app.providers import pull_state
 from app.providers.gemini_provider import GeminiProvider
+from app.providers.groq_provider import GroqProvider
 from app.providers.nvidia_provider import NvidiaProvider
 from app.providers.ollama_provider import OllamaProvider
 from app.providers.openrouter_provider import OpenRouterProvider
@@ -32,6 +33,8 @@ class EngineConfig(BaseModel):
     ollama_batch_token_budget: int = 400
     gemini_model: str
     gemini_api_key: str | None = None  # only set to overwrite; omitted = unchanged
+    gemini_batch_token_budget: int = 4000
+    gemini_concurrent_batch_window: int = 4
     nvidia_model: str = "deepseek-ai/deepseek-v4-flash"
     nvidia_api_key: str | None = None  # only set to overwrite; omitted = unchanged
     nvidia_batch_token_budget: int = 700
@@ -40,6 +43,10 @@ class EngineConfig(BaseModel):
     openrouter_api_key: str | None = None  # only set to overwrite; omitted = unchanged
     openrouter_batch_token_budget: int = 4000
     openrouter_concurrent_batch_window: int = 4
+    groq_model: str = "llama-3.1-8b-instant"
+    groq_api_key: str | None = None  # only set to overwrite; omitted = unchanged
+    groq_batch_token_budget: int = 4000
+    groq_concurrent_batch_window: int = 4
 
 
 @router.get("")
@@ -54,6 +61,8 @@ async def get_engine_config():
         "gemini_model": settings.gemini_model,
         "gemini_api_key_masked": _mask(settings.gemini_api_key),
         "gemini_has_key": bool(settings.gemini_api_key),
+        "gemini_batch_token_budget": settings.gemini_batch_token_budget,
+        "gemini_concurrent_batch_window": settings.gemini_concurrent_batch_window,
         "nvidia_model": settings.nvidia_model,
         "nvidia_api_key_masked": _mask(settings.nvidia_api_key),
         "nvidia_has_key": bool(settings.nvidia_api_key),
@@ -64,6 +73,11 @@ async def get_engine_config():
         "openrouter_has_key": bool(settings.openrouter_api_key),
         "openrouter_batch_token_budget": settings.openrouter_batch_token_budget,
         "openrouter_concurrent_batch_window": settings.openrouter_concurrent_batch_window,
+        "groq_model": settings.groq_model,
+        "groq_api_key_masked": _mask(settings.groq_api_key),
+        "groq_has_key": bool(settings.groq_api_key),
+        "groq_batch_token_budget": settings.groq_batch_token_budget,
+        "groq_concurrent_batch_window": settings.groq_concurrent_batch_window,
     }
 
 
@@ -85,6 +99,20 @@ async def set_engine_config(config: EngineConfig, conn=Depends(state.get_conn)):
         raise HTTPException(
             status_code=422, detail="openrouter_concurrent_batch_window must be at least 1"
         )
+    if config.gemini_batch_token_budget < 1:
+        raise HTTPException(
+            status_code=422, detail="gemini_batch_token_budget must be at least 1"
+        )
+    if config.gemini_concurrent_batch_window < 1:
+        raise HTTPException(
+            status_code=422, detail="gemini_concurrent_batch_window must be at least 1"
+        )
+    if config.groq_batch_token_budget < 1:
+        raise HTTPException(status_code=422, detail="groq_batch_token_budget must be at least 1")
+    if config.groq_concurrent_batch_window < 1:
+        raise HTTPException(
+            status_code=422, detail="groq_concurrent_batch_window must be at least 1"
+        )
     settings.active_engine = config.active_engine
     settings_store.save_one(conn, "active_engine", config.active_engine)
     settings.fallback_engine = config.fallback_engine
@@ -102,6 +130,12 @@ async def set_engine_config(config: EngineConfig, conn=Depends(state.get_conn)):
     if config.gemini_api_key:
         settings.gemini_api_key = config.gemini_api_key
         settings_store.save_one(conn, "gemini_api_key", config.gemini_api_key)
+    settings.gemini_batch_token_budget = config.gemini_batch_token_budget
+    settings_store.save_one(conn, "gemini_batch_token_budget", config.gemini_batch_token_budget)
+    settings.gemini_concurrent_batch_window = config.gemini_concurrent_batch_window
+    settings_store.save_one(
+        conn, "gemini_concurrent_batch_window", config.gemini_concurrent_batch_window
+    )
     settings.nvidia_model = config.nvidia_model
     settings_store.save_one(conn, "nvidia_model", config.nvidia_model)
     if config.nvidia_api_key:
@@ -125,6 +159,17 @@ async def set_engine_config(config: EngineConfig, conn=Depends(state.get_conn)):
     settings.openrouter_concurrent_batch_window = config.openrouter_concurrent_batch_window
     settings_store.save_one(
         conn, "openrouter_concurrent_batch_window", config.openrouter_concurrent_batch_window
+    )
+    settings.groq_model = config.groq_model
+    settings_store.save_one(conn, "groq_model", config.groq_model)
+    if config.groq_api_key:
+        settings.groq_api_key = config.groq_api_key
+        settings_store.save_one(conn, "groq_api_key", config.groq_api_key)
+    settings.groq_batch_token_budget = config.groq_batch_token_budget
+    settings_store.save_one(conn, "groq_batch_token_budget", config.groq_batch_token_budget)
+    settings.groq_concurrent_batch_window = config.groq_concurrent_batch_window
+    settings_store.save_one(
+        conn, "groq_concurrent_batch_window", config.groq_concurrent_batch_window
     )
     return {"saved": True}
 
@@ -162,6 +207,12 @@ async def test_engine(name: str, req: TestEngineRequest | None = None):
         if not api_key:
             raise HTTPException(status_code=400, detail="No OpenRouter API key configured")
         provider = OpenRouterProvider(api_key=api_key, model=model)
+    elif name == "groq":
+        api_key = (req.api_key if req and req.api_key else settings.groq_api_key)
+        model = (req.model if req and req.model else settings.groq_model)
+        if not api_key:
+            raise HTTPException(status_code=400, detail="No Groq API key configured")
+        provider = GroqProvider(api_key=api_key, model=model)
     else:
         raise HTTPException(status_code=400, detail=f"Unknown or unimplemented engine: {name}")
 

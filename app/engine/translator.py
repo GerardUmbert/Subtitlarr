@@ -132,24 +132,25 @@ async def _translate_batch(
     return reassemble(batch, llm_response), engine_used
 
 
-# Cloud-provider-only (NVIDIA, OpenRouter): their endpoints have no local
-# VRAM/GPU contention (unlike Ollama, where concurrent requests would just
-# serialize against the same model instance anyway — no real speedup, and
-# it fights the watchdog/timeout logic that assumes one request at a
-# time). Kept well under each provider's own documented per-minute request
-# ceiling (see RATE_LIMIT_RPM in nvidia_provider.py / openrouter_provider.py).
-# Confirmed safe: each batch's cues carry their own real subtitle index
-# baked into the prompt (srt_io.extract_dialogue_text), and reassemble()
-# maps translated content back onto the ORIGINAL cue list by matching that
-# index, never by position/arrival order — and asyncio.gather() itself
-# returns results in the same order as its input regardless of which one
-# resolves first. So concurrent batches can't misorder cues even though
-# responses can arrive out of order.
+# Cloud-provider-only (NVIDIA, OpenRouter, Groq, Gemini): their endpoints
+# have no local VRAM/GPU contention (unlike Ollama, where concurrent
+# requests would just serialize against the same model instance anyway —
+# no real speedup, and it fights the watchdog/timeout logic that assumes
+# one request at a time). Kept well under each provider's own documented
+# (or, for Gemini, account-tier-dependent) per-minute request ceiling —
+# see RATE_LIMIT_RPM in nvidia_provider.py / openrouter_provider.py /
+# groq_provider.py. Confirmed safe: each batch's cues carry their own real
+# subtitle index baked into the prompt (srt_io.extract_dialogue_text), and
+# reassemble() maps translated content back onto the ORIGINAL cue list by
+# matching that index, never by position/arrival order — and
+# asyncio.gather() itself returns results in the same order as its input
+# regardless of which one resolves first. So concurrent batches can't
+# misorder cues even though responses can arrive out of order.
 NVIDIA_CONCURRENT_BATCH_WINDOW = 4
 
 # Set of provider names that get the windowed-concurrency treatment above
 # instead of translating batches strictly sequentially.
-_CONCURRENT_PROVIDERS = {"nvidia", "openrouter"}
+_CONCURRENT_PROVIDERS = {"nvidia", "openrouter", "groq", "gemini"}
 
 
 async def _translate_batches(

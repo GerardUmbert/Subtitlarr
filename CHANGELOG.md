@@ -6,6 +6,26 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 ## [0.5.0]
 
 ### Added
+- **Groq translation engine** (Engines page): a new provider option
+  alongside Ollama/Gemini/NVIDIA/OpenRouter, reached via Groq's
+  OpenAI-compatible `/openai/v1/chat/completions` endpoint
+  (`app.providers.groq_provider`). Defaults to `llama-3.1-8b-instant`
+  (confirmed to handle Catalan translation, and Groq's most generous
+  documented free-tier limits: 30 requests/minute, 14,400/day — far
+  looser than OpenRouter's free-tier 20 RPM / 50-per-day). Gets the same
+  windowed-concurrency batching and its own batch-token-budget setting as
+  NVIDIA/OpenRouter (`groq_batch_token_budget`/`groq_concurrent_batch_window`,
+  both default 4000/4). Groq serves a fixed lineup on its own LPU
+  hardware (Llama, GPT-OSS, Qwen, etc. — no Gemma or DeepSeek).
+- **Gemini engine upgraded to the same reliability pattern as NVIDIA/
+  OpenRouter/Groq**: previously had no shared rate-limit cooldown gate, no
+  connection-error retry handling, and no per-engine batch-token-budget/
+  concurrency settings (silently inherited Ollama's small GPU-safe
+  default and ran strictly sequential batches). Now has its own
+  `gemini_batch_token_budget`/`gemini_concurrent_batch_window` settings
+  and a shared 429 cooldown (`GeminiProvider._rate_limited_until`) so a
+  rate limit on one call makes every other in-flight batch/item wait at
+  the same gate, instead of each one independently hitting its own 429.
 - **OpenRouter translation engine** (Engines page): a new provider option
   alongside Ollama/Gemini/NVIDIA, reached via OpenRouter's OpenAI-
   compatible `/chat/completions` endpoint (`app.providers.openrouter_provider`).

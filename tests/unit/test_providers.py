@@ -93,6 +93,47 @@ async def test_gemini_rate_limited_raises_retryable():
     await provider.aclose()
 
 
+@pytest.mark.asyncio
+@respx.mock
+async def test_gemini_429_blocks_a_later_call_on_the_same_provider_instance(monkeypatch):
+    """Gemini now shares the same cooldown-gate pattern as NVIDIA/
+    OpenRouter/Groq: a 429 on one call must make a LATER call on the same
+    provider instance wait, without needing to hit its own 429 first."""
+    import app.providers.gemini_provider as gemini_module
+
+    calls = {"post": 0}
+    route = respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+    )
+
+    def responder(request):
+        calls["post"] += 1
+        if calls["post"] == 1:
+            return httpx.Response(429, headers={"Retry-After": "5"})
+        return httpx.Response(
+            200, json={"candidates": [{"content": {"parts": [{"text": "ok"}]}}]}
+        )
+
+    route.mock(side_effect=responder)
+
+    slept = []
+
+    async def fake_sleep(seconds):
+        slept.append(seconds)
+
+    monkeypatch.setattr(gemini_module.asyncio, "sleep", fake_sleep)
+
+    provider = GeminiProvider(api_key="testkey", model="gemini-1.5-flash")
+
+    with pytest.raises(ProviderRateLimitedError):
+        await provider.translate("1\nHello.", "en", "es")
+
+    await provider.translate("2\nHello again.", "en", "es")
+
+    assert slept == pytest.approx([5.0], abs=0.01)
+    await provider.aclose()
+
+
 def test_registry_builds_active_and_fallback():
     settings = Settings(
         active_engine="ollama",
@@ -128,3 +169,9 @@ def test_registry_builds_openrouter():
     settings = Settings(active_engine="openrouter", openrouter_api_key="testkey")
     active = get_active_provider(settings)
     assert active.name == "openrouter"
+
+
+def test_registry_builds_groq():
+    settings = Settings(active_engine="groq", groq_api_key="testkey")
+    active = get_active_provider(settings)
+    assert active.name == "groq"
