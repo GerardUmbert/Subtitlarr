@@ -10,8 +10,25 @@
   <script src="/static/js/vue.global.prod.js?v={{ asset_version }}"></script>
 </head>
 <body>
-  <div class="shell">
+  <div class="shell" id="shell">
     {% include "partials/sidebar.html" %}
+    <script>
+      // Applied synchronously, right after the sidebar markup parses —
+      // before first paint — so a returning visitor with the sidebar
+      // collapsed doesn't see one frame of the expanded sidebar before
+      // api.js (loaded at the end of <body>) catches up. See api.js's
+      // initCollapseToggle for the click handler that keeps this in sync.
+      (function () {
+        if (localStorage.getItem("sidebarCollapsed") !== "1") return;
+        document.getElementById("shell").classList.add("sidebar-collapsed");
+        var sidebar = document.getElementById("sidebar");
+        sidebar.classList.add("collapsed");
+        var toggle = document.getElementById("collapse-toggle");
+        toggle.textContent = "▸";
+        toggle.setAttribute("aria-expanded", "false");
+        toggle.setAttribute("aria-label", "Expand sidebar");
+      })();
+    </script>
     <main id="app">
       {% block content %}{% endblock %}
     </main>

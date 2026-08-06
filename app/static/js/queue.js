@@ -71,6 +71,8 @@ createApp({
       currentRunItems: [],
       currentBatchOnly: false,
       excludeNoSource: true,
+      sortBy: null,
+      sortDir: "asc",
       filters: [
         { label: "All", value: "" },
         { label: "Queued", value: "pending" },
@@ -107,6 +109,8 @@ createApp({
     }
     if (params.get("batch") === "1") this.currentBatchOnly = true;
     if (params.has("exclude_no_source")) this.excludeNoSource = params.get("exclude_no_source") === "1";
+    if (params.has("sort_by")) this.sortBy = params.get("sort_by");
+    if (params.has("sort_dir")) this.sortDir = params.get("sort_dir");
   },
   computed: {
     totalPages() {
@@ -143,6 +147,21 @@ createApp({
     toggleCurrentBatch() {
       this.currentBatchOnly = !this.currentBatchOnly;
       this.syncUrl();
+    },
+    sortIndicator(column) {
+      if (this.sortBy !== column) return "";
+      return this.sortDir === "asc" ? "▲" : "▼";
+    },
+    setSort(column) {
+      if (this.sortBy === column) {
+        this.sortDir = this.sortDir === "asc" ? "desc" : "asc";
+      } else {
+        this.sortBy = column;
+        this.sortDir = "asc";
+      }
+      this.page = 1;
+      this.syncUrl();
+      this.refresh();
     },
     onExcludeNoSourceChange() {
       this.page = 1;
@@ -183,6 +202,10 @@ createApp({
       // now true, so omitting it when false would make a reload silently
       // re-check a box the user just unchecked.
       params.set("exclude_no_source", this.excludeNoSource ? "1" : "0");
+      if (this.sortBy) {
+        params.set("sort_by", this.sortBy);
+        params.set("sort_dir", this.sortDir);
+      }
       const qs = params.toString();
       const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
       // replaceState (not pushState) — filter changes shouldn't pile up
@@ -200,6 +223,10 @@ createApp({
       try {
         const params = { ...this.filterParams(), page: this.page, page_size: this.pageSize };
         if (this.excludeNoSource) params.exclude_no_source = true;
+        if (this.sortBy) {
+          params.sort_by = this.sortBy;
+          params.sort_dir = this.sortDir;
+        }
         const result = await Api.getQueue(params);
         this.items = result.data;
         this.total = result.total;

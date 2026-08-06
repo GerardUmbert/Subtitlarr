@@ -1,5 +1,16 @@
 * { box-sizing: border-box; }
 
+/* Defensive default: a long unbroken string (a URL, a filename) inside
+   any normal text flow shouldn't be able to force its container wider
+   than available space — combined with the grid-track/main-width fix
+   just below, this is belt-and-suspenders against the same class of
+   layout bug reappearing wherever new content gets added later. Tables
+   are explicitly excluded (see .table-scroll's own intentional
+   horizontal scroll for wide tabular data — those should NOT wrap). */
+main, .panel, .note {
+  overflow-wrap: anywhere;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -19,8 +30,25 @@ a { color: inherit; }
 
 .shell {
   display: grid;
-  grid-template-columns: 236px 1fr;
+  /* minmax(0, 1fr), not bare 1fr — a bare 1fr track's implicit min-width
+     is `auto` (i.e. big enough for its content), so a wide child can
+     still force the track wider than available space. minmax(0, 1fr)
+     is what actually lets main's own max-width/overflow-wrap rules take
+     over instead of the grid track fighting them. */
+  grid-template-columns: 236px minmax(0, 1fr);
   min-height: 100vh;
+}
+
+/* Only animate the column resize once the page has finished loading —
+   applied by JS after first paint (see api.js) so the initial render
+   with a persisted collapsed state never shows a spurious 0.18s
+   expand-then-collapse animation on page load. */
+.shell.transitions-enabled {
+  transition: grid-template-columns 0.18s ease;
+}
+
+.shell.sidebar-collapsed {
+  grid-template-columns: 64px minmax(0, 1fr);
 }
 
 h1 {
@@ -47,8 +75,17 @@ h1 {
 
 main {
   padding: 30px 36px 60px;
-  width: 1180px;
-  max-width: 100%;
+  /* max-width (not a fixed width) — this is a grid item, and a 1fr grid
+     track's default min-width is `auto`, not 0, so it won't shrink below
+     its content's intrinsic size on its own. A FIXED width here forced
+     main to demand 1180px regardless of how much room the grid track
+     actually had once the sidebar's column was accounted for, and with
+     nothing to reveal the overflow (page-wide horizontal scroll is
+     avoided deliberately — see body's overflow-x), it just silently
+     clipped instead of shrinking. Confirmed live: content cut off
+     mid-word on a viewport too narrow for sidebar + 1180px + padding. */
+  max-width: 1180px;
+  width: 100%;
   min-width: 0;
   margin: 0 auto;
 }
@@ -56,7 +93,8 @@ main {
 ::selection { background: var(--accent-soft); color: var(--accent); }
 
 @media (max-width: 980px) {
-  .shell { grid-template-columns: minmax(0, 1fr); }
+  .shell,
+  .shell.sidebar-collapsed { grid-template-columns: minmax(0, 1fr); }
   main { width: 100%; padding: 20px 16px 40px; }
   .grid-2 { grid-template-columns: 1fr; }
   .stats { grid-template-columns: repeat(2, 1fr); }

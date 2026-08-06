@@ -193,8 +193,32 @@
           llama.cpp's own built-in local HTTP server (github.com/ggml-org/llama.cpp) — a
           separate local runtime from Ollama, not another name for it. It has no web UI and no
           model-switching endpoint: whatever model the server was started with (via its own CLI
-          flags) is what gets used here. There is no model field or pull button on this page —
-          start/stop and model selection both happen on the llama.cpp server itself.
+          flags) is what actually runs — start/stop and model selection both happen on the
+          llama.cpp server itself, not here.
+        </p>
+      </div>
+      <div class="field">
+        <label>Model name (optional)</label>
+        <input v-model="llamacppModel" placeholder="gemma3:4b" />
+        <p class="field-hint">
+          Most llama.cpp servers ignore this entirely — only one model is ever loaded, so it's
+          usually not needed. Some server builds/versions, and any reverse proxy sitting in front
+          (LiteLLM, etc.) enforcing strict OpenAI-spec requests, reject a request with no
+          <span class="mono">model</span> field at all — confirmed live with a real 400 "model
+          name is missing from the request" against a remote instance. Set this to whatever
+          <span class="mono">/v1/models</span> reports (shown after Test connection below) if you
+          hit that error; leave as-is otherwise.
+        </p>
+      </div>
+      <div class="field">
+        <label>API key {% raw %}{{ llamacppKeyMasked ? '(' + llamacppKeyMasked + ')' : '(optional)' }}{% endraw %}</label>
+        <input v-model="llamacppApiKey" type="password" placeholder="leave blank to keep current key" />
+        <p class="field-hint">
+          llama.cpp's own server has no built-in auth — only needed if the Base URL above points
+          at an instance sitting behind a reverse proxy/gateway that enforces its own auth (a
+          tunnel with auth added in front, a rented GPU host, etc). Sent as an
+          <span class="mono">Authorization: Bearer</span> header. Leave blank for a normal local or
+          unauthenticated llama.cpp server.
         </p>
       </div>
       <div class="field">

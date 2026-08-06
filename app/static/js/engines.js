@@ -16,6 +16,10 @@ createApp({
       // invalid/oddball entries (e.g. a value the model doesn't support).
       numCtxOptions: [4096, 8192, 16384, 32768, 65536, 131072, 262144],
       llamacppBaseUrl: "",
+      llamacppModel: "",
+      llamacppApiKey: "",
+      llamacppKeyMasked: "",
+      llamacppHasKey: false,
       llamacppBatchTokenBudget: 400,
       geminiModel: "",
       geminiApiKey: "",
@@ -79,6 +83,9 @@ createApp({
       this.ollamaNumCtx = cfg.ollama_num_ctx;
       this.ollamaBatchTokenBudget = cfg.ollama_batch_token_budget;
       this.llamacppBaseUrl = cfg.llamacpp_base_url;
+      this.llamacppModel = cfg.llamacpp_model;
+      this.llamacppKeyMasked = cfg.llamacpp_api_key_masked;
+      this.llamacppHasKey = cfg.llamacpp_has_key;
       this.llamacppBatchTokenBudget = cfg.llamacpp_batch_token_budget;
       this.geminiModel = cfg.gemini_model;
       this.geminiKeyMasked = cfg.gemini_api_key_masked;
@@ -121,7 +128,7 @@ createApp({
         if (name === "ollama") {
           cfg = { base_url: this.ollamaBaseUrl, model: this.ollamaModel };
         } else if (name === "llamacpp") {
-          cfg = { base_url: this.llamacppBaseUrl };
+          cfg = { base_url: this.llamacppBaseUrl, model: this.llamacppModel || null, api_key: this.llamacppApiKey || null };
         } else if (name === "gemini") {
           cfg = { model: this.geminiModel, api_key: this.geminiApiKey || null };
         } else if (name === "nvidia") {
@@ -151,6 +158,8 @@ createApp({
           ollama_num_ctx: this.ollamaNumCtx,
           ollama_batch_token_budget: this.ollamaBatchTokenBudget,
           llamacpp_base_url: this.llamacppBaseUrl,
+          llamacpp_model: this.llamacppModel,
+          llamacpp_api_key: this.llamacppApiKey || null,
           llamacpp_batch_token_budget: this.llamacppBatchTokenBudget,
           gemini_model: this.geminiModel,
           gemini_api_key: this.geminiApiKey || null,
@@ -169,6 +178,7 @@ createApp({
           groq_batch_token_budget: this.groqBatchTokenBudget,
           groq_concurrent_batch_window: this.groqConcurrentBatchWindow,
         });
+        this.llamacppApiKey = "";
         this.geminiApiKey = "";
         this.nvidiaApiKey = "";
         this.openrouterApiKey = "";

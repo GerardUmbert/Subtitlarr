@@ -32,7 +32,11 @@ def _build(name: str, settings: Settings) -> TranslationProvider:
     if name == "groq":
         return GroqProvider(api_key=settings.groq_api_key, model=settings.groq_model)
     if name == "llamacpp":
-        return LlamaCppProvider(base_url=settings.llamacpp_base_url)
+        return LlamaCppProvider(
+            base_url=settings.llamacpp_base_url,
+            api_key=settings.llamacpp_api_key or None,
+            model=settings.llamacpp_model or None,
+        )
     raise ValueError(f"Unknown or unimplemented provider: {name!r}")
 
 

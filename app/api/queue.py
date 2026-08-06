@@ -32,11 +32,14 @@ async def list_queue(
     page: int = 1,
     page_size: int = 50,
     sort: str = "title",
+    sort_by: str | None = None,
+    sort_dir: str = "asc",
     conn=Depends(state.get_conn),
 ):
     rows, total = repository.list_queue(
         conn, status=status, item_type=item_type, search=search,
         exclude_no_source=exclude_no_source, page=page, page_size=page_size, sort=sort,
+        sort_by=sort_by, sort_dir=sort_dir,
     )
     return {"data": _with_cached_flag(rows), "total": total, "page": page, "page_size": page_size}
 

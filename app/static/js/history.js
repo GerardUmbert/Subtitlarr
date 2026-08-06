@@ -47,10 +47,42 @@ const TRIGGERED_BY_LABELS = {
   manual_filtered: "Filtered batch",
 };
 
+const EVENT_TYPE_LABELS = {
+  sending: "sending",
+  response: "response",
+  item_done: "item done",
+  rate_limited_retry: "rate-limited, retrying",
+  content_blocked_fallback: "content blocked → fallback",
+  provider_failed_fallback: "provider failed → fallback",
+  watchdog_timeout: "watchdog timeout",
+  item_failed: "item failed",
+};
+
+const EVENT_TYPE_FILTER_OPTIONS = [
+  { value: "", label: "All types" },
+  { value: "sending", label: "Sending" },
+  { value: "response", label: "Response" },
+  { value: "item_done", label: "Item done" },
+  { value: "rate_limited_retry", label: "Rate-limited retry" },
+  { value: "content_blocked_fallback", label: "Content blocked" },
+  { value: "provider_failed_fallback", label: "Provider failed" },
+  { value: "watchdog_timeout", label: "Watchdog timeout" },
+  { value: "item_failed", label: "Item failed" },
+];
+
+function formatLogTimestamp(ts) {
+  // Log timestamps are "YYYY-MM-DD HH:MM:SS,mmm" (local server time, not ISO) —
+  // swap the comma for a period so `new Date()` parses it instead of returning
+  // Invalid Date.
+  if (!ts) return "—";
+  return new Date(ts.replace(",", ".")).toLocaleString();
+}
+
 createApp({
   data() {
     return {
       pageLoading: true,
+      activeTab: "runs", // 'runs' | 'events' | 'stats'
       runs: [],
       total: 0,
       page: 1,
@@ -61,11 +93,30 @@ createApp({
       errorModal: null, // the clicked item, or null when closed
       runningItemId: null,
       runActive: false,
+      runsSortBy: null,
+      runsSortDir: "desc",
+
+      // Events tab
+      events: [],
+      eventsLoading: false,
+      eventsItemIdFilter: null, // set when deep-linking from a run's items
+      eventsEngineFilter: "",
+      eventsTypeFilter: "",
+      eventsSortBy: null,
+      eventsSortDir: "desc",
+
+      // Stats tab
+      stats: null,
+      statsLoading: false,
+      statsRange: "all",
     };
   },
   computed: {
     totalPages() {
       return Math.max(1, Math.ceil(this.total / this.pageSize));
+    },
+    eventTypeFilterOptions() {
+      return EVENT_TYPE_FILTER_OPTIONS;
     },
   },
   methods: {
@@ -85,12 +136,44 @@ createApp({
     },
     async refresh() {
       try {
-        const result = await Api.getHistory({ page: this.page, page_size: this.pageSize });
+        const params = { page: this.page, page_size: this.pageSize };
+        if (this.runsSortBy) {
+          params.sort_by = this.runsSortBy;
+          params.sort_dir = this.runsSortDir;
+        }
+        const result = await Api.getHistory(params);
         this.runs = result.data;
         this.total = result.total;
       } catch (_) {
         // keep last known state on transient failure
       }
+    },
+    runsSortIndicator(column) {
+      if (this.runsSortBy !== column) return "";
+      return this.runsSortDir === "asc" ? "▲" : "▼";
+    },
+    setRunsSort(column) {
+      if (this.runsSortBy === column) {
+        this.runsSortDir = this.runsSortDir === "asc" ? "desc" : "asc";
+      } else {
+        this.runsSortBy = column;
+        this.runsSortDir = "desc";
+      }
+      this.page = 1;
+      this.refresh();
+    },
+    eventsSortIndicator(column) {
+      if (this.eventsSortBy !== column) return "";
+      return this.eventsSortDir === "asc" ? "▲" : "▼";
+    },
+    setEventsSort(column) {
+      if (this.eventsSortBy === column) {
+        this.eventsSortDir = this.eventsSortDir === "asc" ? "desc" : "asc";
+      } else {
+        this.eventsSortBy = column;
+        this.eventsSortDir = "desc";
+      }
+      this.loadEvents();
     },
     async toggleExpand(run) {
       if (this.expandedRunId === run.id) {
@@ -114,6 +197,70 @@ createApp({
     },
     closeErrorModal() {
       this.errorModal = null;
+    },
+    eventTypeLabel(type) {
+      return EVENT_TYPE_LABELS[type] || type;
+    },
+    formatLogTimestamp,
+    async switchTab(tab) {
+      this.activeTab = tab;
+      if (tab === "events" && this.events.length === 0) {
+        await this.loadEvents();
+      } else if (tab === "stats" && this.stats === null) {
+        await this.loadStats();
+      }
+    },
+    async loadEvents() {
+      this.eventsLoading = true;
+      try {
+        const params = {};
+        if (this.eventsItemIdFilter) params.item_id = this.eventsItemIdFilter;
+        if (this.eventsEngineFilter) params.engine = this.eventsEngineFilter;
+        if (this.eventsTypeFilter) params.event_type = this.eventsTypeFilter;
+        if (this.eventsSortBy) {
+          params.sort_by = this.eventsSortBy;
+          params.sort_dir = this.eventsSortDir;
+        }
+        const result = await Api.getHistoryEvents(params);
+        this.events = result.data;
+      } catch (_) {
+        // keep last known state on transient failure
+      } finally {
+        this.eventsLoading = false;
+      }
+    },
+    setEventsTypeFilter(type) {
+      this.eventsTypeFilter = type;
+      this.loadEvents();
+    },
+    async viewEventsForItem(itemId) {
+      this.eventsItemIdFilter = itemId;
+      this.eventsEngineFilter = "";
+      this.eventsTypeFilter = "";
+      this.activeTab = "events";
+      await this.loadEvents();
+    },
+    clearEventsItemFilter() {
+      this.eventsItemIdFilter = null;
+      this.loadEvents();
+    },
+    async loadStats() {
+      this.statsLoading = true;
+      try {
+        this.stats = await Api.getHistoryStats(this.statsRange);
+      } catch (_) {
+        // keep last known state on transient failure
+      } finally {
+        this.statsLoading = false;
+      }
+    },
+    async changeStatsRange(range) {
+      this.statsRange = range;
+      await this.loadStats();
+    },
+    barWidthPct(value, max) {
+      if (!max) return 0;
+      return Math.max(2, Math.round((value / max) * 100));
     },
     async runItem(item) {
       this.runningItemId = item.item_id;

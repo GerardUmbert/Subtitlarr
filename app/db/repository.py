@@ -297,6 +297,37 @@ _QUEUE_SORTS = {
     "recent": "last_updated DESC",
 }
 
+# Column-click sorting (Queue table headers) — a separate mechanism from
+# _QUEUE_SORTS above, which is a small set of fixed named presets used by
+# other callers (Dashboard). This is a real "any of these columns, either
+# direction" allowlist: only column names appearing here are ever allowed
+# into the ORDER BY, since sort_by/sort_dir come straight from a query
+# param and must never be interpolated into SQL unvalidated.
+_QUEUE_SORT_COLUMNS = {
+    "title": "COALESCE(series_title, title) COLLATE NOCASE, season_episode",
+    "language": "target_language COLLATE NOCASE",
+    "status": "status COLLATE NOCASE",
+    "updated": "last_updated",
+    "duration": "last_updated",  # duration is computed client-side; closest proxy available server-side
+}
+
+_RUN_HISTORY_SORT_COLUMNS = {
+    "started": "started_at",
+    "duration": "(julianday(finished_at) - julianday(started_at))",
+    "files": "items_processed",
+    "failed": "items_failed",
+}
+
+
+def _order_by_clause(
+    sort_columns: dict[str, str], sort_by: str | None, sort_dir: str, default: str
+) -> str:
+    direction = "ASC" if sort_dir == "asc" else "DESC"
+    column_expr = sort_columns.get(sort_by) if sort_by else None
+    if column_expr is None:
+        return default
+    return f"{column_expr} {direction}"
+
 
 def _build_queue_filter(
     status: str | None,
@@ -335,8 +366,11 @@ def list_queue(
     page: int = 1,
     page_size: int = 50,
     sort: str = "title",
+    sort_by: str | None = None,
+    sort_dir: str = "asc",
 ) -> tuple[list[sqlite3.Row], int]:
-    order_by = _QUEUE_SORTS.get(sort, _QUEUE_SORTS["title"])
+    default_order = _QUEUE_SORTS.get(sort, _QUEUE_SORTS["title"])
+    order_by = _order_by_clause(_QUEUE_SORT_COLUMNS, sort_by, sort_dir, default_order)
     conditions, params = _build_queue_filter(status, item_type, search, exclude_no_source)
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
@@ -494,20 +528,27 @@ def log_item_attempt(
 
 
 def list_run_history(
-    conn: sqlite3.Connection, *, page: int = 1, page_size: int = 20
+    conn: sqlite3.Connection,
+    *,
+    page: int = 1,
+    page_size: int = 20,
+    sort_by: str | None = None,
+    sort_dir: str = "desc",
 ) -> tuple[list[dict], int]:
-    """Past runs (finished or still open), newest first, each with a
-    per-run engine rollup derived from its items' logged engine_used
-    values — run_history itself doesn't store an engine, since a run can
-    mix engines (fallback triggered on some items, or settings changed
-    mid-run). 'primary_engine' is whichever engine the most items in that
-    run used; 'other_engines' lists any additional distinct engines seen,
-    for a '+1 via gemini' style note rather than hiding the mix."""
+    """Past runs (finished or still open), newest first by default, each
+    with a per-run engine rollup derived from its items' logged
+    engine_used values — run_history itself doesn't store an engine, since
+    a run can mix engines (fallback triggered on some items, or settings
+    changed mid-run). 'primary_engine' is whichever engine the most items
+    in that run used; 'other_engines' lists any additional distinct
+    engines seen, for a '+1 via gemini' style note rather than hiding the
+    mix."""
+    order_by = _order_by_clause(_RUN_HISTORY_SORT_COLUMNS, sort_by, sort_dir, "started_at DESC")
     total = conn.execute("SELECT COUNT(*) FROM run_history").fetchone()[0]
     rows = conn.execute(
-        """
+        f"""
         SELECT * FROM run_history
-        ORDER BY started_at DESC
+        ORDER BY {order_by}
         LIMIT ? OFFSET ?
         """,
         (page_size, (page - 1) * page_size),

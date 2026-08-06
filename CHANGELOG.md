@@ -3,6 +3,123 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.7.0]
+
+### Added
+- **Clickable column-header sorting** on Queue (Title/Language/Status/
+  Updated) and History's Runs (sort chips for Started/Duration/Files/
+  Failed) and Events (Time/Item/Engine/Type) tables — server-side and
+  paginated, not a client-side re-sort of whatever page happens to be
+  loaded. Column/direction are validated against a per-table allowlist
+  before ever reaching SQL.
+- **Optional API key for llama.cpp** (Engines page, blank by default):
+  llama.cpp's own server has no built-in auth, but a remote instance
+  sitting behind a reverse proxy/gateway can enforce its own — confirmed
+  live with a friend's llama.cpp instance exposed over a Tailscale
+  Funnel, gated by a bearer token in front of it. Sent as
+  `Authorization: Bearer <key>` on every request when set; left blank,
+  no Authorization header is sent at all, matching llama.cpp's default
+  unauthenticated behavior. (An equivalent feature was first built and
+  then reverted for Ollama earlier in this same work, after the actual
+  remote instance turned out to be llama.cpp, not Ollama.)
+- **History page now has three tabs: Runs, Events, Stats.** Runs is the
+  existing run-by-run breakdown (now with a "re-run" button — see below).
+  Events is a searchable feed of individual translator log lines
+  (per-batch send/response, rate-limit retries, content-block fallbacks,
+  Ollama watchdog restarts, item failures), filterable by item id, event
+  type, or engine, with a "view events" link from each run's expanded
+  item row so a specific item's whole request history can be inspected.
+  Stats shows items per target language, queue status totals, per-engine
+  fail ratio, per-engine p50/p90 response time, and fallback counts
+  (e.g. "gemini → ollama: 4"), with a 7-day/30-day/all-time range filter.
+- **New `app/engine/log_events.py`** parses the app's own log file into
+  structured events via a small pattern table (one regex per known log
+  message shape) rather than free-text search — the same "map of known
+  values" approach already used for provider error explanations.
+  **New `app/engine/stats.py`** computes the Stats tab's aggregates:
+  item/status counts from the DB, response-time percentiles and fallback
+  counts from the parsed log (`item_run_log` only ever stores one
+  terminal timestamp per attempt, not individual call durations or which
+  engine a fallback landed on).
+- **A real rotating log file** (`RotatingFileHandler`, 5MB × 3 backups,
+  alongside the SQLite DB in the same persistent volume). Previously the
+  app only logged to stdout — in this dev session a log file existed
+  purely as a side effect of how the server happened to be launched
+  (`nohup ... > file.log`), which would not exist at all under a normal
+  Docker/Unraid deployment where stdout goes to `docker logs`. The
+  Events tab needs a real, persistent, bounded file in every deployment.
+- **"Re-run" button on the History page's expanded run view**, mirroring
+  the Queue page's per-item run action — History was previously
+  read-only, so a failed item found while reviewing a past run couldn't
+  be retried without navigating away to the Queue page and re-finding it
+  there.
+- **Collapsible sidebar.** A toggle button collapses the nav down to an
+  icon rail (plain Unicode glyphs — no icon library added) and persists
+  the collapsed/expanded state in `localStorage`, restored before first
+  paint so there's no flash of the wrong layout on reload. Icons use
+  distinct glyphs per page (Jobs: ▶, Settings: ⚙, etc. — an early pass
+  had these backwards).
+
+### Fixed
+- **Repetition-loop failures never triggered fallback.** A degenerate
+  response (10+ consecutive cues with identical translated content) is
+  caught by `reassemble()` AFTER `translate()` already returned
+  successfully — so it fell entirely outside the
+  `ProviderRateLimitedError`/`ProviderContentBlockedError` fallback
+  handling, which only wraps the `translate()` call itself. Confirmed
+  live: several items failed outright on Gemini repetition loops with
+  Ollama configured as fallback but never attempted. Now retries once
+  against the fallback provider (keyed by engine name, so it can't bounce
+  back to the provider that just produced the bad output).
+- **`rate_per_min`/ETA on the current-run panel was a whole-run
+  cumulative average**, not a current rate — a single slow item early in
+  a long run (a 300s watchdog timeout, a content-block-then-fallback
+  chain) permanently dragged the displayed rate down for the rest of the
+  run even after throughput fully recovered. Now uses a rolling window
+  of the last 20 completions.
+- **Stats tab showed test-fixture "engines" (`echo`, `fake`,
+  `fake-failing`) alongside real ones, with nonsense response-time
+  percentiles.** Root cause: `app.main`'s import-time `configure_logging()`
+  wrote to the SAME log file (`data/subtitlarr.log`) that both the live
+  server and every local `pytest` run share, so every test run's fake
+  translate() calls were appended into production's own event log.
+  `configure_logging()` now detects pytest (`PYTEST_CURRENT_TEST`/
+  `PYTEST_VERSION` env vars) and skips the file handler entirely in that
+  case. Also hardened `stats.py`'s duration calculation to only count
+  "response" events for items that ultimately succeeded (`item_run_log`
+  status `done`) — a fast reply that was later rejected (content-blocked,
+  alignment failure) isn't a representative "this engine answers in Xs"
+  data point. The pre-existing polluted log was rotated out to a backup
+  file so the Events/Stats views start clean.
+- **Models softened profanity instead of translating it directly** —
+  confirmed live comparing the same source against llamacpp and ollama:
+  a repeated "fuck" translated to euphemistic "besaría" (would kiss)
+  instead of the real Spanish equivalent. The system prompt now
+  explicitly instructs faithful, uncensored translation of profanity and
+  vulgar language, matching the source's intensity rather than
+  substituting a milder alternative. When Catalan's Vegeta-insults addon
+  is also active, its instruction to adapt rather than translate
+  literally now explicitly overrides this rule, instead of the two
+  competing silently based on prompt ordering alone.
+- **Main content area didn't adapt to narrower viewports.** `main` had a
+  fixed `width: 1180px` (not `max-width`) inside a bare `1fr` grid track
+  — a bare `1fr` track's implicit min-width is `auto`, not 0, so the
+  column couldn't shrink below that fixed width regardless of available
+  space. Combined with `body { overflow-x: hidden }`, content just
+  clipped instead of reflowing or scrolling. Fixed via `max-width` +
+  `minmax(0, 1fr)` grid tracks, plus defensive `overflow-wrap: anywhere`
+  on text containers.
+- **Sidebar stretched taller than the viewport on long pages**, scrolling
+  away with the page instead of staying pinned — it had no height
+  constraint of its own, so it filled `.shell`'s grid row instead of the
+  actual screen. Fixed with `position: sticky; top: 0; height: 100vh`
+  (with a mobile-breakpoint override, since below 980px the sidebar
+  becomes a horizontal top bar instead of a side column).
+- **Events tab toolbar was misaligned, and its engine filter required an
+  exact match.** Added `align-items: center` to the wrapping toolbar;
+  engine filtering is now a case-insensitive substring match against
+  both the primary and fallback engine, not an exact match.
+
 ## [0.6.0]
 
 ### Added

@@ -5,7 +5,7 @@
   <div class="page-head">
     <div>
       <h1>History</h1>
-      <p class="page-sub">Every past translation run, grouped by batch — expand a run to see each file's individual result and elapsed time.</p>
+      <p class="page-sub">Every past translation run, plus a live event log and aggregate stats.</p>
     </div>
   </div>
 
@@ -15,6 +15,22 @@
   </div>
 
   <template v-else>
+  <div class="page-tabs">
+    <button class="page-tab" :class="{ active: activeTab === 'runs' }" @click="switchTab('runs')">Runs</button>
+    <button class="page-tab" :class="{ active: activeTab === 'events' }" @click="switchTab('events')">Events</button>
+    <button class="page-tab" :class="{ active: activeTab === 'stats' }" @click="switchTab('stats')">Stats</button>
+  </div>
+
+  <template v-if="activeTab === 'runs'">
+    <div class="panel" style="margin-bottom:14px; padding:14px 18px;" v-if="runs.length">
+      <div class="queue-toolbar" style="padding:0;">
+        <span>Sort by:</span>
+        <span class="chip sortable-chip" :class="{ active: runsSortBy === 'started' || !runsSortBy }" @click="setRunsSort('started')">Started {% raw %}{{ runsSortIndicator('started') || (!runsSortBy ? '▼' : '') }}{% endraw %}</span>
+        <span class="chip sortable-chip" :class="{ active: runsSortBy === 'duration' }" @click="setRunsSort('duration')">Duration {% raw %}{{ runsSortIndicator('duration') }}{% endraw %}</span>
+        <span class="chip sortable-chip" :class="{ active: runsSortBy === 'files' }" @click="setRunsSort('files')">Files {% raw %}{{ runsSortIndicator('files') }}{% endraw %}</span>
+        <span class="chip sortable-chip" :class="{ active: runsSortBy === 'failed' }" @click="setRunsSort('failed')">Failed {% raw %}{{ runsSortIndicator('failed') }}{% endraw %}</span>
+      </div>
+    </div>
     <div v-if="!runs.length" class="panel">
       <div class="empty-state" style="padding:40px 20px;">No runs yet — trigger a translation from the Queue or Jobs page.</div>
     </div>
@@ -52,6 +68,7 @@
                 <th>Duration</th>
                 <th>Error</th>
                 <th></th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -75,6 +92,9 @@
                     {% raw %}{{ runningItemId === item.item_id ? 'running…' : (runActive ? 'run in progress…' : 're-run') }}{% endraw %}
                   </button>
                 </td>
+                <td class="row-action">
+                  <button class="link-btn" @click="viewEventsForItem(item.item_id)">events</button>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -90,6 +110,141 @@
         <button class="btn" :disabled="page >= totalPages" @click="nextPage">Next</button>
       </div>
     </div>
+  </template>
+
+  <template v-if="activeTab === 'events'">
+    <div class="panel" style="margin-bottom:14px; padding:14px 18px;">
+      <div class="queue-toolbar" style="padding:0;">
+        <span class="chip" v-if="eventsItemIdFilter" @click="clearEventsItemFilter">
+          item #{% raw %}{{ eventsItemIdFilter }}{% endraw %} &times;
+        </span>
+        <span v-for="t in eventTypeFilterOptions" :key="t.value"
+              :class="['chip', { active: eventsTypeFilter === t.value }]"
+              @click="setEventsTypeFilter(t.value)">{% raw %}{{ t.label }}{% endraw %}</span>
+        <input v-model="eventsEngineFilter" @change="loadEvents" placeholder="engine (e.g. gemini)"
+               style="margin-left:auto; max-width:180px; padding:5px 11px; border-radius:99px; border:1px solid var(--border); background:var(--surface); font-size:12px; color:var(--ink);" />
+        <button class="btn" @click="loadEvents" :disabled="eventsLoading">{% raw %}{{ eventsLoading ? 'Loading…' : 'Refresh' }}{% endraw %}</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div v-if="eventsLoading" class="empty-state" style="padding:40px 20px;">Loading events…</div>
+      <div v-else-if="!events.length" class="empty-state" style="padding:40px 20px;">No matching events found in the current log file.</div>
+      <div class="table-scroll" v-else>
+        <table class="events-table">
+          <thead>
+            <tr>
+              <th class="sortable" @click="setEventsSort('time')">Time <span class="sort-indicator">{% raw %}{{ eventsSortIndicator('time') || (!eventsSortBy ? '▼' : '') }}{% endraw %}</span></th>
+              <th class="sortable" @click="setEventsSort('item')">Item <span class="sort-indicator">{% raw %}{{ eventsSortIndicator('item') }}{% endraw %}</span></th>
+              <th class="sortable" @click="setEventsSort('engine')">Engine <span class="sort-indicator">{% raw %}{{ eventsSortIndicator('engine') }}{% endraw %}</span></th>
+              <th class="sortable" @click="setEventsSort('type')">Type <span class="sort-indicator">{% raw %}{{ eventsSortIndicator('type') }}{% endraw %}</span></th>
+              <th>Detail</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="ev in events" :key="ev.id">
+              <td class="row-time">{% raw %}{{ formatLogTimestamp(ev.timestamp) }}{% endraw %}</td>
+              <td class="row-time">{% raw %}{{ ev.item_id ?? '—' }}{% endraw %}</td>
+              <td class="row-time">{% raw %}{{ ev.engine || '—' }}{% endraw %}{% raw %}{{ ev.fallback_engine ? ' → ' + ev.fallback_engine : '' }}{% endraw %}</td>
+              <td :class="'event-type-' + ev.event_type">{% raw %}{{ eventTypeLabel(ev.event_type) }}{% endraw %}</td>
+              <td class="row-time" style="max-width:420px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" :title="ev.detail">{% raw %}{{ ev.detail }}{% endraw %}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </template>
+
+  <template v-if="activeTab === 'stats'">
+    <div class="panel" style="margin-bottom:14px; padding:14px 18px;">
+      <div style="display:flex; gap:8px;">
+        <button class="chip" :class="{ active: statsRange === '7d' }" @click="changeStatsRange('7d')">7 days</button>
+        <button class="chip" :class="{ active: statsRange === '30d' }" @click="changeStatsRange('30d')">30 days</button>
+        <button class="chip" :class="{ active: statsRange === 'all' }" @click="changeStatsRange('all')">All time</button>
+      </div>
+    </div>
+
+    <div v-if="statsLoading || !stats" class="panel-loading">
+      <div class="loading-spinner"></div>
+      <p>Loading stats…</p>
+    </div>
+
+    <template v-else>
+      <div class="panel" style="margin-bottom:14px;">
+        <div class="panel-head"><div class="panel-title">Items per language</div></div>
+        <div style="padding:16px 18px;">
+          <div v-if="!stats.items_per_language.length" class="empty-state">No items yet.</div>
+          <div class="bar-chart" v-else>
+            <div class="bar-row" v-for="row in stats.items_per_language" :key="row.language">
+              <div class="bar-row-label">{% raw %}{{ row.language.toUpperCase() }}{% endraw %}</div>
+              <div class="bar-row-track"><div class="bar-row-fill" :style="{ width: barWidthPct(row.count, stats.items_per_language[0].count) + '%' }"></div></div>
+              <div class="bar-row-value">{% raw %}{{ row.count }}{% endraw %}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:14px;">
+        <div class="panel-head"><div class="panel-title">Queue totals</div></div>
+        <div style="padding:16px 18px;">
+          <div v-if="!stats.status_totals.length" class="empty-state">No items yet.</div>
+          <div class="bar-chart" v-else>
+            <div class="bar-row" v-for="row in stats.status_totals" :key="row.status">
+              <div class="bar-row-label">{% raw %}{{ statusLabel(row.status) }}{% endraw %}</div>
+              <div class="bar-row-track"><div class="bar-row-fill" :class="row.status === 'failed' ? 'bad' : (row.status === 'done' ? 'good' : '')" :style="{ width: barWidthPct(row.count, stats.status_totals[0].count) + '%' }"></div></div>
+              <div class="bar-row-value">{% raw %}{{ row.count }}{% endraw %}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:14px;">
+        <div class="panel-head"><div class="panel-title">Fail ratio per engine</div><div class="panel-title-sub">from logged attempts{% raw %}{{ statsRange !== 'all' ? ' in range' : '' }}{% endraw %}</div></div>
+        <div style="padding:16px 18px;">
+          <div v-if="!stats.fail_ratio_per_engine.length" class="empty-state">No attempts logged yet.</div>
+          <div class="bar-chart" v-else>
+            <div class="bar-row" v-for="row in stats.fail_ratio_per_engine" :key="row.engine">
+              <div class="bar-row-label">{% raw %}{{ row.engine }}{% endraw %}</div>
+              <div class="bar-row-track"><div class="bar-row-fill bad" :style="{ width: Math.max(2, Math.round(row.fail_ratio * 100)) + '%' }"></div></div>
+              <div class="bar-row-value">{% raw %}{{ row.failures }}{% endraw %}/{% raw %}{{ row.attempts }}{% endraw %} ({% raw %}{{ Math.round(row.fail_ratio * 100) }}{% endraw %}%)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:14px;">
+        <div class="panel-head"><div class="panel-title">Median / p90 response time per engine</div><div class="panel-title-sub">from the current log file{% raw %}{{ statsRange !== 'all' ? ', in range' : '' }}{% endraw %}</div></div>
+        <div style="padding:16px 18px;">
+          <div v-if="!stats.duration_per_engine.length" class="empty-state">No timed calls in the current log file.</div>
+          <table v-else>
+            <thead><tr><th>Engine</th><th>Calls</th><th>p50</th><th>p90</th></tr></thead>
+            <tbody>
+              <tr v-for="row in stats.duration_per_engine" :key="row.engine">
+                <td>{% raw %}{{ row.engine }}{% endraw %}</td>
+                <td class="row-time">{% raw %}{{ row.calls }}{% endraw %}</td>
+                <td class="row-time">{% raw %}{{ row.p50_seconds }}{% endraw %}s</td>
+                <td class="row-time">{% raw %}{{ row.p90_seconds }}{% endraw %}s</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><div class="panel-title">Fallbacks</div><div class="panel-title-sub">from the current log file{% raw %}{{ statsRange !== 'all' ? ', in range' : '' }}{% endraw %}</div></div>
+        <div style="padding:16px 18px;">
+          <div v-if="!stats.fallback_counts.length" class="empty-state">No fallbacks in the current log file.</div>
+          <div class="bar-chart" v-else>
+            <div class="bar-row" v-for="row in stats.fallback_counts" :key="row.from_to">
+              <div class="bar-row-label">{% raw %}{{ row.from_to }}{% endraw %}</div>
+              <div class="bar-row-track"><div class="bar-row-fill" :style="{ width: barWidthPct(row.count, stats.fallback_counts[0].count) + '%' }"></div></div>
+              <div class="bar-row-value">{% raw %}{{ row.count }}{% endraw %}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+  </template>
   </template>
 
   <div class="modal-backdrop" v-if="errorModal" @click.self="closeErrorModal">

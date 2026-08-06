@@ -2,6 +2,7 @@ import asyncio
 import logging
 import sqlite3
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -32,11 +33,30 @@ class RunProgress:
     # yet-started items at all (confirmed live: it only showed the single
     # item actively translating, not the other items still waiting).
     item_ids: list[int] = field(default_factory=list)
+    # monotonic() timestamps of the most recent completions, for a ROLLING
+    # rate_per_min instead of a whole-run cumulative average — a cumulative
+    # average stays skewed toward whatever was slow near the start of a
+    # long run (a single 300s watchdog-timeout retry, or several
+    # content-block-then-fallback items early on) for the ENTIRE rest of
+    # the run, even once throughput has long since recovered. Bounded so a
+    # very long run's memory doesn't grow unboundedly.
+    _recent_completions: deque[float] = field(default_factory=lambda: deque(maxlen=20))
+
+    def record_completion(self) -> None:
+        self._recent_completions.append(time.monotonic())
 
     @property
     def rate_per_min(self) -> float:
-        elapsed_min = (time.monotonic() - self.started_at) / 60
-        return round(self.processed / elapsed_min, 1) if elapsed_min > 0 else 0.0
+        if len(self._recent_completions) < 2:
+            # Not enough recent samples for a windowed rate yet — fall back
+            # to the cumulative average so the UI shows SOMETHING early in
+            # a run instead of blank/zero for the first couple of items.
+            elapsed_min = (time.monotonic() - self.started_at) / 60
+            return round(self.processed / elapsed_min, 1) if elapsed_min > 0 else 0.0
+        span_min = (self._recent_completions[-1] - self._recent_completions[0]) / 60
+        if span_min <= 0:
+            return 0.0
+        return round((len(self._recent_completions) - 1) / span_min, 1)
 
     @property
     def eta_seconds(self) -> float | None:
@@ -193,6 +213,7 @@ class RunController:
                     prefetch.cleanup_scratch_file(cached_path)
                 finally:
                     progress.processed += 1
+                    progress.record_completion()
                 # A short rest between items so a long batch doesn't peg the
                 # GPU non-stop for hours — skipped after the last item.
                 if pause_seconds > 0 and i + 1 < len(ready_items):

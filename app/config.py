@@ -31,13 +31,29 @@ class Settings(BaseSettings):
 
     # llama.cpp's own built-in local HTTP server (github.com/ggml-org/
     # llama.cpp/tools/server) — a separate local inference runtime from
-    # Ollama, not another name for it. No web UI (headless server only),
-    # no API key (local-only, same trust model as Ollama), and no
-    # model-switching endpoint — the server is started with one fixed
-    # model already loaded via CLI flags, so unlike Ollama there is no
-    # llamacpp_model setting here or a model picker on the Engines page.
-    # Default port per llama.cpp's server docs.
+    # Ollama, not another name for it. No web UI (headless server only)
+    # and no model-switching endpoint — the server is normally started
+    # with one fixed model already loaded via CLI flags, so unlike
+    # Ollama there's no model PICKER on the Engines page. Default port
+    # per llama.cpp's server docs.
     llamacpp_base_url: str = "http://localhost:8080"
+    # Optional — most llama.cpp server builds ignore `model` entirely
+    # (only one model is ever loaded), but some builds/versions, and any
+    # reverse proxy in front (LiteLLM, etc.) enforcing strict OpenAI-spec
+    # requests, reject a request with no `model` field at all — confirmed
+    # live with a real 400 "model name is missing from the request" from
+    # a friend's remote llama.cpp instance. Defaults to the same model
+    # name as Ollama's own default (ollama_model) since that's the most
+    # likely thing to actually be loaded on a typical local setup; leave
+    # blank against a server that doesn't require the field at all.
+    llamacpp_model: str = "gemma3:4b"
+    # Optional — llama.cpp's own server has no built-in auth either, but
+    # (same situation as Ollama) a remote instance can sit behind a
+    # reverse proxy/gateway that enforces its own — confirmed live with a
+    # friend's llama.cpp instance exposed over a Tailscale Funnel, gated
+    # by a bearer token in front of it. Sent as `Authorization: Bearer
+    # <key>`; left blank, no Authorization header is sent at all.
+    llamacpp_api_key: str = ""
     # Same reasoning as ollama_batch_token_budget: no local GPU/VRAM
     # constraint beyond what's already true for Ollama, so this shares the
     # same conservative default rather than assuming llama.cpp's specific

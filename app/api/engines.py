@@ -33,6 +33,8 @@ class EngineConfig(BaseModel):
     ollama_num_ctx: int = 8192
     ollama_batch_token_budget: int = 400
     llamacpp_base_url: str = "http://localhost:8080"
+    llamacpp_model: str = "gemma3:4b"
+    llamacpp_api_key: str | None = None  # only set to overwrite; omitted = unchanged
     llamacpp_batch_token_budget: int = 400
     gemini_model: str
     gemini_api_key: str | None = None  # only set to overwrite; omitted = unchanged
@@ -62,6 +64,9 @@ async def get_engine_config():
         "ollama_num_ctx": settings.ollama_num_ctx,
         "ollama_batch_token_budget": settings.ollama_batch_token_budget,
         "llamacpp_base_url": settings.llamacpp_base_url,
+        "llamacpp_model": settings.llamacpp_model,
+        "llamacpp_api_key_masked": _mask(settings.llamacpp_api_key),
+        "llamacpp_has_key": bool(settings.llamacpp_api_key),
         "llamacpp_batch_token_budget": settings.llamacpp_batch_token_budget,
         "gemini_model": settings.gemini_model,
         "gemini_api_key_masked": _mask(settings.gemini_api_key),
@@ -134,6 +139,11 @@ async def set_engine_config(config: EngineConfig, conn=Depends(state.get_conn)):
     settings_store.save_one(conn, "ollama_batch_token_budget", config.ollama_batch_token_budget)
     settings.llamacpp_base_url = config.llamacpp_base_url
     settings_store.save_one(conn, "llamacpp_base_url", config.llamacpp_base_url)
+    settings.llamacpp_model = config.llamacpp_model
+    settings_store.save_one(conn, "llamacpp_model", config.llamacpp_model)
+    if config.llamacpp_api_key:
+        settings.llamacpp_api_key = config.llamacpp_api_key
+        settings_store.save_one(conn, "llamacpp_api_key", config.llamacpp_api_key)
     settings.llamacpp_batch_token_budget = config.llamacpp_batch_token_budget
     settings_store.save_one(
         conn, "llamacpp_batch_token_budget", config.llamacpp_batch_token_budget
@@ -204,7 +214,9 @@ async def test_engine(name: str, req: TestEngineRequest | None = None):
         provider = OllamaProvider(base_url=base_url, model=model, num_ctx=settings.ollama_num_ctx)
     elif name == "llamacpp":
         base_url = (req.base_url if req and req.base_url else settings.llamacpp_base_url)
-        provider = LlamaCppProvider(base_url=base_url)
+        api_key = (req.api_key if req and req.api_key else settings.llamacpp_api_key) or None
+        model = (req.model if req and req.model else settings.llamacpp_model) or None
+        provider = LlamaCppProvider(base_url=base_url, api_key=api_key, model=model)
     elif name == "gemini":
         api_key = (req.api_key if req and req.api_key else settings.gemini_api_key)
         model = (req.model if req and req.model else settings.gemini_model)

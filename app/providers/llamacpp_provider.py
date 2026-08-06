@@ -37,14 +37,28 @@ class LlamaCppProvider(TranslationProvider):
     a headless HTTP server only, started with a specific model already
     loaded via CLI flags — there is no equivalent to Ollama's /api/pull or
     a model-switching endpoint, so unlike OllamaProvider this provider has
-    no pull_model()/list_models() and no `model` field is sent in the
-    request body (the server was already started with one fixed model).
+    no pull_model()/list_models().
 
-    Local-only like Ollama: no API key, no per-minute/per-day rate limit
-    to react to, and no windowed concurrency (see
-    translator._CONCURRENT_PROVIDERS) — concurrent requests would just
-    serialize against the same loaded model on the same GPU/CPU anyway,
-    same reasoning as Ollama."""
+    `model` is optional and, when set, sent in the request body — most
+    llama.cpp server builds ignore it entirely (only one model is ever
+    loaded), but some builds/versions, and any reverse proxy in front
+    (LiteLLM, etc.) enforcing strict OpenAI-spec requests, reject a
+    request with no `model` field at all. Confirmed live: a friend's
+    llama.cpp instance behind a Tailscale Funnel returned a real 400
+    "model name is missing from the request" with no `model` sent.
+    Leave blank against a server that doesn't require it.
+
+    Local-only like Ollama: no per-minute/per-day rate limit to react to,
+    and no windowed concurrency (see translator._CONCURRENT_PROVIDERS) —
+    concurrent requests would just serialize against the same loaded
+    model on the same GPU/CPU anyway, same reasoning as Ollama.
+
+    llama.cpp's own server has no built-in auth either, but — same
+    situation as Ollama — a remote instance can sit behind a reverse
+    proxy/gateway that enforces its own (confirmed live: the same
+    Tailscale-Funnel instance above, gated by a bearer token in front of
+    it). api_key is optional and only sent as an Authorization header
+    when set."""
 
     name = "llamacpp"
 
@@ -52,23 +66,27 @@ class LlamaCppProvider(TranslationProvider):
         self,
         base_url: str,
         timeout: float = DEFAULT_LLAMACPP_TIMEOUT_SECONDS,
+        api_key: str | None = None,
+        model: str | None = None,
     ):
         self._base_url = base_url.rstrip("/")
-        self._client = httpx.AsyncClient(base_url=self._base_url, timeout=timeout)
+        self._model = model
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else None
+        self._client = httpx.AsyncClient(base_url=self._base_url, timeout=timeout, headers=headers)
 
     async def aclose(self) -> None:
         await self._client.aclose()
 
     async def _chat_request(self, system_prompt: str, dialogue_text: str) -> httpx.Response:
-        return await self._client.post(
-            "/v1/chat/completions",
-            json={
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": build_user_prompt(dialogue_text)},
-                ],
-            },
-        )
+        body = {
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": build_user_prompt(dialogue_text)},
+            ],
+        }
+        if self._model:
+            body["model"] = self._model
+        return await self._client.post("/v1/chat/completions", json=body)
 
     async def translate(
         self,

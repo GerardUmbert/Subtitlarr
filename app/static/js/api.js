@@ -80,6 +80,11 @@ const Api = (() => {
       return request("GET", `/api/history${qs ? "?" + qs : ""}`);
     },
     getHistoryRunItems: (runId) => request("GET", `/api/history/${runId}/items`),
+    getHistoryEvents: (params = {}) => {
+      const qs = new URLSearchParams(params).toString();
+      return request("GET", `/api/history/events${qs ? "?" + qs : ""}`);
+    },
+    getHistoryStats: (range = "all") => request("GET", `/api/history/stats?range=${range}`),
   };
 })();
 
@@ -113,5 +118,34 @@ const Api = (() => {
   toggle.addEventListener("click", () => {
     const open = sidebar.classList.toggle("nav-open");
     toggle.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+})();
+
+// Desktop sidebar collapse — shrinks to an icon-only rail rather than
+// hiding navigation entirely, so the shell's grid column (see base.css's
+// .shell.sidebar-collapsed) resizes the main content smoothly instead of
+// jumping. Persisted so the choice survives navigating between pages —
+// each page load is a fresh document, not an SPA route change, so
+// without persistence the sidebar would silently reset to expanded on
+// every click through the app. Applied ASAP (see the inline script in
+// base.html's <head>, before this file loads) to avoid a flash of the
+// expanded sidebar on load.
+(function initCollapseToggle() {
+  const toggle = document.getElementById("collapse-toggle");
+  const sidebar = document.getElementById("sidebar");
+  const shell = document.getElementById("shell");
+  if (!toggle || !sidebar || !shell) return;
+  // Enabled after this script runs (post-first-paint), not in the initial
+  // inline <script> in base.html's <head> — see base.css's comment on
+  // .transitions-enabled for why.
+  shell.classList.add("transitions-enabled");
+  toggle.addEventListener("click", () => {
+    const collapsed = !sidebar.classList.contains("collapsed");
+    sidebar.classList.toggle("collapsed", collapsed);
+    shell.classList.toggle("sidebar-collapsed", collapsed);
+    toggle.textContent = collapsed ? "▸" : "◂";
+    toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    toggle.setAttribute("aria-label", collapsed ? "Expand sidebar" : "Collapse sidebar");
+    localStorage.setItem("sidebarCollapsed", collapsed ? "1" : "0");
   });
 })();

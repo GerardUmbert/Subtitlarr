@@ -170,7 +170,36 @@ async def _translate_batch(
             dialogue_text, source_lang, target_lang, catalan_vegeta_insults, european_spanish
         )
 
-    return reassemble(batch, llm_response), engine_used
+    try:
+        return reassemble(batch, llm_response), engine_used
+    except (TranslationAlignmentError, TranslationIntegrityError) as exc:
+        # A repetition loop or otherwise-unreliable response is a property
+        # of THIS provider's output, not a request-level failure the
+        # ProviderRateLimitedError/ProviderContentBlockedError handlers
+        # above would ever see — translate() returned 200 with real text,
+        # it just wasn't trustworthy. Confirmed live: several items failed
+        # outright on Gemini repetition loops with a fallback engine
+        # configured but never attempted, same class of gap as the
+        # content-block case above. Only retry once, against the fallback
+        # (if one is configured and wasn't already the engine that just
+        # produced this bad output) — never loop back to the SAME engine,
+        # since a repetition loop is generally reproducible on retry.
+        if fallback_provider is None or engine_used == fallback_provider.name:
+            raise
+        logger.warning(
+            "Provider %s produced an unreliable response for item %d (%s); falling back to %s",
+            engine_used, item_id, exc, fallback_provider.name,
+        )
+        if run_id is not None:
+            run_events.emit(
+                run_id, item_id, batch_index, batch_total, "fell_back",
+                f"{engine_used} produced an unreliable response — falling back to {fallback_provider.name}",
+            )
+        engine_used = fallback_provider.name
+        llm_response = await fallback_provider.translate(
+            dialogue_text, source_lang, target_lang, catalan_vegeta_insults, european_spanish
+        )
+        return reassemble(batch, llm_response), engine_used
 
 
 # Cloud-provider-only (NVIDIA, OpenRouter, Groq, Gemini): their endpoints

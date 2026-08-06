@@ -315,3 +315,103 @@ async def test_content_blocked_reraises_when_no_fallback_configured():
 
     with pytest.raises(ProviderContentBlockedError):
         await _translate_batches(_batches(1), "en", "es", AlwaysBlocksProvider(), None, item_id=1)
+
+
+def _repetition_loop_batch() -> list[list[srt.Subtitle]]:
+    """12 cues with distinct source content, all in ONE batch — enough to
+    trip MAX_CONSECUTIVE_REPEATS (10) once a provider echoes the same
+    translated line for every cue."""
+    return [[_cue(i, f"Original distinct line {i}") for i in range(1, 13)]]
+
+
+class RepetitionLoopProvider(TranslationProvider):
+    """Returns a real 200-equivalent response (translate() succeeds, no
+    exception) but the SAME translated line for every cue — reproduces a
+    real degenerate-generation failure mode, distinct from a provider-level
+    error. reassemble() is what catches this, not translate() itself."""
+
+    def __init__(self, name: str):
+        self.name = name
+        self.attempts = 0
+
+    async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
+        self.attempts += 1
+        indices = [int(line) for line in dialogue_text.splitlines() if line.strip().isdigit()]
+        return "\n".join(f"{i}\nRepeated identical translated line" for i in indices)
+
+    async def test_connection(self):
+        return ProviderStatus(ok=True)
+
+
+class GoodTranslationProvider(TranslationProvider):
+    """Translates every cue distinctly and correctly — the healthy
+    fallback a repetition-loop-producing provider should hand off to."""
+
+    def __init__(self, name: str):
+        self.name = name
+        self.attempts = 0
+        self.call_order: list[int] = []
+
+    async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
+        self.attempts += 1
+        indices = [int(line) for line in dialogue_text.splitlines() if line.strip().isdigit()]
+        self.call_order.extend(indices)
+        return "\n".join(f"{i}\nTranslated {i}" for i in indices)
+
+    async def test_connection(self):
+        return ProviderStatus(ok=True)
+
+
+@pytest.mark.asyncio
+async def test_repetition_loop_falls_back_to_a_different_provider():
+    """Regression test: a repetition loop is detected by reassemble()
+    AFTER translate() already returned successfully (real text, no
+    provider-level exception) — so it previously bypassed the
+    ProviderRateLimitedError/ProviderContentBlockedError fallback handling
+    entirely and failed the item outright even with a working fallback
+    engine configured. Confirmed live: several items failed this way on
+    Gemini with Ollama configured as fallback but never attempted."""
+    provider = RepetitionLoopProvider("gemini")
+    fallback = GoodTranslationProvider("nvidia")
+
+    translated_subs, engine_used = await _translate_batches(
+        _repetition_loop_batch(), "en", "es", provider, fallback, item_id=1
+    )
+
+    assert provider.attempts == 1  # no same-provider retry — reproducible failure
+    assert fallback.attempts == 1  # fallback was actually used
+    assert engine_used == "nvidia"
+    assert len(translated_subs) == 12
+
+
+@pytest.mark.asyncio
+async def test_repetition_loop_reraises_when_no_fallback_configured():
+    """Without a fallback provider, a repetition loop must still surface
+    as a real failure, same as any other unrecoverable reconciliation
+    error."""
+    from app.subtitles.reconciler import TranslationAlignmentError
+
+    provider = RepetitionLoopProvider("gemini")
+
+    with pytest.raises(TranslationAlignmentError):
+        await _translate_batches(_repetition_loop_batch(), "en", "es", provider, None, item_id=1)
+
+
+@pytest.mark.asyncio
+async def test_repetition_loop_does_not_bounce_back_to_the_same_named_fallback():
+    """If active and fallback providers share the SAME name (e.g. both
+    configured as "gemini" by mistake, or a batch where the active
+    provider's name already equals the fallback's), the guard against
+    retrying the provider that just produced the bad output must key off
+    the NAME, not object identity — never call the fallback at all in
+    that case, and raise instead of silently repeating a reproducible
+    failure."""
+    from app.subtitles.reconciler import TranslationAlignmentError
+
+    provider = RepetitionLoopProvider("gemini")
+    fallback = RepetitionLoopProvider("gemini")  # same name, different instance
+
+    with pytest.raises(TranslationAlignmentError):
+        await _translate_batches(_repetition_loop_batch(), "en", "es", provider, fallback, item_id=1)
+
+    assert fallback.attempts == 0  # never even called

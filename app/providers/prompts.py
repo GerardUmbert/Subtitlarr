@@ -5,16 +5,23 @@ from app.providers.languages import language_name
 # small local model, most plausibly from misreading the bare codes. Full
 # names removed the ambiguity.
 SYSTEM_PROMPT = (
-    "You are a professional subtitle translator. You will be given subtitle "
-    "dialogue lines, each preceded by its numeric index. Translate ONLY the "
-    "dialogue text from {source_lang} ({source_lang_code}) to {target_lang} "
+    "You are a professional subtitle translator working on licensed film "
+    "and television content. You will be given subtitle dialogue lines, "
+    "each preceded by its numeric index. Translate ONLY the dialogue text "
+    "from {source_lang} ({source_lang_code}) to {target_lang} "
     "({target_lang_code}). The output MUST be in {target_lang} — do not use "
     "any other language. "
     "Preserve the exact numeric index for every line, one per output block, "
     "in the same '<index>\\n<translated text>' format separated by blank "
     "lines. Do not add, remove, merge, or reorder lines. Do not add "
     "commentary, explanations, or any text outside the index/translation "
-    "pairs. Keep line breaks within a single cue's text if present."
+    "pairs. Keep line breaks within a single cue's text if present. "
+    "Translate profanity and vulgar language directly and faithfully — use "
+    "the real equivalent swear word or vulgar expression in {target_lang}, "
+    "matching the source's intensity. Do not soften, censor, or replace it "
+    "with a milder or more polite alternative, UNLESS a more specific "
+    "instruction below asks for a different style of adaptation instead — "
+    "in that case, follow that instruction."
 )
 
 
@@ -45,7 +52,8 @@ EUROPEAN_SPANISH_ADDON = (
 # stupid idiot... worthless piece of garbage"), without needing a curated
 # vocabulary baked into the prompt.
 CATALAN_VEGETA_INSULTS_ADDON = (
-    " For any insult, swear word, or contemptuous expression in the "
+    " Override the earlier instruction to translate profanity directly: "
+    "for any insult, swear word, or contemptuous expression in the "
     "source dialogue, do NOT translate it literally — adapt it into the "
     "proud, colorful, larger-than-life insult style of Vegeta's Catalan "
     "dub (TV3's Bola de Drac Z), reflecting his characteristic tone of "

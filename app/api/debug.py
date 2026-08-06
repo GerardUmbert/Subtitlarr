@@ -50,3 +50,32 @@ async def get_episode_subtitle_text(
         "cue_count": len(cues),
         "first_20_cues": [c.content for c in cues[:20]],
     }
+
+
+@router.get("/movie/{radarr_id}/subtitle")
+async def get_movie_subtitle_text(
+    radarr_id: int,
+    lang: str,
+    client: BazarrClient = Depends(state.get_client),
+):
+    """Movie counterpart to the episode subtitle debug route above — same
+    read-only fetch, just against get_movie_detail instead."""
+    detail = await client.get_movie_detail(radarr_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Movie not found in Bazarr")
+    match = next((s for s in detail.subtitles if s.code2 == lang and s.path), None)
+    if match is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No '{lang}' subtitle with a real path found; available: "
+            f"{[(s.code2, s.path) for s in detail.subtitles]}",
+        )
+    cues = await client.get_subtitle_contents(match.path)
+    return {
+        "path": match.path,
+        "cue_count": len(cues),
+        "cues": [
+            {"start": str(c.start), "end": str(c.end), "content": c.content}
+            for c in cues
+        ],
+    }

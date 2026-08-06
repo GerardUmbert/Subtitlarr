@@ -43,10 +43,10 @@
       <table>
         <thead>
           <tr>
-            <th>Title</th>
-            <th>Language</th>
-            <th>Status</th>
-            <th>Updated</th>
+            <th class="sortable" @click="setSort('title')">Title <span class="sort-indicator">{% raw %}{{ sortIndicator('title') }}{% endraw %}</span></th>
+            <th class="sortable" @click="setSort('language')">Language <span class="sort-indicator">{% raw %}{{ sortIndicator('language') }}{% endraw %}</span></th>
+            <th class="sortable" @click="setSort('status')">Status <span class="sort-indicator">{% raw %}{{ sortIndicator('status') }}{% endraw %}</span></th>
+            <th class="sortable" @click="setSort('updated')">Updated <span class="sort-indicator">{% raw %}{{ sortIndicator('updated') }}{% endraw %}</span></th>
             <th>Duration</th>
             <th>Error</th>
             <th></th>

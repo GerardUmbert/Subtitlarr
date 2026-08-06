@@ -6,6 +6,86 @@
   display: flex;
   flex-direction: column;
   gap: 28px;
+  overflow: hidden;
+  /* Pinned to the actual viewport, not stretched to the grid row's full
+     height (which — since .shell only sets min-height: 100vh, not a
+     fixed height — grows with whatever makes the PAGE tall, main's
+     content included). Confirmed live: on a short page the sidebar
+     still rendered taller than one screen and scrolled away with the
+     rest of the page instead of staying put. position: sticky keeps it
+     pinned to the visible screen while the page around it scrolls. */
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+/* Character used as each nav item's collapsed-state icon — no icon
+   library in this project, hidden in expanded mode (the .dot active-state
+   indicator shows instead, unchanged from before). Confirmed live: the
+   .dot alone at 8px isn't identifiable as anything, so a plain
+   icon-rail made the collapsed sidebar unusable — a real (if improvised)
+   glyph per item is needed for a collapsed nav to be legible at all. */
+.nav-item .icon {
+  display: none;
+  font-size: 16px;
+  line-height: 1;
+  width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* Desktop collapse — separate from the mobile .nav-open reveal below.
+   Shrinks to an icon-only rail (glyphs only, labels/text hidden) rather
+   than fully hiding the nav, so the page stays navigable collapsed. */
+.collapse-toggle {
+  margin-left: auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--ink-faint);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 1;
+}
+.collapse-toggle:hover { color: var(--ink); background: var(--border); }
+
+.sidebar.collapsed {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+.sidebar.collapsed .brand-name,
+.sidebar.collapsed .brand-sub,
+.sidebar.collapsed .nav-label,
+.sidebar.collapsed .label,
+.sidebar.collapsed .sidebar-foot .mono {
+  display: none;
+}
+.sidebar.collapsed .brand {
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+}
+.sidebar.collapsed .collapse-toggle { margin-left: 0; }
+.sidebar.collapsed nav { align-items: center; }
+.sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 10px;
+  width: 40px;
+}
+.sidebar.collapsed .nav-item .dot { display: none; }
+.sidebar.collapsed .nav-item .icon {
+  display: block;
+  color: var(--ink-dim);
+}
+.sidebar.collapsed .nav-item.active .icon { color: var(--accent); }
+.sidebar.collapsed .sidebar-foot {
+  justify-content: center;
 }
 
 .brand {
@@ -124,9 +204,27 @@ nav { display: flex; flex-direction: column; gap: 2px; }
     align-self: start;
     border-right: none;
     border-bottom: 1px solid var(--border);
+    /* Below this breakpoint the sidebar becomes a horizontal top bar
+       (see base.css's own 980px override collapsing .shell to a single
+       column) — it should scroll away with the rest of the page like
+       any normal top bar, not stay pinned as its own 100vh-tall column. */
+    position: static;
+    height: auto;
   }
   .sidebar .brand { padding: 0; }
   .nav-toggle { display: flex; }
+  /* Mobile already fully hides/reveals the nav via the hamburger above —
+     the desktop icon-rail collapse is redundant here, and .shell's fixed
+     column width doesn't apply below this breakpoint anyway (see
+     base.css's own 980px override). */
+  .collapse-toggle { display: none; }
+  .sidebar.collapsed .brand-name,
+  .sidebar.collapsed .brand-sub,
+  .sidebar.collapsed .label {
+    display: initial;
+  }
+  .sidebar.collapsed .brand { flex-direction: row; }
+  .sidebar.collapsed .nav-item { width: auto; justify-content: flex-start; }
 
   .sidebar nav,
   .sidebar .sidebar-foot {
@@ -496,7 +594,9 @@ a.panel:hover {
 /* ---------- Queue table ---------- */
 .queue-toolbar {
   display: flex;
+  align-items: center;
   gap: 8px;
+  row-gap: 10px;
   padding: 12px 20px;
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
@@ -573,7 +673,94 @@ tbody tr:last-child td { border-bottom: none; }
 .status-skipped_no_source { background: var(--surface-2); color: var(--ink-faint); }
 .status-translated_pending_upload { background: var(--warn-soft); color: var(--warn); }
 
+/* ---------- Page tabs ---------- */
+.page-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+
+.page-tab {
+  background: none;
+  border: none;
+  padding: 9px 14px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-faint);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.page-tab:hover { color: var(--ink); }
+.page-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ---------- Simple horizontal bar chart (no charting library) ---------- */
+.bar-chart { display: flex; flex-direction: column; gap: 10px; }
+
+.bar-row { display: flex; align-items: center; gap: 10px; }
+
+.bar-row-label {
+  width: 140px;
+  flex-shrink: 0;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bar-row-track {
+  flex: 1;
+  height: 16px;
+  background: var(--surface-2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.bar-row-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+}
+
+.bar-row-fill.bad { background: var(--bad); }
+.bar-row-fill.good { background: var(--good); }
+
+.bar-row-value {
+  width: 90px;
+  flex-shrink: 0;
+  text-align: right;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.events-table td.event-type-sending { color: var(--ink-faint); }
+.events-table td.event-type-response { color: var(--ink-dim); }
+.events-table td.event-type-item_done { color: var(--good); }
+.events-table td.event-type-content_blocked_fallback,
+.events-table td.event-type-provider_failed_fallback,
+.events-table td.event-type-rate_limited_retry,
+.events-table td.event-type-watchdog_timeout { color: var(--warn); }
+.events-table td.event-type-item_failed { color: var(--bad); }
+
 .row-time { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink-faint); white-space: nowrap; }
+
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+th.sortable:hover { color: var(--ink); }
+th.sortable .sort-indicator {
+  display: inline-block;
+  width: 10px;
+  font-size: 10px;
+  color: var(--accent);
+}
+.sortable-chip { cursor: pointer; }
 .row-action { text-align: right; }
 .link-btn {
   background: none;
