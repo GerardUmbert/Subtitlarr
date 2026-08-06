@@ -51,6 +51,7 @@
                 <th>Engine</th>
                 <th>Duration</th>
                 <th>Error</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -68,6 +69,12 @@
                   :title="item.error_message ? 'Click for full error' : ''"
                   @click="item.error_message && openErrorModal(item)"
                 >{% raw %}{{ (item.error_message || '').slice(0, 50) }}{% endraw %}</td>
+                <td class="row-action">
+                  <button class="link-btn" :disabled="runningItemId === item.item_id || runActive"
+                          @click="runItem(item)">
+                    {% raw %}{{ runningItemId === item.item_id ? 'running…' : (runActive ? 'run in progress…' : 're-run') }}{% endraw %}
+                  </button>
+                </td>
               </tr>
             </tbody>
           </table>

@@ -59,6 +59,8 @@ createApp({
       runItems: {}, // run_id -> items[], loaded lazily on expand
       loadingItemsForRunId: null,
       errorModal: null, // the clicked item, or null when closed
+      runningItemId: null,
+      runActive: false,
     };
   },
   computed: {
@@ -113,6 +115,48 @@ createApp({
     closeErrorModal() {
       this.errorModal = null;
     },
+    async runItem(item) {
+      this.runningItemId = item.item_id;
+      try {
+        const result = await Api.runItem(item.item_id);
+        if (!result.started) {
+          alert(result.reason || "Could not start item");
+          this.runningItemId = null;
+          return;
+        }
+        const source = (result.source_language || "?").toUpperCase();
+        const target = item.target_language.toUpperCase();
+        Toast.show(`Translating from ${source} to ${target}…`);
+        this.runActive = true;
+        this.pollRunState();
+      } catch (err) {
+        alert(`Could not start item: ${err.message}`);
+        this.runningItemId = null;
+      }
+    },
+    pollRunState() {
+      if (this._runPollHandle) clearTimeout(this._runPollHandle);
+      this._runPollHandle = setTimeout(async () => {
+        try {
+          const run = await Api.getRunCurrent();
+          this.runActive = !!run.active;
+        } catch (_) {
+          // keep last known state on transient failure
+        }
+        if (this.runActive) {
+          this.pollRunState();
+        } else {
+          this.runningItemId = null;
+          // Refresh whichever run's items are currently expanded so the
+          // just-finished re-run's new status/duration/error show up
+          // without a full page reload.
+          if (this.expandedRunId !== null) {
+            const result = await Api.getHistoryRunItems(this.expandedRunId).catch(() => null);
+            if (result) this.runItems = { ...this.runItems, [this.expandedRunId]: result.data };
+          }
+        }
+      }, 2000);
+    },
     prevPage() {
       if (this.page > 1) {
         this.page -= 1;
@@ -128,6 +172,16 @@ createApp({
   },
   async mounted() {
     await this.refresh();
+    try {
+      const run = await Api.getRunCurrent();
+      this.runActive = !!run.active;
+      if (this.runActive) this.pollRunState();
+    } catch (_) {
+      // endpoint not reachable yet — ignore
+    }
     this.pageLoading = false;
+  },
+  unmounted() {
+    if (this._runPollHandle) clearTimeout(this._runPollHandle);
   },
 }).mount("#history-app");
