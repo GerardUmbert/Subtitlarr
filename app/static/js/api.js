@@ -37,6 +37,7 @@ const Api = (() => {
       const qs = new URLSearchParams(params).toString();
       return request("POST", `/api/queue/run-filtered${qs ? "?" + qs : ""}`);
     },
+    runByIds: (itemIds) => request("POST", "/api/queue/run-by-ids", { item_ids: itemIds }),
     getQueue: (params = {}) => {
       const qs = new URLSearchParams(params).toString();
       return request("GET", `/api/queue${qs ? "?" + qs : ""}`);

@@ -1,6 +1,7 @@
 import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from app import state
 from app.db import repository
@@ -72,6 +73,26 @@ async def run_filtered(
         return {"started": False, "reason": "A run is already in progress"}
     asyncio.create_task(runner.run_filtered(status, item_type, search))
     return {"started": True}
+
+
+class RunByIdsRequest(BaseModel):
+    item_ids: list[int]
+
+
+@router.post("/run-by-ids")
+async def run_by_ids(req: RunByIdsRequest, runner=Depends(state.get_runner)):
+    """Runs an explicit, caller-chosen set of item ids as ONE batch/
+    run_history row — for selections the status/item_type/search filter
+    params can't express, e.g. "every item currently translating INTO a
+    specific target language," which isn't a filterable dimension on
+    GET /api/queue at all. The caller (or an agent) is expected to have
+    already resolved the exact id list it wants."""
+    if runner.current is not None and runner.current.active:
+        return {"started": False, "reason": "A run is already in progress"}
+    if not req.item_ids:
+        return {"started": False, "reason": "No item ids given"}
+    asyncio.create_task(runner.run_by_ids(req.item_ids))
+    return {"started": True, "count": len(req.item_ids)}
 
 
 @router.get("/current-run")

@@ -247,6 +247,23 @@ class RunController:
             raise ValueError(f"Item {item_id} not found")
         return await self.run_batch([item], triggered_by="manual_item", enforce_daily_limit=False)
 
+    async def run_by_ids(self, item_ids: list[int]) -> RunProgress:
+        """Runs an explicit, caller-chosen set of items as ONE batch/
+        run_history row — for filters the Queue page's status/type/search
+        params can't express (e.g. "every item translating INTO Spanish,
+        regardless of title"), where the caller already knows exactly
+        which item ids it wants without needing a DB-side WHERE clause.
+        Missing ids are silently skipped (an id list built from a stale
+        page could reference a since-deleted item) rather than failing
+        the whole batch over one bad id. Bypasses the daily limit, same
+        as run_single_item — an explicit hand-picked list is exactly the
+        kind of deliberate one-off the cap isn't meant to block."""
+        items = [
+            item for item_id in item_ids
+            if (item := repository.get_item(self._conn, item_id)) is not None
+        ]
+        return await self.run_batch(items, triggered_by="manual_filtered", enforce_daily_limit=False)
+
     async def run_filtered(
         self, status: str | None, item_type: str | None, search: str | None
     ) -> RunProgress:

@@ -601,3 +601,83 @@ async def test_run_single_item_can_rerun_an_already_done_item(conn, monkeypatch)
 
     row = conn.execute("SELECT * FROM items WHERE bazarr_id = 42").fetchone()
     assert row["status"] == "done"
+
+
+@pytest.mark.asyncio
+async def test_run_by_ids_runs_an_explicit_set_as_one_batch(conn, monkeypatch):
+    """run_by_ids lets a caller hand-pick an arbitrary set of item ids as
+    ONE batch/run_history row — for selections the status/item_type/search
+    filter params can't express (e.g. "everything currently translating
+    INTO Spanish, across several different series"), which isn't a
+    filterable dimension on the Queue page's bulk-run at all. Confirmed
+    real gap: re-translating 78 already-done Spanish items after a prompt
+    fix required either 78 separate single-item runs (78 separate
+    run_history rows, not one batch) or a title-search bulk-run that would
+    ALSO catch same-title items targeting a different language."""
+    repository.set_config(conn, "source_lang_priority", ["en"])
+    repository.upsert_item_seen(
+        conn, item_type="episode", bazarr_id=42, series_id=1,
+        title="Legacy", series_title="The Bear", season_episode="3x7",
+        target_language="es",
+    )
+    repository.upsert_item_seen(
+        conn, item_type="episode", bazarr_id=43, series_id=1,
+        title="Legacy 2", series_title="The Bear", season_episode="3x8",
+        target_language="ca",
+    )
+    es_item = conn.execute("SELECT id FROM items WHERE bazarr_id = 42").fetchone()
+    ca_item = conn.execute("SELECT id FROM items WHERE bazarr_id = 43").fetchone()
+    for item_id in (es_item["id"], ca_item["id"]):
+        repository.update_item_status(
+            conn, item_id, "done", source_language="en", engine_used="ollama", mark_completed=True
+        )
+
+    fake_client = FakeBazarrClient()
+    from app.config import Settings
+    settings = Settings(active_engine="ollama", fallback_engine="")
+
+    monkeypatch.setattr("app.engine.runner.get_active_provider", lambda s: FakeProvider())
+    monkeypatch.setattr("app.engine.runner.get_fallback_provider", lambda s: None)
+
+    controller = RunController(conn, lambda: fake_client, settings)
+    # Only the ES item id is passed — the CA item (same series, same
+    # title-search match) must be left completely untouched.
+    progress = await controller.run_by_ids([es_item["id"]])
+
+    assert progress.processed == 1
+    assert progress.failed == 0
+    assert progress.triggered_by == "manual_filtered"
+
+    runs, _ = repository.list_run_history(conn)
+    assert len(runs) == 1  # one batch, not one row per item
+
+    ca_row = conn.execute("SELECT * FROM items WHERE id = ?", (ca_item["id"],)).fetchone()
+    assert ca_row["last_attempt_at"] is None  # untouched — never re-run
+
+
+@pytest.mark.asyncio
+async def test_run_by_ids_skips_missing_ids_without_failing_the_batch(conn, monkeypatch):
+    repository.set_config(conn, "source_lang_priority", ["en"])
+    repository.upsert_item_seen(
+        conn, item_type="episode", bazarr_id=42, series_id=1,
+        title="Legacy", series_title="The Bear", season_episode="3x7",
+        target_language="es",
+    )
+    item = conn.execute("SELECT id FROM items WHERE bazarr_id = 42").fetchone()
+    repository.update_item_status(
+        conn, item["id"], "done", source_language="en", engine_used="ollama", mark_completed=True
+    )
+
+    fake_client = FakeBazarrClient()
+    from app.config import Settings
+    settings = Settings(active_engine="ollama", fallback_engine="")
+
+    monkeypatch.setattr("app.engine.runner.get_active_provider", lambda s: FakeProvider())
+    monkeypatch.setattr("app.engine.runner.get_fallback_provider", lambda s: None)
+
+    controller = RunController(conn, lambda: fake_client, settings)
+    nonexistent_id = item["id"] + 99999
+    progress = await controller.run_by_ids([item["id"], nonexistent_id])
+
+    assert progress.processed == 1  # the real item still ran
+    assert progress.failed == 0
