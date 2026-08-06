@@ -18,7 +18,84 @@
     <div class="panel-title">Active engine</div>
     <div class="panel-title-sub">Fallback engine is used if the active one rate-limits or fails</div>
 
-    <div :class="['engine-opt', { selected: active === 'ollama' }]" @click="active = 'ollama'">
+    <div class="note" style="margin-bottom:16px;">
+      <strong>Recommended: Gemini.</strong> Live-benchmarked against every other engine here on the
+      same real content — Gemini (with a real-quota model, see below) came out roughly
+      <strong>4&ndash;25&times; faster per subtitle cue</strong> than NVIDIA, Ollama, OpenRouter, or Groq,
+      with a genuinely usable free tier (500 requests/day on the recommended model). The other
+      engines below are solid alternatives — useful as a fallback, or if you hit Gemini's daily cap —
+      but start here unless you have a specific reason not to.
+    </div>
+
+    <div :class="['engine-opt', { selected: active === 'gemini' }]" @click="active = 'gemini'">
+      <div class="engine-radio"><div class="fill" v-if="active === 'gemini'"></div></div>
+      <div class="engine-info">
+        <div class="engine-name">Gemini <span class="badge badge-free">free tier</span> <span class="badge" style="background:#2f7d4f22;color:#2f7d4f;">recommended</span></div>
+        <div class="engine-meta">{% raw %}{{ geminiModel }}{% endraw %}</div>
+      </div>
+      <div :class="['engine-status', geminiHasKey ? '' : 'off']">
+        <span class="dot"></span>{% raw %}{{ geminiHasKey ? 'configured' : 'no key' }}{% endraw %}
+      </div>
+    </div>
+
+    <div class="engine-config" v-if="active === 'gemini'">
+      <div class="field">
+        <label>Model</label>
+        <input v-model="geminiModel" placeholder="gemini-3.5-flash-lite" />
+        <p class="field-hint">
+          <strong>Important: not every Gemini model name actually has free-tier quota on your
+          account.</strong> Confirmed live: <span class="mono">gemini-2.0-flash</span> (an old
+          default) had 0 RPM / 0 TPM / 0 RPD on a real account — every request 429'd instantly,
+          which looks like a rate-limit problem but is actually "this model isn't available to
+          you at all." Check <span class="mono">aistudio.google.com/rate-limit</span> for your
+          account's real per-model numbers before assuming a failure is your batch size or
+          pacing. <span class="mono">gemini-3.5-flash-lite</span> (the default here) had the best
+          confirmed free-tier quota of any text model at time of writing: 15 RPM, 250K TPM,
+          500 RPD.
+        </p>
+      </div>
+      <div class="field">
+        <label>API key {% raw %}{{ geminiKeyMasked ? '(' + geminiKeyMasked + ')' : '' }}{% endraw %}</label>
+        <input v-model="geminiApiKey" type="password" placeholder="leave blank to keep current key" />
+        <p class="field-hint">
+          Get a free key at <span class="mono">aistudio.google.com/apikey</span> — no billing
+          setup required for the free tier.
+        </p>
+      </div>
+      <div class="field">
+        <label>Batch size (dialogue tokens)</label>
+        <input v-model.number="geminiBatchTokenBudget" type="number" min="1" step="100" />
+        <p class="field-hint">
+          How many dialogue tokens go into one translation request. A real-quota model like
+          <span class="mono">gemini-3.5-flash-lite</span> has 250K TPM — enormous headroom, so
+          this can stay high (fewer, bigger requests). Lower it only if translations come back
+          with a low "recovered N/M cues" count, not in response to 429s — an instant 429 on the
+          very first request almost always means the MODEL has no quota, not that the batch is
+          too big (see the Model field's note above).
+        </p>
+      </div>
+      <div class="field">
+        <label>Concurrent batches</label>
+        <input v-model.number="geminiConcurrentBatchWindow" type="number" min="1" step="1" />
+        <p class="field-hint">
+          How many batches are sent to Gemini at once before waiting for that group to finish.
+          Confirmed live at 15 RPM for the recommended model — 3 keeps comfortable headroom
+          without running fully sequential. Re-check <span class="mono">aistudio.google.com/rate-limit</span>
+          before raising further; RPM is account/model-specific, not something Google publishes
+          as a stable number.
+        </p>
+      </div>
+      <div class="field-row">
+        <button class="btn" @click="testEngine('gemini')" :disabled="testing === 'gemini'">
+          {% raw %}{{ testing === 'gemini' ? 'Testing…' : 'Test connection' }}{% endraw %}
+        </button>
+        <span v-if="testResults.gemini" :class="['test-result', { error: !testResults.gemini.ok }]">
+          ● {% raw %}{{ testResults.gemini.detail }}{% endraw %}
+        </span>
+      </div>
+    </div>
+
+    <div :class="['engine-opt', { selected: active === 'ollama' }]" style="margin-top:14px;" @click="active = 'ollama'">
       <div class="engine-radio"><div class="fill" v-if="active === 'ollama'"></div></div>
       <div class="engine-info">
         <div class="engine-name">Ollama <span class="badge badge-local">local</span></div>
@@ -100,51 +177,42 @@
       </div>
     </div>
 
-    <div :class="['engine-opt', { selected: active === 'gemini' }]" style="margin-top:14px;" @click="active = 'gemini'">
-      <div class="engine-radio"><div class="fill" v-if="active === 'gemini'"></div></div>
+    <div :class="['engine-opt', { selected: active === 'llamacpp' }]" style="margin-top:14px;" @click="active = 'llamacpp'">
+      <div class="engine-radio"><div class="fill" v-if="active === 'llamacpp'"></div></div>
       <div class="engine-info">
-        <div class="engine-name">Gemini <span class="badge badge-free">free tier</span></div>
-        <div class="engine-meta">{% raw %}{{ geminiModel }}{% endraw %} · rate limited</div>
-      </div>
-      <div :class="['engine-status', geminiHasKey ? '' : 'off']">
-        <span class="dot"></span>{% raw %}{{ geminiHasKey ? 'configured' : 'no key' }}{% endraw %}
+        <div class="engine-name">llama.cpp <span class="badge badge-local">local</span></div>
+        <div class="engine-meta">{% raw %}{{ llamacppBaseUrl }}{% endraw %}</div>
       </div>
     </div>
 
-    <div class="engine-config" v-if="active === 'gemini'">
+    <div class="engine-config" v-if="active === 'llamacpp'">
       <div class="field">
-        <label>Model</label>
-        <input v-model="geminiModel" placeholder="gemini-1.5-flash" />
-      </div>
-      <div class="field">
-        <label>API key {% raw %}{{ geminiKeyMasked ? '(' + geminiKeyMasked + ')' : '' }}{% endraw %}</label>
-        <input v-model="geminiApiKey" type="password" placeholder="leave blank to keep current key" />
-      </div>
-      <div class="field">
-        <label>Batch size (dialogue tokens)</label>
-        <input v-model.number="geminiBatchTokenBudget" type="number" min="1" step="100" />
+        <label>Base URL</label>
+        <input v-model="llamacppBaseUrl" placeholder="http://localhost:8080" />
         <p class="field-hint">
-          Same idea as NVIDIA/OpenRouter's batch size — how many dialogue tokens go into one
-          translation request. Google doesn't publish a fixed free-tier RPM/RPD number (it
-          varies by account/usage tier — check <span class="mono">aistudio.google.com</span>),
-          so this starts at a moderate default. Lower it if translations come back with a low
+          llama.cpp's own built-in local HTTP server (github.com/ggml-org/llama.cpp) — a
+          separate local runtime from Ollama, not another name for it. It has no web UI and no
+          model-switching endpoint: whatever model the server was started with (via its own CLI
+          flags) is what gets used here. There is no model field or pull button on this page —
+          start/stop and model selection both happen on the llama.cpp server itself.
+        </p>
+      </div>
+      <div class="field">
+        <label>Batch size override (dialogue tokens)</label>
+        <input v-model.number="llamacppBatchTokenBudget" type="number" min="0" step="100" />
+        <p class="field-hint">
+          Same idea as Ollama's batch size — how many dialogue tokens go into one translation
+          request. Small/local models can lose reliable formatting on a big batch even though it
+          technically fits context. Lower this if translations come back with a low
           "recovered N/M cues" count.
         </p>
       </div>
-      <div class="field">
-        <label>Concurrent batches</label>
-        <input v-model.number="geminiConcurrentBatchWindow" type="number" min="1" step="1" />
-        <p class="field-hint">
-          Same windowed-concurrency treatment as NVIDIA/OpenRouter/Groq. Kept modest by default
-          since Gemini's actual per-account rate limit isn't known ahead of time.
-        </p>
-      </div>
       <div class="field-row">
-        <button class="btn" @click="testEngine('gemini')" :disabled="testing === 'gemini'">
-          {% raw %}{{ testing === 'gemini' ? 'Testing…' : 'Test connection' }}{% endraw %}
+        <button class="btn" @click="testEngine('llamacpp')" :disabled="testing === 'llamacpp'">
+          {% raw %}{{ testing === 'llamacpp' ? 'Testing…' : 'Test connection' }}{% endraw %}
         </button>
-        <span v-if="testResults.gemini" :class="['test-result', { error: !testResults.gemini.ok }]">
-          ● {% raw %}{{ testResults.gemini.detail }}{% endraw %}
+        <span v-if="testResults.llamacpp" :class="['test-result', { error: !testResults.llamacpp.ok }]">
+          ● {% raw %}{{ testResults.llamacpp.detail }}{% endraw %}
         </span>
       </div>
     </div>
@@ -307,20 +375,24 @@
         <label>Batch size (dialogue tokens)</label>
         <input v-model.number="groqBatchTokenBudget" type="number" min="1" step="100" />
         <p class="field-hint">
-          Same idea as NVIDIA/OpenRouter's batch size. Groq's free tier for the default model is
-          confirmed at <strong>30 requests/minute and 14,400 requests/day</strong> — far more
-          generous than OpenRouter's free-tier models, so there's less pressure to maximize this
-          purely to conserve daily quota. Lower it only if translations come back with a low
-          "recovered N/M cues" count.
+          Same idea as NVIDIA/OpenRouter's batch size. Groq's free tier for the default model
+          has generous request-count limits (<strong>30 requests/minute, 14,400/day</strong>),
+          but ALSO enforces a separate <strong>tokens-per-minute (TPM) cap of 6000</strong> for
+          this model — confirmed live via Groq's own error: a 4000-token dialogue budget (plus
+          system-prompt/response overhead) already exceeded it on the very first request. 1800
+          keeps the full round-trip safely under that ceiling. Lower it further only if
+          translations still come back with a low "recovered N/M cues" count.
         </p>
       </div>
       <div class="field">
         <label>Concurrent batches</label>
         <input v-model.number="groqConcurrentBatchWindow" type="number" min="1" step="1" />
         <p class="field-hint">
-          How many batches are sent to Groq at once before waiting for that group to finish and
-          starting the next — same windowed-concurrency treatment as NVIDIA/OpenRouter. Kept
-          well under the confirmed 30 requests/minute ceiling for the default model.
+          Defaults to <strong>1</strong> (sequential) rather than NVIDIA/OpenRouter's usual 4 —
+          the 6000 TPM cap above is a single rolling budget shared across every concurrent
+          request, so running several batches at once makes hitting it MORE likely, not less.
+          Only raise this after confirming your account has real per-minute token headroom
+          beyond what one sequential batch already uses.
         </p>
       </div>
       <div class="field-row">
@@ -357,6 +429,7 @@
         <select v-model="fallback">
           <option value="">None</option>
           <option value="ollama">Ollama</option>
+          <option value="llamacpp">llama.cpp</option>
           <option value="gemini">Gemini</option>
           <option value="nvidia">NVIDIA (DeepSeek V4 Flash)</option>
           <option value="openrouter">OpenRouter</option>

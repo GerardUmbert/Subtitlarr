@@ -32,3 +32,36 @@ def test_vegeta_addon_does_not_replace_the_base_translation_instructions():
     base = build_system_prompt("en", "ca")
     with_addon = build_system_prompt("en", "ca", catalan_vegeta_insults=True)
     assert with_addon.startswith(base)
+
+
+def test_european_spanish_addon_applies_by_default():
+    """Unlike the Catalan Vegeta addon (opt-in, defaults off),
+    european_spanish defaults to True — a real translation confirmed live
+    defaulted to Latin American colloquial phrasing ("¿Qué anduvo Missy
+    ahora?") with the bare 'es' code and no way to request otherwise, so
+    this must apply WITHOUT the caller passing anything explicitly."""
+    prompt = build_system_prompt("en", "es")
+    assert "Peninsular" in prompt or "Castilian" in prompt
+    assert "Spain" in prompt
+
+
+def test_european_spanish_addon_can_be_disabled():
+    prompt = build_system_prompt("en", "es", european_spanish=False)
+    assert "Peninsular" not in prompt
+    assert "Castilian" not in prompt
+
+
+def test_european_spanish_addon_only_applies_to_spanish_target():
+    prompt = build_system_prompt("en", "ca", european_spanish=True)
+    assert "Peninsular" not in prompt
+    assert "Castilian" not in prompt
+
+
+def test_european_spanish_and_catalan_vegeta_addons_can_coexist():
+    """Both addons only ever trigger for their own target language (es vs
+    ca respectively), so they should never actually appear together in
+    practice — but the function must not error or interfere between them
+    when both flags are passed regardless of target."""
+    prompt = build_system_prompt("en", "es", catalan_vegeta_insults=True, european_spanish=True)
+    assert "Peninsular" in prompt or "Castilian" in prompt
+    assert "Vegeta" not in prompt  # target is es, not ca — Vegeta addon must not leak in

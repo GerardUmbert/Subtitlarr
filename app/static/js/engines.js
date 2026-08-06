@@ -15,12 +15,14 @@ createApp({
       // but covers every value anyone would realistically want and avoids
       // invalid/oddball entries (e.g. a value the model doesn't support).
       numCtxOptions: [4096, 8192, 16384, 32768, 65536, 131072, 262144],
+      llamacppBaseUrl: "",
+      llamacppBatchTokenBudget: 400,
       geminiModel: "",
       geminiApiKey: "",
       geminiKeyMasked: "",
       geminiHasKey: false,
-      geminiBatchTokenBudget: 4000,
-      geminiConcurrentBatchWindow: 4,
+      geminiBatchTokenBudget: 1800,
+      geminiConcurrentBatchWindow: 1,
       nvidiaModel: "",
       nvidiaApiKey: "",
       nvidiaKeyMasked: "",
@@ -37,8 +39,8 @@ createApp({
       groqApiKey: "",
       groqKeyMasked: "",
       groqHasKey: false,
-      groqBatchTokenBudget: 4000,
-      groqConcurrentBatchWindow: 4,
+      groqBatchTokenBudget: 1800,
+      groqConcurrentBatchWindow: 1,
       testing: null,
       testResults: {},
       saving: false,
@@ -76,6 +78,8 @@ createApp({
       }
       this.ollamaNumCtx = cfg.ollama_num_ctx;
       this.ollamaBatchTokenBudget = cfg.ollama_batch_token_budget;
+      this.llamacppBaseUrl = cfg.llamacpp_base_url;
+      this.llamacppBatchTokenBudget = cfg.llamacpp_batch_token_budget;
       this.geminiModel = cfg.gemini_model;
       this.geminiKeyMasked = cfg.gemini_api_key_masked;
       this.geminiHasKey = cfg.gemini_has_key;
@@ -116,6 +120,8 @@ createApp({
         let cfg;
         if (name === "ollama") {
           cfg = { base_url: this.ollamaBaseUrl, model: this.ollamaModel };
+        } else if (name === "llamacpp") {
+          cfg = { base_url: this.llamacppBaseUrl };
         } else if (name === "gemini") {
           cfg = { model: this.geminiModel, api_key: this.geminiApiKey || null };
         } else if (name === "nvidia") {
@@ -144,6 +150,8 @@ createApp({
           ollama_model: this.ollamaModel,
           ollama_num_ctx: this.ollamaNumCtx,
           ollama_batch_token_budget: this.ollamaBatchTokenBudget,
+          llamacpp_base_url: this.llamacppBaseUrl,
+          llamacpp_batch_token_budget: this.llamacppBatchTokenBudget,
           gemini_model: this.geminiModel,
           gemini_api_key: this.geminiApiKey || null,
           gemini_batch_token_budget: this.geminiBatchTokenBudget,

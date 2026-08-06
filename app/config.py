@@ -29,22 +29,51 @@ class Settings(BaseSettings):
     # 900-token batches reproducibly hit.
     ollama_batch_token_budget: int = 400
 
+    # llama.cpp's own built-in local HTTP server (github.com/ggml-org/
+    # llama.cpp/tools/server) — a separate local inference runtime from
+    # Ollama, not another name for it. No web UI (headless server only),
+    # no API key (local-only, same trust model as Ollama), and no
+    # model-switching endpoint — the server is started with one fixed
+    # model already loaded via CLI flags, so unlike Ollama there is no
+    # llamacpp_model setting here or a model picker on the Engines page.
+    # Default port per llama.cpp's server docs.
+    llamacpp_base_url: str = "http://localhost:8080"
+    # Same reasoning as ollama_batch_token_budget: no local GPU/VRAM
+    # constraint beyond what's already true for Ollama, so this shares the
+    # same conservative default rather than assuming llama.cpp's specific
+    # loaded model handles large batches reliably.
+    llamacpp_batch_token_budget: int = 400
+
     gemini_api_key: str = ""
     # Gemini's model lineup changes over time (1.5-flash has been retired,
-    # returning 404s) — verify this is still current against
-    # https://aistudio.google.com/ before relying on it, and prefer setting
-    # it explicitly via the Engine page or GEMINI_MODEL env var.
-    gemini_model: str = "gemini-2.0-flash"
-    # No local GPU/VRAM constraint. Google doesn't publish a fixed
-    # free-tier RPM/RPD number (varies by account/usage tier — see
-    # ai.google.dev/gemini-api/docs/rate-limits), so this starts at the
-    # same conservative-but-not-tiny value as NVIDIA/OpenRouter/Groq
-    # rather than a guessed number; lower it if translations come back
-    # with low cue-recovery counts.
+    # returning 404s; 2.0-flash confirmed live to have been silently
+    # DEPRECATED for free-tier access — the AI Studio rate-limit dashboard
+    # showed 0 RPM / 0 TPM / 0 RPD for it, meaning every request 429s
+    # instantly regardless of batch size or pacing, not a real rate limit
+    # at all) — verify this is still current against
+    # https://aistudio.google.com/rate-limit before relying on it, and
+    # prefer setting it explicitly via the Engine page or GEMINI_MODEL env
+    # var. gemini-3.5-flash-lite confirmed live to have real free-tier
+    # quota (15 RPM / 250K TPM / 500 RPD, the best numbers of any
+    # text-output model on a fresh free-tier account as of this check).
+    gemini_model: str = "gemini-3.5-flash-lite"
+    # No local GPU/VRAM constraint. The confirmed 250K TPM quota on
+    # gemini-3.5-flash-lite (see gemini_model's comment) gives enormous
+    # headroom compared to Groq's confirmed-live 6000 TPM cap — no need
+    # for the same conservative value. Matches OpenRouter/NVIDIA's
+    # "maximize batch size, minimize request count" posture instead.
     gemini_batch_token_budget: int = 4000
-    # Mirrors nvidia_concurrent_batch_window. Kept modest since Gemini's
-    # actual per-account RPM isn't known ahead of time.
-    gemini_concurrent_batch_window: int = 4
+    # Confirmed live (AI Studio rate-limit dashboard) at 15 RPM for
+    # gemini-3.5-flash-lite — NOT mirroring NVIDIA's default of 4 (against
+    # NVIDIA's documented 40 RPM), since 4 concurrent against a 15 RPM
+    # ceiling leaves much thinner margin. 3 keeps comfortable headroom
+    # (a batch can legitimately take several seconds, so concurrent
+    # in-flight requests rarely all land in the same one-minute window
+    # anyway) while still meaningfully overlapping requests instead of
+    # running fully sequential. Re-check aistudio.google.com/rate-limit
+    # before raising further — this number is specific to the free tier
+    # and this exact model, not something Google publishes as stable.
+    gemini_concurrent_batch_window: int = 3
 
     nvidia_api_key: str = ""
     # NVIDIA's build.nvidia.com free tier (integrate.api.nvidia.com), an
@@ -134,15 +163,28 @@ class Settings(BaseSettings):
     # (30 RPM / 14,400 per day — see RATE_LIMIT_RPM in groq_provider.py);
     # larger models on Groq typically get a LOWER per-model cap.
     groq_model: str = "llama-3.1-8b-instant"
-    # No local GPU/VRAM constraint. Groq's free tier is far more generous
-    # than OpenRouter's (30 RPM / 14,400 per day vs OpenRouter's 20 RPM /
-    # 50 per day), so there's less pressure to maximize batch size purely
-    # to conserve daily quota. Starts at the same value as OpenRouter's
-    # for consistency; lower it if translations come back with low
+    # No local GPU/VRAM constraint, BUT Groq's free tier also enforces a
+    # tokens-per-minute (TPM) cap on top of the RPM/RPD numbers above — one
+    # that's much tighter than 4000 dialogue tokens: confirmed LIVE via
+    # Groq's own 429/413 error body: "Request too large for model
+    # llama-3.1-8b-instant... on tokens per minute (TPM): Limit 6000,
+    # Requested 6734" — a 4000-token dialogue budget plus system-prompt/
+    # response overhead already exceeds the model's real TPM ceiling on
+    # the FIRST request, before any per-minute request-count throttling
+    # even applies. 1800 keeps the full round-trip (dialogue + ~1.3x
+    # response + system prompt, see translator._batch_token_budget) safely
+    # under 6000. Lower further if translations still come back with low
     # cue-recovery counts.
-    groq_batch_token_budget: int = 4000
-    # Mirrors nvidia_concurrent_batch_window / openrouter_concurrent_batch_window.
-    groq_concurrent_batch_window: int = 4
+    groq_batch_token_budget: int = 1800
+    # NOT simply mirroring nvidia_concurrent_batch_window's default (4):
+    # the confirmed 6000 TPM cap (see groq_batch_token_budget's comment)
+    # is a single ROLLING budget shared across every concurrent request on
+    # the account, not a per-request limit — so even at the reduced
+    # 1800-token budget, 2+ requests in flight at once can still blow past
+    # 6000 TPM combined. Defaults to 1 (fully sequential, same as Ollama)
+    # until there's confirmed room to raise it; only increase after
+    # verifying the account's real TPM headroom.
+    groq_concurrent_batch_window: int = 1
 
     # Scheduling
     schedule_cron: str = "0 3 * * *"

@@ -36,6 +36,14 @@
 
     <div class="engine-config">
       <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+        <input type="checkbox" v-model="europeanSpanish" style="width:auto;" />
+        European (Castilian) Spanish, not Latin American
+      </label>
+      <p class="field-hint">When translating into Spanish, explicitly request Peninsular Spanish from Spain — vocabulary, verb conjugations (vosotros), and idioms as used in Spain. Enabled by default: the bare "es" language code is ambiguous, and confirmed live to default to Latin American colloquial phrasing without this. Uncheck if you actually want Latin American Spanish output. Doesn't affect any other language.</p>
+    </div>
+
+    <div class="engine-config">
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
         <input type="checkbox" v-model="catalanVegetaInsults" style="width:auto;" />
         Vegeta-style insults for Catalan
       </label>

@@ -241,6 +241,7 @@ def update_item_status(
     source_language: str | None = None,
     engine_used: str | None = None,
     error_message: str | None = None,
+    error_detail: str | None = None,
     mark_attempt: bool = False,
     mark_completed: bool = False,
 ) -> None:
@@ -256,10 +257,17 @@ def update_item_status(
     if error_message is not None:
         fields.append("error_message = ?")
         values.append(error_message)
+        # error_detail travels WITH error_message — a fresh error_message
+        # but no error_detail arg means "this failure had no extra detail
+        # to capture," so any stale detail from a PREVIOUS failure must be
+        # cleared too, not left dangling under a new, unrelated message.
+        fields.append("error_detail = ?")
+        values.append(error_detail)
     elif status in ("translating", "done", "translated_pending_upload"):
         # A fresh attempt or a successful completion must never leave a
         # stale error from a previous failed run visible in the UI.
         fields.append("error_message = NULL")
+        fields.append("error_detail = NULL")
     if mark_attempt:
         fields.append("last_attempt_at = ?")
         values.append(now)
@@ -461,17 +469,24 @@ def log_item_attempt(
     status: str,
     engine_used: str | None = None,
     error_message: str | None = None,
+    error_detail: str | None = None,
     settings_snapshot: dict | None = None,
 ) -> None:
+    """error_message is the SHORT, human-readable failure summary shown
+    directly in the Queue/History tables. error_detail is optional and
+    carries the full underlying detail (e.g. a provider's raw JSON error
+    response — see ProviderError.raw_detail) for a "show full error"
+    expansion — deliberately kept separate so a long raw response never
+    bloats the table-row display."""
     with conn:
         conn.execute(
             """
             INSERT INTO item_run_log
-                (item_id, run_id, status, engine_used, error_message, settings_snapshot, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                (item_id, run_id, status, engine_used, error_message, error_detail, settings_snapshot, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                item_id, run_id, status, engine_used, error_message,
+                item_id, run_id, status, engine_used, error_message, error_detail,
                 json.dumps(settings_snapshot) if settings_snapshot is not None else None,
                 _now(),
             ),
@@ -530,7 +545,7 @@ def get_run_items(conn: sqlite3.Connection, run_id: int) -> list[dict]:
     rows = conn.execute(
         """
         SELECT
-            l.id AS log_id, l.status, l.engine_used, l.error_message, l.created_at,
+            l.id AS log_id, l.status, l.engine_used, l.error_message, l.error_detail, l.created_at,
             i.id AS item_id, i.item_type, i.title, i.series_title, i.season_episode,
             i.target_language, i.last_attempt_at, i.completed_at
         FROM item_run_log l

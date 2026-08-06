@@ -9,6 +9,7 @@ from app.db import settings_store
 from app.providers import pull_state
 from app.providers.gemini_provider import GeminiProvider
 from app.providers.groq_provider import GroqProvider
+from app.providers.llamacpp_provider import LlamaCppProvider
 from app.providers.nvidia_provider import NvidiaProvider
 from app.providers.ollama_provider import OllamaProvider
 from app.providers.openrouter_provider import OpenRouterProvider
@@ -31,10 +32,12 @@ class EngineConfig(BaseModel):
     ollama_model: str
     ollama_num_ctx: int = 8192
     ollama_batch_token_budget: int = 400
+    llamacpp_base_url: str = "http://localhost:8080"
+    llamacpp_batch_token_budget: int = 400
     gemini_model: str
     gemini_api_key: str | None = None  # only set to overwrite; omitted = unchanged
     gemini_batch_token_budget: int = 4000
-    gemini_concurrent_batch_window: int = 4
+    gemini_concurrent_batch_window: int = 3
     nvidia_model: str = "deepseek-ai/deepseek-v4-flash"
     nvidia_api_key: str | None = None  # only set to overwrite; omitted = unchanged
     nvidia_batch_token_budget: int = 700
@@ -45,8 +48,8 @@ class EngineConfig(BaseModel):
     openrouter_concurrent_batch_window: int = 4
     groq_model: str = "llama-3.1-8b-instant"
     groq_api_key: str | None = None  # only set to overwrite; omitted = unchanged
-    groq_batch_token_budget: int = 4000
-    groq_concurrent_batch_window: int = 4
+    groq_batch_token_budget: int = 1800
+    groq_concurrent_batch_window: int = 1
 
 
 @router.get("")
@@ -58,6 +61,8 @@ async def get_engine_config():
         "ollama_model": settings.ollama_model,
         "ollama_num_ctx": settings.ollama_num_ctx,
         "ollama_batch_token_budget": settings.ollama_batch_token_budget,
+        "llamacpp_base_url": settings.llamacpp_base_url,
+        "llamacpp_batch_token_budget": settings.llamacpp_batch_token_budget,
         "gemini_model": settings.gemini_model,
         "gemini_api_key_masked": _mask(settings.gemini_api_key),
         "gemini_has_key": bool(settings.gemini_api_key),
@@ -87,6 +92,8 @@ async def set_engine_config(config: EngineConfig, conn=Depends(state.get_conn)):
         raise HTTPException(status_code=422, detail="ollama_num_ctx must be at least 512")
     if config.ollama_batch_token_budget < 0:
         raise HTTPException(status_code=422, detail="ollama_batch_token_budget must be >= 0")
+    if config.llamacpp_batch_token_budget < 0:
+        raise HTTPException(status_code=422, detail="llamacpp_batch_token_budget must be >= 0")
     if config.nvidia_batch_token_budget < 1:
         raise HTTPException(status_code=422, detail="nvidia_batch_token_budget must be at least 1")
     if config.nvidia_concurrent_batch_window < 1:
@@ -125,6 +132,12 @@ async def set_engine_config(config: EngineConfig, conn=Depends(state.get_conn)):
     settings_store.save_one(conn, "ollama_num_ctx", config.ollama_num_ctx)
     settings.ollama_batch_token_budget = config.ollama_batch_token_budget
     settings_store.save_one(conn, "ollama_batch_token_budget", config.ollama_batch_token_budget)
+    settings.llamacpp_base_url = config.llamacpp_base_url
+    settings_store.save_one(conn, "llamacpp_base_url", config.llamacpp_base_url)
+    settings.llamacpp_batch_token_budget = config.llamacpp_batch_token_budget
+    settings_store.save_one(
+        conn, "llamacpp_batch_token_budget", config.llamacpp_batch_token_budget
+    )
     settings.gemini_model = config.gemini_model
     settings_store.save_one(conn, "gemini_model", config.gemini_model)
     if config.gemini_api_key:
@@ -175,9 +188,9 @@ async def set_engine_config(config: EngineConfig, conn=Depends(state.get_conn)):
 
 
 class TestEngineRequest(BaseModel):
-    base_url: str | None = None  # ollama only; blank = use currently saved value
+    base_url: str | None = None  # ollama/llamacpp only; blank = use currently saved value
     model: str | None = None  # blank = use currently saved value
-    api_key: str | None = None  # gemini/nvidia only; blank = use currently saved value
+    api_key: str | None = None  # cloud providers only; blank = use currently saved value
 
 
 @router.post("/{name}/test")
@@ -189,6 +202,9 @@ async def test_engine(name: str, req: TestEngineRequest | None = None):
         base_url = (req.base_url if req and req.base_url else settings.ollama_base_url)
         model = (req.model if req and req.model else settings.ollama_model)
         provider = OllamaProvider(base_url=base_url, model=model, num_ctx=settings.ollama_num_ctx)
+    elif name == "llamacpp":
+        base_url = (req.base_url if req and req.base_url else settings.llamacpp_base_url)
+        provider = LlamaCppProvider(base_url=base_url)
     elif name == "gemini":
         api_key = (req.api_key if req and req.api_key else settings.gemini_api_key)
         model = (req.model if req and req.model else settings.gemini_model)

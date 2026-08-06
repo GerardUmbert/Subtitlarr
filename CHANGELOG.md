@@ -3,6 +3,108 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.6.0]
+
+### Added
+- **llama.cpp translation engine** (Engines page): a new LOCAL provider
+  option alongside Ollama, reached via llama.cpp's own built-in HTTP
+  server (github.com/ggml-org/llama.cpp) — a separate local runtime from
+  Ollama, not another name for it. OpenAI-compatible request format like
+  the cloud providers, but treated operationally like Ollama: no API key,
+  no rate limits, no windowed concurrency, its own watchdog-timeout-and-
+  retry pattern. No web UI and no model-switching endpoint — the server
+  is started with one fixed model already loaded via its own CLI flags,
+  so there's no model field or pull button on this page.
+- **"European Spanish, not Latin American" toggle** (Language Rules page,
+  **enabled by default**): the bare "Spanish (es)" language code is
+  ambiguous between European (Castilian/Peninsular) and Latin American
+  Spanish, and a real translation confirmed live defaulted to Latin
+  American colloquial phrasing ("¿Qué anduvo Missy ahora?") with no way
+  to have requested otherwise. Threaded through every provider's
+  `translate()` and read live per-item from Language Rules' saved config,
+  same pattern as the existing Catalan Vegeta-insults toggle — but
+  opt-out instead of opt-in.
+- **Click-to-expand full error detail** on the Queue and History pages:
+  a failed item's error cell is now clickable, opening a modal with the
+  complete underlying error (e.g. a provider's full raw JSON response),
+  not just the short summary already shown in the table. New
+  `error_detail` column on both `items` and `item_run_log`
+  (`ProviderError.raw_detail`), separate from the short human-readable
+  `error_message` so a long raw response never bloats the table itself.
+- **Content-policy blocks now trigger automatic fallback.** A new
+  `ProviderContentBlockedError` (Gemini's `PROHIBITED_CONTENT`/`SAFETY`
+  block reasons, mapped to human-readable explanations instead of an
+  opaque `KeyError`) is fallback-eligible — unlike a generic
+  `ProviderError`, which the runner never retried or fell back on at
+  all. Confirmed live: a real batch failed outright on Gemini with a
+  fallback engine configured but never even attempted, since content
+  blocks weren't a recognized retryable/fallback case. No same-provider
+  retry step (pointless — the content won't stop tripping the same
+  filter), goes straight to the fallback provider if one is configured.
+- **Explicit "sending" log line before every translate() call.** Both
+  httpx's own request logging and the existing completion-timing log
+  only fire AFTER a response comes back, so there was no way to confirm
+  "is this request actually in flight" from the log alone — confirmed
+  live, a real stuck-looking request required inspecting live TCP
+  connections (`Get-NetTCPConnection`) to confirm it had genuinely
+  reached the provider's servers. The new line fires immediately before
+  the call, with the batch index/total and character count.
+- Temporary read-only `/api/debug` endpoints for inspecting a Bazarr
+  episode's raw subtitle detail (embedded tracks, external file paths)
+  and any subtitle's actual parsed content, without needing to hand the
+  Bazarr API key to whoever's debugging — added to investigate a real
+  incident (see Fixed) and left in as a standing diagnostic tool.
+
+### Fixed
+- **Root-caused a real source-language contamination incident**: several
+  "Georgie & Mandy's First Marriage" episodes had only an Italian
+  (fansub) external subtitle file in Bazarr, with a genuine English
+  track existing only as an EMBEDDED (baked-in) stream — Bazarr's
+  "treat embedded subtitles as downloaded" setting suppressed the
+  missing-subtitle nag but never materialized the track as an external
+  file `build_source_map()` could see, so the source-language picker
+  correctly (per its own logic) fell back to the contaminated Italian
+  file. Not a Subtitlarr bug — confirmed via the new debug endpoints
+  that Bazarr's API already reports embedded tracks with `path: null`
+  distinctly from real external files; the fix was extracting the
+  embedded track in Bazarr itself. Of 19 already-uploaded episodes
+  checked directly against Bazarr's live content, only 1 (still
+  un-pushed, `translated_pending_upload`) was actually affected.
+- **Gemini model default was pointing at a model with ZERO free-tier
+  quota.** `gemini-2.0-flash` showed 0 RPM / 0 TPM / 0 RPD on a real
+  account's AI Studio rate-limit dashboard — every request 429'd
+  instantly, which looks identical to a batch-size/rate-limit problem
+  but is actually "this model isn't available to you at all." Switched
+  default to `gemini-3.5-flash-lite` (confirmed live: 15 RPM / 250K TPM
+  / 500 RPD, the best free-tier numbers of any text-output model at time
+  of writing) and raised `gemini_batch_token_budget` back up (250K TPM
+  gives enormous headroom vs. Groq's confirmed 6000 TPM cap) and
+  `gemini_concurrent_batch_window` to 3.
+- **Groq's real constraint is a 6000 TPM cap, not just its documented
+  RPM/RPD numbers** — confirmed live via Groq's own 429/413 error body
+  naming the exact limit. The default `groq_batch_token_budget` (4000
+  dialogue tokens, ~9200 total with prompt/response overhead) already
+  exceeded it on the FIRST request. Lowered to 1800 and
+  `groq_concurrent_batch_window` to 1 (a TPM cap is a single rolling
+  budget shared across concurrent requests, so concurrency made hitting
+  it MORE likely, not less).
+- **Gemini's API key was leaking into plaintext logs** via the
+  `?key=...` query-string auth method — every request URL, including
+  the full key, ended up verbatim in httpx/uvicorn's access logs.
+  Switched to the `x-goog-api-key` header, which Google's REST API
+  accepts as an equivalent alternative specifically to avoid this.
+- **Failed item_run_log rows never recorded which engine was used**,
+  because `engine_used` was only ever set on the SUCCESS path — a run
+  that failed outright showed `"primary_engine": null` on the History
+  page instead of naming the engine that actually failed. Now set from
+  `active_provider.name` on both failure paths.
+- OpenRouter/NVIDIA/Groq/Gemini's per-engine batch-token-budget and
+  concurrency settings are now selected via a single lookup table in
+  `runner.py` instead of a growing if/elif chain, so a newly added cloud
+  provider can no longer silently inherit Ollama's small GPU-safe
+  default by omission (the exact gap that caused the Groq/Gemini batch-
+  size bugs above).
+
 ## [0.5.0]
 
 ### Added

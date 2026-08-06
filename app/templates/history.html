@@ -63,7 +63,11 @@
                 <td><span :class="'status-pill status-' + item.status"><span class="dot"></span>{% raw %}{{ statusLabel(item.status) }}{% endraw %}</span></td>
                 <td class="row-time">{% raw %}{{ item.engine_used || '—' }}{% endraw %}</td>
                 <td class="row-time">{% raw %}{{ itemDuration(item) }}{% endraw %}</td>
-                <td class="row-time" :title="item.error_message || ''">{% raw %}{{ (item.error_message || '').slice(0, 50) }}{% endraw %}</td>
+                <td
+                  :class="item.error_message ? 'row-time error-cell' : 'row-time'"
+                  :title="item.error_message ? 'Click for full error' : ''"
+                  @click="item.error_message && openErrorModal(item)"
+                >{% raw %}{{ (item.error_message || '').slice(0, 50) }}{% endraw %}</td>
               </tr>
             </tbody>
           </table>
@@ -80,6 +84,20 @@
       </div>
     </div>
   </template>
+
+  <div class="modal-backdrop" v-if="errorModal" @click.self="closeErrorModal">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3>{% raw %}{{ errorModal.series_title || errorModal.title }}{% endraw %} — full error</h3>
+        <button class="modal-close" @click="closeErrorModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin:0 0 12px; color:var(--ink-faint); font-size:13px;">{% raw %}{{ errorModal.error_message }}{% endraw %}</p>
+        <pre v-if="errorModal.error_detail">{% raw %}{{ errorModal.error_detail }}{% endraw %}</pre>
+        <p v-else style="margin:0; color:var(--ink-faint); font-size:13px;">No additional detail captured for this error.</p>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 {% block scripts %}

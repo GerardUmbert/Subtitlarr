@@ -7,6 +7,7 @@ createApp({
       sourcePriority: [],
       newSourceLang: "",
       catalanVegetaInsults: false,
+      europeanSpanish: true,
       saving: false,
       saved: false,
     };
@@ -16,6 +17,7 @@ createApp({
       const cfg = await Api.getLanguageConfig();
       this.sourcePriority = cfg.source_priority;
       this.catalanVegetaInsults = cfg.catalan_vegeta_insults;
+      this.europeanSpanish = cfg.european_spanish;
     },
     addSource() {
       const lang = this.newSourceLang.trim().toLowerCase();
@@ -34,6 +36,7 @@ createApp({
         await Api.setLanguageConfig({
           source_priority: this.sourcePriority,
           catalan_vegeta_insults: this.catalanVegetaInsults,
+          european_spanish: this.europeanSpanish,
         });
         this.saved = true;
         setTimeout(() => (this.saved = false), 3000);

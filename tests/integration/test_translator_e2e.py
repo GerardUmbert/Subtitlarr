@@ -88,11 +88,14 @@ class FakeProvider(TranslationProvider):
 
     def __init__(self):
         self.received_catalan_vegeta_insults: list[bool] = []
+        self.received_european_spanish: list[bool] = []
 
     async def translate(
-        self, dialogue_text: str, source_lang: str, target_lang: str, catalan_vegeta_insults: bool = False
+        self, dialogue_text: str, source_lang: str, target_lang: str,
+        catalan_vegeta_insults: bool = False, european_spanish: bool = True,
     ) -> str:
         self.received_catalan_vegeta_insults.append(catalan_vegeta_insults)
+        self.received_european_spanish.append(european_spanish)
         # trivial "translation": prefix each line to prove content flowed through
         return "1\nHola.\n\n2\n¿Cómo estás?"
 
@@ -169,6 +172,72 @@ async def test_full_translation_round_trip(conn, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_failed_translation_still_logs_engine_used(conn, monkeypatch):
+    """Regression test: a failed item_run_log row previously omitted
+    engine_used entirely (only set on the SUCCESS path), so
+    list_run_history's "WHERE engine_used IS NOT NULL" rollup query
+    silently showed primary_engine: null on the History page for any run
+    that failed outright — confirmed live on a real run that failed on
+    Groq. engine_used must be set from active_provider.name even when
+    translation never got a usable response back."""
+    repository.set_config(conn, "source_lang_priority", ["en"])
+    repository.upsert_item_seen(
+        conn, item_type="episode", bazarr_id=42, series_id=1,
+        title="Legacy", series_title="The Bear", season_episode="3x7",
+        target_language="es",
+    )
+
+    fake_client = FakeBazarrClient(
+        wanted_episodes=[
+            WantedEpisode(
+                seriesTitle="The Bear", episode_number="3x7", episodeTitle="Legacy",
+                missing_subtitles=[LanguageInfo(name="Spanish", code2="es", code3="spa")],
+                sonarrSeriesId=1, sonarrEpisodeId=42,
+            )
+        ]
+    )
+
+    class AlwaysFailsProvider(TranslationProvider):
+        name = "fake-failing"
+
+        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
+            # Garbage response the reconciler can't align to any cue —
+            # triggers TranslationAlignmentError, one of the failure
+            # paths that previously dropped engine_used.
+            return "not a valid numbered response"
+
+        async def test_connection(self) -> ProviderStatus:
+            return ProviderStatus(ok=True)
+
+    from app.config import Settings
+    settings = Settings(active_engine="ollama", fallback_engine="")
+
+    monkeypatch.setattr(
+        "app.engine.runner.get_active_provider", lambda s: AlwaysFailsProvider()
+    )
+    monkeypatch.setattr(
+        "app.engine.runner.get_fallback_provider", lambda s: None
+    )
+
+    controller = RunController(conn, lambda: fake_client, settings)
+    progress = await controller.run_now()
+
+    assert progress.failed == 1
+
+    row = conn.execute("SELECT * FROM items WHERE bazarr_id = 42").fetchone()
+    assert row["status"] == "failed"
+
+    log_row = conn.execute(
+        "SELECT * FROM item_run_log WHERE item_id = ? ORDER BY id DESC LIMIT 1", (row["id"],)
+    ).fetchone()
+    assert log_row["status"] == "failed"
+    assert log_row["engine_used"] == "fake-failing"
+
+    runs, _ = repository.list_run_history(conn)
+    assert runs[0]["primary_engine"] == "fake-failing"
+
+
+@pytest.mark.asyncio
 async def test_catalan_vegeta_insults_setting_reaches_the_provider(conn, monkeypatch):
     """Confirms the DB-stored catalan_vegeta_insults toggle (Language
     Rules page) actually flows from translate_item() through to the
@@ -205,6 +274,80 @@ async def test_catalan_vegeta_insults_setting_reaches_the_provider(conn, monkeyp
     assert progress.processed == 1
     assert progress.failed == 0
     assert fake_provider.received_catalan_vegeta_insults == [True]
+
+
+@pytest.mark.asyncio
+async def test_european_spanish_setting_defaults_on_and_reaches_the_provider(conn, monkeypatch):
+    """Confirms european_spanish defaults to True (unlike
+    catalan_vegeta_insults, which defaults False) and flows from
+    translate_item() through to the provider's translate() call WITHOUT
+    the setting ever being explicitly written to the DB — a fresh install
+    must get this behavior automatically, not require opting in."""
+    repository.set_config(conn, "source_lang_priority", ["en"])
+    repository.upsert_item_seen(
+        conn, item_type="episode", bazarr_id=42, series_id=1,
+        title="Legacy", series_title="The Bear", season_episode="3x7",
+        target_language="es",
+    )
+
+    fake_client = FakeBazarrClient(
+        wanted_episodes=[
+            WantedEpisode(
+                seriesTitle="The Bear", episode_number="3x7", episodeTitle="Legacy",
+                missing_subtitles=[LanguageInfo(name="Spanish", code2="es", code3="spa")],
+                sonarrSeriesId=1, sonarrEpisodeId=42,
+            )
+        ]
+    )
+
+    from app.config import Settings
+    settings = Settings(active_engine="ollama", fallback_engine="")
+
+    fake_provider = FakeProvider()
+    monkeypatch.setattr("app.engine.runner.get_active_provider", lambda s: fake_provider)
+    monkeypatch.setattr("app.engine.runner.get_fallback_provider", lambda s: None)
+
+    controller = RunController(conn, lambda: fake_client, settings)
+    progress = await controller.run_now()
+
+    assert progress.processed == 1
+    assert progress.failed == 0
+    assert fake_provider.received_european_spanish == [True]
+
+
+@pytest.mark.asyncio
+async def test_european_spanish_setting_can_be_disabled(conn, monkeypatch):
+    repository.set_config(conn, "source_lang_priority", ["en"])
+    repository.set_config(conn, "european_spanish", False)
+    repository.upsert_item_seen(
+        conn, item_type="episode", bazarr_id=42, series_id=1,
+        title="Legacy", series_title="The Bear", season_episode="3x7",
+        target_language="es",
+    )
+
+    fake_client = FakeBazarrClient(
+        wanted_episodes=[
+            WantedEpisode(
+                seriesTitle="The Bear", episode_number="3x7", episodeTitle="Legacy",
+                missing_subtitles=[LanguageInfo(name="Spanish", code2="es", code3="spa")],
+                sonarrSeriesId=1, sonarrEpisodeId=42,
+            )
+        ]
+    )
+
+    from app.config import Settings
+    settings = Settings(active_engine="ollama", fallback_engine="")
+
+    fake_provider = FakeProvider()
+    monkeypatch.setattr("app.engine.runner.get_active_provider", lambda s: fake_provider)
+    monkeypatch.setattr("app.engine.runner.get_fallback_provider", lambda s: None)
+
+    controller = RunController(conn, lambda: fake_client, settings)
+    progress = await controller.run_now()
+
+    assert progress.processed == 1
+    assert progress.failed == 0
+    assert fake_provider.received_european_spanish == [False]
 
 
 @pytest.mark.asyncio
@@ -305,7 +448,8 @@ class EchoProvider(TranslationProvider):
     name = "echo"
 
     async def translate(
-        self, dialogue_text: str, source_lang: str, target_lang: str, catalan_vegeta_insults: bool = False
+        self, dialogue_text: str, source_lang: str, target_lang: str,
+        catalan_vegeta_insults: bool = False, european_spanish: bool = True,
     ) -> str:
         blocks = dialogue_text.strip().split("\n\n")
         out = []

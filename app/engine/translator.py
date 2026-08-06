@@ -7,7 +7,12 @@ from pathlib import Path
 from app.bazarr.client import BazarrClient
 from app.db import repository
 from app.engine import run_events, upload_queue
-from app.providers.base import ProviderError, ProviderRateLimitedError, TranslationProvider
+from app.providers.base import (
+    ProviderContentBlockedError,
+    ProviderError,
+    ProviderRateLimitedError,
+    TranslationProvider,
+)
 from app.subtitles import srt_io
 from app.subtitles.reconciler import (
     TranslationAlignmentError,
@@ -47,6 +52,7 @@ async def _translate_batch(
     fallback_provider: TranslationProvider | None,
     item_id: int,
     catalan_vegeta_insults: bool = False,
+    european_spanish: bool = True,
     retry_pause_seconds: float = 0,
     run_id: int | None = None,
     batch_index: int = 1,
@@ -76,11 +82,22 @@ async def _translate_batch(
     # with NO corresponding gap visible in httpx's own request logging
     # (which only logs AFTER a call completes, not when it starts) — this
     # pins down exactly how long is spent waiting on translate() itself
-    # vs. anything before/after it.
+    # vs. anything before/after it. The explicit "sending" line below is
+    # the ONLY log line that fires BEFORE the response comes back —
+    # without it, there is no way to distinguish "still waiting on the
+    # provider" from "request never went out" purely from the log; that
+    # previously had to be confirmed by inspecting live TCP connections
+    # instead (confirmed live: a real request sat with no log output for
+    # 2.5+ minutes, and only `Get-NetTCPConnection` could confirm it had
+    # actually reached Google's servers, not stalled locally).
     call_started = time.monotonic()
+    logger.info(
+        "Sending translate() call for item %d batch %d/%d to %s (%d chars)",
+        item_id, batch_index, batch_total, active_provider.name, len(dialogue_text),
+    )
     try:
         llm_response = await active_provider.translate(
-            dialogue_text, source_lang, target_lang, catalan_vegeta_insults
+            dialogue_text, source_lang, target_lang, catalan_vegeta_insults, european_spanish
         )
         logger.info(
             "translate() call for item %d (%s) took %.2fs",
@@ -105,7 +122,7 @@ async def _translate_batch(
             await asyncio.sleep(wait_seconds)
         try:
             llm_response = await active_provider.translate(
-                dialogue_text, source_lang, target_lang, catalan_vegeta_insults
+                dialogue_text, source_lang, target_lang, catalan_vegeta_insults, european_spanish
             )
             if run_id is not None:
                 run_events.emit(
@@ -126,8 +143,32 @@ async def _translate_batch(
                 )
             engine_used = fallback_provider.name
             llm_response = await fallback_provider.translate(
-                dialogue_text, source_lang, target_lang, catalan_vegeta_insults
+                dialogue_text, source_lang, target_lang, catalan_vegeta_insults, european_spanish
             )
+    except ProviderContentBlockedError as exc:
+        # No same-provider retry here — unlike ProviderRateLimitedError,
+        # retrying the SAME provider on a content-policy block would just
+        # trip the same filter again (the content didn't change). Go
+        # straight to the fallback provider, if one is configured, since a
+        # different provider/model may not flag the same content at all.
+        # Confirmed live: a real batch failed outright on Gemini
+        # (PROHIBITED_CONTENT) with a fallback engine configured but never
+        # even attempted — this is the gap that fixes.
+        if fallback_provider is None:
+            raise
+        logger.warning(
+            "Provider %s blocked content for item %d (%s); falling back to %s",
+            active_provider.name, item_id, exc, fallback_provider.name,
+        )
+        if run_id is not None:
+            run_events.emit(
+                run_id, item_id, batch_index, batch_total, "fell_back",
+                f"{active_provider.name} blocked this content — falling back to {fallback_provider.name}",
+            )
+        engine_used = fallback_provider.name
+        llm_response = await fallback_provider.translate(
+            dialogue_text, source_lang, target_lang, catalan_vegeta_insults, european_spanish
+        )
 
     return reassemble(batch, llm_response), engine_used
 
@@ -161,6 +202,7 @@ async def _translate_batches(
     fallback_provider: TranslationProvider | None,
     item_id: int,
     catalan_vegeta_insults: bool = False,
+    european_spanish: bool = True,
     retry_pause_seconds: float = 0,
     run_id: int | None = None,
     concurrent_batch_window: int = NVIDIA_CONCURRENT_BATCH_WINDOW,
@@ -178,7 +220,7 @@ async def _translate_batches(
         for i, batch in enumerate(batches):
             batch_result, batch_engine = await _translate_batch(
                 batch, source_lang, target_lang, active_provider, fallback_provider, item_id,
-                catalan_vegeta_insults, retry_pause_seconds, run_id, i + 1, batch_total,
+                catalan_vegeta_insults, european_spanish, retry_pause_seconds, run_id, i + 1, batch_total,
             )
             translated_subs.extend(batch_result)
             engine_used = batch_engine
@@ -191,7 +233,7 @@ async def _translate_batches(
             *(
                 _translate_batch(
                     batch, source_lang, target_lang, active_provider, fallback_provider, item_id,
-                    catalan_vegeta_insults, retry_pause_seconds, run_id,
+                    catalan_vegeta_insults, european_spanish, retry_pause_seconds, run_id,
                     window_start + offset + 1, batch_total,
                 )
                 for offset, batch in enumerate(window)
@@ -300,10 +342,11 @@ async def translate_item(
         )
 
         catalan_vegeta_insults = repository.get_config(conn, "catalan_vegeta_insults", default=False)
+        european_spanish = repository.get_config(conn, "european_spanish", default=True)
         translate_started = time.monotonic()
         translated_subs, engine_used = await _translate_batches(
             batches, source_lang, target_lang, active_provider, fallback_provider, item_id,
-            catalan_vegeta_insults, retry_pause_seconds, run_id, concurrent_batch_window,
+            catalan_vegeta_insults, european_spanish, retry_pause_seconds, run_id, concurrent_batch_window,
         )
         logger.info(
             "Item %d: all batches took %.2fs total (item started %.2fs ago)",
@@ -366,19 +409,38 @@ async def translate_item(
         TranslationAlignmentError,
         TranslationIntegrityError,
     ) as exc:
-        repository.update_item_status(conn, item_id, "failed", error_message=str(exc))
+        # engine_used=active_provider.name (not the possibly-unset local
+        # `engine_used` from the try block, which only gets assigned on a
+        # SUCCESSFUL _translate_batches() call) — a failure still happened
+        # against a specific configured engine, and omitting it here meant
+        # list_run_history's "WHERE engine_used IS NOT NULL" rollup query
+        # silently dropped every failed-run row's engine entirely, showing
+        # "primary_engine": null on the History page for any run that
+        # failed outright (confirmed live: a run that failed on Groq showed
+        # no engine at all on /history).
+        repository.update_item_status(
+            conn, item_id, "failed",
+            error_message=str(exc), error_detail=getattr(exc, "raw_detail", None),
+        )
         repository.log_item_attempt(
             conn, item_id, run_id, "failed",
-            error_message=str(exc), settings_snapshot=settings_snapshot,
+            engine_used=active_provider.name,
+            error_message=str(exc), error_detail=getattr(exc, "raw_detail", None),
+            settings_snapshot=settings_snapshot,
         )
         if run_id is not None:
             run_events.emit(run_id, item_id, 0, 0, "item_failed", str(exc))
         raise
     except Exception as exc:  # noqa: BLE001 - any unexpected failure must not crash the batch
-        repository.update_item_status(conn, item_id, "failed", error_message=str(exc))
+        repository.update_item_status(
+            conn, item_id, "failed",
+            error_message=str(exc), error_detail=getattr(exc, "raw_detail", None),
+        )
         repository.log_item_attempt(
             conn, item_id, run_id, "failed",
-            error_message=str(exc), settings_snapshot=settings_snapshot,
+            engine_used=active_provider.name,
+            error_message=str(exc), error_detail=getattr(exc, "raw_detail", None),
+            settings_snapshot=settings_snapshot,
         )
         if run_id is not None:
             run_events.emit(run_id, item_id, 0, 0, "item_failed", str(exc))

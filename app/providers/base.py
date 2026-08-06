@@ -9,7 +9,35 @@ class ProviderStatus:
 
 
 class ProviderError(Exception):
-    """Raised for non-retryable provider failures."""
+    """Raised for non-retryable provider failures.
+
+    `str(exc)` (the message) should stay short and human-readable — it's
+    what gets shown directly in the Queue/History tables. `raw_detail`,
+    when set, carries the full underlying detail (e.g. the provider's raw
+    JSON response) that's too long/technical for a table cell but useful
+    in a "show full error" expansion — callers that want it must fetch it
+    separately (see item_run_log.error_detail), it is NOT automatically
+    included in str(exc)."""
+
+    def __init__(self, message: str, raw_detail: str | None = None):
+        super().__init__(message)
+        self.raw_detail = raw_detail
+
+
+class ProviderContentBlockedError(ProviderError):
+    """The provider refused to translate this specific content — a safety/
+    content-policy filter, not a rate limit, outage, or malformed request.
+    Retrying the SAME provider is pointless (the content won't stop
+    tripping its filter), but a DIFFERENT provider's filter may not flag
+    the same content, or may not have one at all — so the runner treats
+    this as fallback-eligible, same as a retryable error, just skipping
+    the same-provider retry step since it cannot possibly help.
+
+    Confirmed live: Gemini blocked several real subtitle batches (a
+    raunchy sitcom) with promptFeedback.blockReason /
+    candidate.finishReason == PROHIBITED_CONTENT — those items simply
+    failed outright with no fallback attempt, even with a fallback engine
+    configured, since ProviderError normally isn't retried at all."""
 
 
 class ProviderRateLimitedError(Exception):
@@ -40,12 +68,15 @@ class TranslationProvider(ABC):
         source_lang: str,
         target_lang: str,
         catalan_vegeta_insults: bool = False,
+        european_spanish: bool = True,
     ) -> str:
         """Sends dialogue-only text (index + content, no timestamps) to the
         LLM and returns its raw text response. Reassembly onto original
         timing happens separately in app.subtitles.reconciler.
         catalan_vegeta_insults only has an effect when target_lang is
-        Catalan — see app.providers.prompts."""
+        Catalan; european_spanish only has an effect when target_lang is
+        Spanish — see app.providers.prompts. european_spanish defaults to
+        True (opt-out, not opt-in), unlike catalan_vegeta_insults."""
         ...
 
     @abstractmethod

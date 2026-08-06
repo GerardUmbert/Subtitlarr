@@ -134,6 +134,85 @@ async def test_gemini_429_blocks_a_later_call_on_the_same_provider_instance(monk
     await provider.aclose()
 
 
+@pytest.mark.asyncio
+@respx.mock
+async def test_gemini_prompt_level_safety_block_raises_clear_error():
+    """Regression test: a Gemini response blocked BEFORE generation
+    (promptFeedback.blockReason set, no candidates at all) previously
+    surfaced as a bare 'KeyError: candidates' with no useful detail —
+    confirmed live on a real run (3/26 items failed this way, with the
+    real reason being PROHIBITED_CONTENT, not SAFETY — the earlier fix
+    only checked for SAFETY and missed this). The short message
+    (str(exc)) must stay human-readable and name what happened; the full
+    raw response goes on raw_detail instead of being crammed into the
+    short message."""
+    respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+    ).mock(
+        return_value=httpx.Response(
+            200, json={"promptFeedback": {"blockReason": "PROHIBITED_CONTENT"}}
+        )
+    )
+    provider = GeminiProvider(api_key="testkey", model="gemini-1.5-flash")
+    with pytest.raises(ProviderError) as excinfo:
+        await provider.translate("1\nHello.", "en", "es")
+    assert "blocked" in str(excinfo.value).lower()
+    assert "prohibited content" in str(excinfo.value).lower()
+    assert "PROHIBITED_CONTENT" in excinfo.value.raw_detail
+    await provider.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_gemini_response_level_safety_block_raises_clear_error():
+    """Same regression as above, for the OTHER blocked-response shape:
+    generation started (a candidate exists) but its finishReason means
+    the output was withheld and there's no content.parts — confirmed
+    live as 'KeyError: parts' with no detail on a real run. Also checks
+    finishMessage (Gemini's own human-readable explanation, when present)
+    gets folded into the short message."""
+    respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "candidates": [
+                    {
+                        "finishReason": "PROHIBITED_CONTENT",
+                        "finishMessage": "This output contains sensitive words.",
+                    }
+                ]
+            },
+        )
+    )
+    provider = GeminiProvider(api_key="testkey", model="gemini-1.5-flash")
+    with pytest.raises(ProviderError) as excinfo:
+        await provider.translate("1\nHello.", "en", "es")
+    assert "blocked" in str(excinfo.value).lower()
+    assert "prohibited content" in str(excinfo.value).lower()
+    assert "sensitive words" in str(excinfo.value)
+    assert "PROHIBITED_CONTENT" in excinfo.value.raw_detail
+    await provider.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_gemini_unmapped_response_shape_still_raises_with_raw_detail():
+    """A response shape that matches none of the known block/finish
+    reasons must still raise cleanly (not crash with an uncaught
+    KeyError) and still carry the raw response for diagnosis."""
+    respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+    ).mock(return_value=httpx.Response(200, json={"totally": "unexpected"}))
+    provider = GeminiProvider(api_key="testkey", model="gemini-1.5-flash")
+    with pytest.raises(ProviderError) as excinfo:
+        await provider.translate("1\nHello.", "en", "es")
+    assert excinfo.value.raw_detail is not None
+    assert "totally" in excinfo.value.raw_detail
+    await provider.aclose()
+
+
 def test_registry_builds_active_and_fallback():
     settings = Settings(
         active_engine="ollama",
@@ -175,3 +254,9 @@ def test_registry_builds_groq():
     settings = Settings(active_engine="groq", groq_api_key="testkey")
     active = get_active_provider(settings)
     assert active.name == "groq"
+
+
+def test_registry_builds_llamacpp():
+    settings = Settings(active_engine="llamacpp")
+    active = get_active_provider(settings)
+    assert active.name == "llamacpp"

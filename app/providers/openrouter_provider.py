@@ -102,9 +102,12 @@ class OpenRouterProvider(TranslationProvider):
         source_lang: str,
         target_lang: str,
         catalan_vegeta_insults: bool = False,
+        european_spanish: bool = True,
     ) -> str:
         await self._wait_for_rate_limit_clear()
-        system_prompt = build_system_prompt(source_lang, target_lang, catalan_vegeta_insults)
+        system_prompt = build_system_prompt(
+            source_lang, target_lang, catalan_vegeta_insults, european_spanish
+        )
         try:
             resp = await self._client.post(
                 "/chat/completions",

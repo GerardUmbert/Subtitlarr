@@ -660,3 +660,64 @@ tbody tr:last-child td { border-bottom: none; }
 }
 .expand-arrow.open { transform: rotate(180deg); }
 .history-run-body { border-top: 1px solid var(--border); }
+
+.error-cell {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+.error-cell:hover { color: var(--ink); }
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+.modal-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  max-width: 720px;
+  width: 100%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.modal-head h3 { margin: 0; font-size: 15px; }
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--ink-faint);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.modal-close:hover { color: var(--ink); }
+.modal-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+}
+.modal-body pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12.5px;
+  margin: 0;
+  color: var(--ink);
+}

@@ -87,6 +87,7 @@ createApp({
       ],
       _pollHandle: null,
       _searchDebounceHandle: null,
+      errorModal: null, // the clicked item, or null when closed
     };
   },
   created() {
@@ -289,6 +290,12 @@ createApp({
         await this.refresh();
         this.schedulePoll();
       }, this.runActive ? 2000 : 3000);
+    },
+    openErrorModal(item) {
+      this.errorModal = item;
+    },
+    closeErrorModal() {
+      this.errorModal = null;
     },
     onVisibilityChange() {
       if (document.visibilityState === "visible") {

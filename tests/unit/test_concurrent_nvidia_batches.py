@@ -35,7 +35,8 @@ class TrackingProvider(TranslationProvider):
         self.call_order: list[int] = []
 
     async def translate(
-        self, dialogue_text: str, source_lang: str, target_lang: str, catalan_vegeta_insults: bool = False
+        self, dialogue_text: str, source_lang: str, target_lang: str,
+        catalan_vegeta_insults: bool = False, european_spanish: bool = True,
     ) -> str:
         index = int(dialogue_text.split("\n", 1)[0])
         self.call_order.append(index)
@@ -138,7 +139,7 @@ async def test_nvidia_falls_back_per_batch_on_rate_limit_within_a_window():
     class FlakyProvider(TranslationProvider):
         name = "nvidia"
 
-        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False):
+        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
             index = int(dialogue_text.split("\n", 1)[0])
             if index == 2:
                 raise ProviderRateLimitedError("simulated 429")
@@ -172,7 +173,7 @@ async def test_transient_failure_retries_same_provider_before_falling_back():
         def __init__(self):
             self.attempts: list[int] = []
 
-        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False):
+        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
             index = int(dialogue_text.split("\n", 1)[0])
             self.attempts.append(index)
             if index == 2 and self.attempts.count(2) == 1:
@@ -212,7 +213,7 @@ async def test_retry_and_fallback_emit_run_events():
         def __init__(self):
             self.attempts: list[int] = []
 
-        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False):
+        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
             index = int(dialogue_text.split("\n", 1)[0])
             self.attempts.append(index)
             if index == 1 and self.attempts.count(1) == 1:
@@ -225,7 +226,7 @@ async def test_retry_and_fallback_emit_run_events():
     class AlwaysFailsProvider(TranslationProvider):
         name = "nvidia"
 
-        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False):
+        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
             raise ProviderRateLimitedError("simulated persistent 504")
 
         async def test_connection(self):
@@ -254,3 +255,63 @@ async def test_retry_and_fallback_emit_run_events():
     assert types == ["retrying", "fell_back"]
 
     run_events._events.clear()
+
+
+@pytest.mark.asyncio
+async def test_content_blocked_falls_back_immediately_without_same_provider_retry():
+    """Regression test: a content-policy block (e.g. Gemini's
+    PROHIBITED_CONTENT) previously had NO fallback path at all — it's a
+    plain ProviderError, which the runner doesn't retry or fall back on.
+    Confirmed live: a real batch failed outright with a fallback engine
+    configured but never even attempted. ProviderContentBlockedError must
+    go straight to the fallback provider, WITHOUT retrying the same
+    provider first (unlike ProviderRateLimitedError) — retrying a content
+    block can't possibly succeed, the content didn't change."""
+    from app.providers.base import ProviderContentBlockedError
+
+    class AlwaysBlocksProvider(TranslationProvider):
+        name = "gemini"
+
+        def __init__(self):
+            self.attempts: list[int] = []
+
+        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
+            index = int(dialogue_text.split("\n", 1)[0])
+            self.attempts.append(index)
+            raise ProviderContentBlockedError("blocked: PROHIBITED_CONTENT")
+
+        async def test_connection(self):
+            return ProviderStatus(ok=True)
+
+    provider = AlwaysBlocksProvider()
+    fallback = TrackingProvider("nvidia")
+    batches = _batches(1)
+
+    translated_subs, engine_used = await _translate_batches(
+        batches, "en", "es", provider, fallback, item_id=1
+    )
+
+    assert len(translated_subs) == 1
+    assert provider.attempts == [1]  # exactly ONE attempt — no same-provider retry
+    assert fallback.call_order == [1]  # fallback was actually used
+    assert engine_used == "nvidia"
+
+
+@pytest.mark.asyncio
+async def test_content_blocked_reraises_when_no_fallback_configured():
+    """Without a fallback provider, a content block must still surface as
+    a real failure (not silently swallowed) — same expectation as any
+    other unrecoverable ProviderError."""
+    from app.providers.base import ProviderContentBlockedError
+
+    class AlwaysBlocksProvider(TranslationProvider):
+        name = "gemini"
+
+        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
+            raise ProviderContentBlockedError("blocked: PROHIBITED_CONTENT")
+
+        async def test_connection(self):
+            return ProviderStatus(ok=True)
+
+    with pytest.raises(ProviderContentBlockedError):
+        await _translate_batches(_batches(1), "en", "es", AlwaysBlocksProvider(), None, item_id=1)

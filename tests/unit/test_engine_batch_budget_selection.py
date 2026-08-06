@@ -102,6 +102,42 @@ async def test_openrouter_engine_uses_openrouter_batch_budget_not_ollamas(conn, 
 
 
 @pytest.mark.asyncio
+async def test_llamacpp_engine_uses_llamacpp_batch_budget_not_ollamas(conn, monkeypatch):
+    """Same regression as the NVIDIA/OpenRouter tests above, for
+    llama.cpp: it must get its own llamacpp_batch_token_budget, not
+    silently inherit Ollama's. Also confirms it stays non-concurrent
+    (concurrent_batch_window == 1) despite being wired up alongside cloud
+    providers — it's a local runtime, same reasoning as Ollama."""
+    items = _seed_pending_item(conn)
+    monkeypatch.setattr(runner_module.selector, "resolve_and_gate", _fake_resolve_and_gate)
+
+    class FakeLlamaCppProvider:
+        name = "llamacpp"
+
+    monkeypatch.setattr(runner_module, "get_active_provider", lambda settings: FakeLlamaCppProvider())
+    monkeypatch.setattr(runner_module, "get_fallback_provider", lambda settings: None)
+
+    captured_kwargs = {}
+
+    async def fake_translate_item(conn, client, item, *args, **kwargs):
+        captured_kwargs.update(kwargs)
+
+    monkeypatch.setattr(runner_module.translator, "translate_item", fake_translate_item)
+
+    settings = Settings(
+        ollama_batch_token_budget=900,
+        llamacpp_batch_token_budget=350,
+        pause_between_items_seconds=0,
+    )
+    controller = RunController(conn, lambda: object(), settings)
+
+    await controller.run_batch(items, triggered_by="manual_full")
+
+    assert captured_kwargs["batch_token_budget_override"] == 350
+    assert captured_kwargs["concurrent_batch_window"] == 1
+
+
+@pytest.mark.asyncio
 async def test_ollama_engine_still_uses_ollama_batch_budget(conn, monkeypatch):
     items = _seed_pending_item(conn)
     monkeypatch.setattr(runner_module.selector, "resolve_and_gate", _fake_resolve_and_gate)

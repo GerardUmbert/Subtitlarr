@@ -18,6 +18,24 @@ SYSTEM_PROMPT = (
 )
 
 
+# Opt-out toggle (Language Rules page), DEFAULTS TO ON — unlike the
+# Catalan add-on below, which defaults off. The bare "Spanish (es)"
+# language code/name is ambiguous between European (Castilian/Peninsular)
+# and Latin American Spanish, and a real translation confirmed live
+# defaulted to Latin American colloquial phrasing ("¿Qué anduvo Missy
+# ahora?" — a loose "andar" construction, not standard/Peninsular usage)
+# with no way to have requested otherwise from the bare code. Bazarr's
+# own language codes don't distinguish es-ES from es-419/es-MX, so this
+# is the only place that distinction can be enforced. Users who actually
+# want Latin American Spanish output can flip the toggle off.
+EUROPEAN_SPANISH_ADDON = (
+    " Use Peninsular Spanish from Spain (Castilian Spanish) — vocabulary, "
+    "verb conjugations (vosotros, not ustedes, for informal plural you), "
+    "and idioms as used in Spain, NOT Latin American Spanish or any other "
+    "regional dialect."
+)
+
+
 # Optional add-on, appended only when translating INTO Catalan and the
 # corresponding Language Rules toggle is on. Deliberately doesn't hardcode
 # a fixed phrase list — confirmed live that DeepSeek V4 Flash already
@@ -43,7 +61,10 @@ CATALAN_VEGETA_INSULTS_ADDON = (
 
 
 def build_system_prompt(
-    source_lang_code: str, target_lang_code: str, catalan_vegeta_insults: bool = False
+    source_lang_code: str,
+    target_lang_code: str,
+    catalan_vegeta_insults: bool = False,
+    european_spanish: bool = True,
 ) -> str:
     prompt = SYSTEM_PROMPT.format(
         source_lang=language_name(source_lang_code),
@@ -53,6 +74,8 @@ def build_system_prompt(
     )
     if catalan_vegeta_insults and target_lang_code == "ca":
         prompt += CATALAN_VEGETA_INSULTS_ADDON
+    if european_spanish and target_lang_code == "es":
+        prompt += EUROPEAN_SPANISH_ADDON
     return prompt
 
 

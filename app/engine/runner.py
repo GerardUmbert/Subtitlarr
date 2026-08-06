@@ -141,10 +141,24 @@ class RunController:
                 self._settings.gemini_concurrent_batch_window,
             ),
         }
-        batch_token_budget_override, concurrent_batch_window = _CLOUD_ENGINE_SETTINGS.get(
-            active_provider.name,
-            (self._settings.ollama_batch_token_budget, 1),  # 1 = unused, non-concurrent
-        )
+        # Local, non-concurrent providers (Ollama, llama.cpp) each still
+        # get their OWN batch-token-budget — sharing Ollama's would be
+        # fine by coincidence today (same conservative default value) but
+        # wrong in spirit, and would silently break if either default
+        # ever diverges.
+        _LOCAL_ENGINE_BATCH_BUDGETS = {
+            "ollama": self._settings.ollama_batch_token_budget,
+            "llamacpp": self._settings.llamacpp_batch_token_budget,
+        }
+        if active_provider.name in _CLOUD_ENGINE_SETTINGS:
+            batch_token_budget_override, concurrent_batch_window = _CLOUD_ENGINE_SETTINGS[
+                active_provider.name
+            ]
+        else:
+            batch_token_budget_override = _LOCAL_ENGINE_BATCH_BUDGETS.get(
+                active_provider.name, self._settings.ollama_batch_token_budget
+            )
+            concurrent_batch_window = 1  # unused for non-concurrent providers
 
         try:
             for i, entry in enumerate(ready_items):

@@ -21,6 +21,8 @@ PERSISTED_KEYS = (
     "ollama_model",
     "ollama_num_ctx",
     "ollama_batch_token_budget",
+    "llamacpp_base_url",
+    "llamacpp_batch_token_budget",
     "gemini_api_key",
     "gemini_model",
     "gemini_batch_token_budget",

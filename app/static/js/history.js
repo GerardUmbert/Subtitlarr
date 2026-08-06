@@ -58,6 +58,7 @@ createApp({
       expandedRunId: null,
       runItems: {}, // run_id -> items[], loaded lazily on expand
       loadingItemsForRunId: null,
+      errorModal: null, // the clicked item, or null when closed
     };
   },
   computed: {
@@ -105,6 +106,12 @@ createApp({
       } finally {
         this.loadingItemsForRunId = null;
       }
+    },
+    openErrorModal(item) {
+      this.errorModal = item;
+    },
+    closeErrorModal() {
+      this.errorModal = null;
     },
     prevPage() {
       if (this.page > 1) {
