@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     db_path: str = "/data/subtitlarr.db"
     run_concurrency: int = 1
     log_level: str = "INFO"
-    port: int = 8000
+    port: int = 7777
 
 
 settings = Settings()

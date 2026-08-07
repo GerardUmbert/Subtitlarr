@@ -115,14 +115,14 @@ consequences worth using deliberately:
 ```bash
 docker run -d \
   --name subtitlarr \
-  -p 8000:8000 \
+  -p 7777:7777 \
   -v ./data:/data \
   -e BAZARR_BASE_URL=http://<your-bazarr-host>:6767 \
   -e BAZARR_API_KEY=<your-bazarr-api-key> \
   ghcr.io/gerardumbert/subtitlarr:latest
 ```
 
-Open `http://localhost:8000`, then add at least one engine instance from the
+Open `http://localhost:7777`, then add at least one engine instance from the
 **Translation Engine** page before running a translation.
 
 ### Docker Compose (local dev, or if you don't already run Ollama)
@@ -132,7 +132,7 @@ cp .env.example .env   # fill in BAZARR_BASE_URL, BAZARR_API_KEY, etc.
 docker compose up -d
 ```
 
-This also starts an Ollama container. Then open `http://localhost:8000` and
+This also starts an Ollama container. Then open `http://localhost:7777` and
 add an Ollama engine instance pointing at `http://ollama:11434`.
 
 ### Unraid (or any Docker host with Bazarr/Ollama already running)
@@ -145,7 +145,10 @@ add an Ollama engine instance pointing at `http://ollama:11434`.
   variable below as a proper UI field.
 - **Manual container**: create a container from
   `ghcr.io/gerardumbert/subtitlarr:latest` with:
-  - **Port**: `8000` → your choice of host port
+  - **Port**: `7777` (container) → keep the host side matching `7777` too if
+    you use Unraid's built-in Tailscale integration (its Serve hook proxies
+    to the host-mapped port number, so a mismatched mapping breaks the
+    Tailscale hostname URL even though LAN access still works)
   - **Volume**: a host path (e.g. `/mnt/user/appdata/subtitlarr`) → `/data`
     (this is Subtitlarr's own database, *not* a media path)
   - **Network type**: `bridge` works for most setups. If Bazarr/Ollama are
@@ -185,8 +188,9 @@ entirely in the **Translation Engine** page — see above — not in this table.
 | `LOG_LEVEL` | Logging verbosity | `INFO` |
 
 `PORT` is accepted but currently has no effect — the container always
-listens on `8000` internally (map it to any host port you like via Docker's
-own port mapping).
+listens on `7777` internally (map it to any host port you like via Docker's
+own port mapping, though see the Unraid/Tailscale note above if that
+applies to you).
 
 **On `QUEUE_UPLOADS_ENABLED`**: if your Bazarr host (or its storage — e.g. a
 NAS array) spins down disks when idle, leave this `false` (upload

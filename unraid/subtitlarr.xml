@@ -22,7 +22,7 @@
   <DonateLink/>
   <Requires/>
 
-  <Config Name="WebUI Port" Target="8000" Default="7777" Mode="tcp" Description="Host port mapped to the container's internal port 8000 (the app always listens on 8000 inside the container — only the host-side mapping changes here)." Type="Port" Display="always" Required="true" Mask="false">7777</Config>
+  <Config Name="WebUI Port" Target="7777" Default="7777" Mode="tcp" Description="Host port mapped to the container's internal port 7777 — keep this matching 7777 on both sides. Unraid's built-in Tailscale hook auto-configures Serve to proxy to the HOST-mapped port number, so a mismatched mapping (e.g. a different host port than the container's actual internal port) breaks the Tailscale hostname URL even though local/LAN access still works fine." Type="Port" Display="always" Required="true" Mask="false">7777</Config>
 
   <Config Name="Data" Target="/data" Default="/mnt/user/appdata/subtitlarr" Mode="rw" Description="Subtitlarr's own SQLite database (queue, run history, settings, engine instances). NOT a media path — do not point this at your library." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/subtitlarr</Config>
 

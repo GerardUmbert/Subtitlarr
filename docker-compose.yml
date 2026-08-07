@@ -2,7 +2,7 @@ services:
   subtitlarr:
     build: .
     ports:
-      - "8000:8000"
+      - "7777:7777"
     environment:
       - BAZARR_BASE_URL=${BAZARR_BASE_URL}
       - BAZARR_API_KEY=${BAZARR_API_KEY}

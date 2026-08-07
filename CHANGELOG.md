@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.8.3]
+
+### Changed
+- **Default internal container port changed from 8000 to 7777**, and the
+  Unraid template's host-side default now matches it exactly (`7777:7777`
+  instead of `7777:8000`). Root cause: Unraid's built-in Tailscale
+  integration auto-configures `tailscale serve` to proxy to the
+  **host-mapped** port number, not the container's actual internal port —
+  a `7777:8000` mapping (custom LAN port, default internal port) left
+  Serve pointed at `localhost:7777` inside the container, where nothing
+  was listening, so the Tailscale hostname URL silently failed while
+  direct `:8000` access still worked. Keeping host and container ports
+  identical is what makes Unraid's Tailscale hook target the right port
+  automatically, matching how other Unraid-common images (e.g. Immich)
+  keep host/container ports matched for exactly this reason.
+- `.env.example`'s `PORT` value, `docker-compose.yml`'s port mapping, and
+  `app/config.py`'s `port` default all updated to `7777` to match.
+
 ## [0.8.2]
 
 ### Fixed
