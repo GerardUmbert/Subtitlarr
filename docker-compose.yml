@@ -14,6 +14,12 @@ services:
       - SYNC_MEDIA_CRON=${SYNC_MEDIA_CRON:-40 9 * * *}
       - SYNC_SUBS_CRON=${SYNC_SUBS_CRON:-40 9 * * *}
       - DB_PATH=/data/subtitlarr.db
+      # The container starts as root, chowns /data to PUID:PGID, then
+      # drops to that user before running the app — set these to match
+      # whatever owns ./data on THIS host if you hit permission errors
+      # (defaults to 1000:1000, the image's baked-in user).
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
     volumes:
       - ./data:/data
     restart: unless-stopped

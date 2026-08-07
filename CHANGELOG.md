@@ -3,6 +3,38 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.8.2]
+
+### Fixed
+- **Container failed to start on Unraid** (`sqlite3.OperationalError: unable
+  to open database file`, plus "Could not open /data/subtitlarr.log for
+  writing"): the image ran as a fixed non-root uid (1000) baked in at build
+  time, but a bind-mounted host `/data` folder's actual ownership comes
+  from the HOST, not the image — Unraid's default `nobody:users` (99:100,
+  or often root-owned freshly-created appdata folders) didn't match, so
+  the container had no write access to its own data directory at all.
+  Fixed with a `PUID`/`PGID` entrypoint (`docker-entrypoint.sh`), the same
+  pattern LinuxServer.io images use: the container now starts as root,
+  `chown`s `/data` to the requested `PUID:PGID` (defaults `1000:1000`,
+  Unraid template defaults `99:100`), then drops to that user via `gosu`
+  before ever running the app — the app process itself is still never
+  root. `docker-compose.yml` and `.env.example` also gained `PUID`/`PGID`.
+
+### Changed
+- Unraid template (`unraid/subtitlarr.xml`) trimmed down to only the two
+  fields that genuinely can't be set from the web UI — **WebUI Port** and
+  **Data** path (plus the new PUID/PGID) — since every other setting
+  (Bazarr connection, scheduling, limits, log level) is fully editable
+  from the Settings/Bazarr Connection pages after first start and was
+  just duplicating the UI in the container form, with real risk of
+  drifting out of sync with the app's actual defaults (as the sync-cron
+  fields already had).
+- Unraid template's default WebUI port changed to `7777` (host-side
+  mapping only — the app always listens on `8000` inside the container).
+- Bazarr Base URL/API Key are no longer marked required in the Unraid
+  form — they can be set from the Bazarr Connection page after first
+  start instead, same as every other setting.
+
 ## [0.8.1]
 
 ### Added

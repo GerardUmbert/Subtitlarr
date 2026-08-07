@@ -9,9 +9,9 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/GerardUmbert/Subtitlarr</Support>
   <Project>https://github.com/GerardUmbert/Subtitlarr</Project>
-  <Overview>Fills gaps in your Bazarr subtitle library by translating subtitles you already have (e.g. English) into languages you're missing (e.g. Spanish), using a local or cloud LLM. Never mounts your media folders — all reading and writing of subtitles happens through Bazarr's own REST API, so Bazarr remains the only thing with filesystem access to your library.&#13;&#10;&#13;&#10;Requires a running Bazarr instance (with its API key). After first start, add at least one translation engine instance (Ollama, llama.cpp, Gemini, NVIDIA NIM, OpenRouter, or Groq) from the Translation Engine page in the web UI — engines are no longer configured via environment variables.&#13;&#10;&#13;&#10;No media path needs to be mapped into this container — only the /data path below, which is Subtitlarr's own small SQLite database, not your library.</Overview>
+  <Overview>Fills gaps in your Bazarr subtitle library by translating subtitles you already have (e.g. English) into languages you're missing (e.g. Spanish), using a local or cloud LLM. Never mounts your media folders — all reading and writing of subtitles happens through Bazarr's own REST API, so Bazarr remains the only thing with filesystem access to your library.&#13;&#10;&#13;&#10;Everything except the port and data path below is configured from the web UI after first start — Bazarr connection, translation engines (Ollama, llama.cpp, Gemini, NVIDIA NIM, OpenRouter, Groq), scheduling, and all other settings persist in Subtitlarr's own database, not container environment variables.&#13;&#10;&#13;&#10;No media path needs to be mapped into this container — only the /data path below, which is Subtitlarr's own small SQLite database, not your library.</Overview>
   <Category>MediaApp:Other Tools:</Category>
-  <WebUI>http://[IP]:[PORT:8000]/</WebUI>
+  <WebUI>http://[IP]:[PORT:7777]/</WebUI>
   <TemplateURL/>
   <Icon>https://raw.githubusercontent.com/GerardUmbert/Subtitlarr/master/unraid/icon.png</Icon>
   <ExtraParams></ExtraParams>
@@ -22,20 +22,10 @@
   <DonateLink/>
   <Requires/>
 
-  <Config Name="WebUI Port" Target="8000" Default="8000" Mode="tcp" Description="Port the Subtitlarr web UI listens on inside the container." Type="Port" Display="always" Required="true" Mask="false">8000</Config>
+  <Config Name="WebUI Port" Target="8000" Default="7777" Mode="tcp" Description="Host port mapped to the container's internal port 8000 (the app always listens on 8000 inside the container — only the host-side mapping changes here)." Type="Port" Display="always" Required="true" Mask="false">7777</Config>
 
   <Config Name="Data" Target="/data" Default="/mnt/user/appdata/subtitlarr" Mode="rw" Description="Subtitlarr's own SQLite database (queue, run history, settings, engine instances). NOT a media path — do not point this at your library." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/subtitlarr</Config>
 
-  <Config Name="Bazarr Base URL" Target="BAZARR_BASE_URL" Default="" Mode="" Description="Bazarr's root URL, e.g. http://192.168.1.10:6767 (or the container name/IP if on the same custom Docker network)." Type="Variable" Display="always" Required="true" Mask="false"></Config>
-  <Config Name="Bazarr API Key" Target="BAZARR_API_KEY" Default="" Mode="" Description="Bazarr → Settings → General → API key." Type="Variable" Display="always" Required="true" Mask="true"></Config>
-
-  <Config Name="Schedule Cron" Target="SCHEDULE_CRON" Default="0 3 * * *" Mode="" Description="5-field cron expression for the main scheduled translation job." Type="Variable" Display="always" Required="false" Mask="false">0 3 * * *</Config>
-  <Config Name="Age Threshold (days)" Target="AGE_THRESHOLD_DAYS" Default="14" Mode="" Description="Days a subtitle must be missing before a scheduled run will translate it — gives Bazarr's own providers first chance to find a real subtitle." Type="Variable" Display="always" Required="false" Mask="false">14</Config>
-  <Config Name="Daily Translation Limit" Target="DAILY_TRANSLATION_LIMIT" Default="100" Mode="" Description="Max items translated per day by scheduled/full runs (0 = unlimited). Per-item re-runs always bypass this." Type="Variable" Display="advanced" Required="false" Mask="false">100</Config>
-  <Config Name="Pause Between Items (seconds)" Target="PAUSE_BETWEEN_ITEMS_SECONDS" Default="30" Mode="" Description="Brief rest between translations so the GPU isn't pegged non-stop for hours (0 = no pause)." Type="Variable" Display="advanced" Required="false" Mask="false">30</Config>
-  <Config Name="Queue Uploads" Target="QUEUE_UPLOADS_ENABLED" Default="false" Mode="" Description="If true, translated subtitles are held locally instead of uploaded immediately — push them all in one batch later from the Jobs page (useful if uploads wake a sleeping NAS)." Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
-  <Config Name="Sync Wanted/Missing Cron" Target="SYNC_MEDIA_CRON" Default="" Mode="" Description="Optional cron expression to auto-refresh Bazarr's wanted list. Leave blank for manual-only (triggered from the Jobs page)." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
-  <Config Name="Pull Pending Subtitles Cron" Target="SYNC_SUBS_CRON" Default="" Mode="" Description="Optional cron expression to auto pre-fetch source subtitle content into the local cache. Leave blank for manual-only." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
-
-  <Config Name="Log Level" Target="LOG_LEVEL" Default="INFO" Mode="" Description="Logging verbosity: DEBUG, INFO, WARNING, or ERROR." Type="Variable" Display="advanced" Required="false" Mask="false">INFO</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User ID the app runs as inside the container — must own (or have write access to) the Data path above. Unraid's default 'nobody' user is 99." Type="Variable" Display="advanced" Required="false" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group ID the app runs as inside the container. Unraid's default 'users' group is 100." Type="Variable" Display="advanced" Required="false" Mask="false">100</Config>
 </Container>
