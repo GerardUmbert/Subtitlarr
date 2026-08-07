@@ -206,10 +206,16 @@ nav { display: flex; flex-direction: column; gap: 2px; }
     border-bottom: 1px solid var(--border);
     /* Below this breakpoint the sidebar becomes a horizontal top bar
        (see base.css's own 980px override collapsing .shell to a single
-       column) — it should scroll away with the rest of the page like
-       any normal top bar, not stay pinned as its own 100vh-tall column. */
-    position: static;
+       column). Sticky, not static — a short top bar pinned to the top
+       of the viewport while the page scrolls under it, same as any
+       normal mobile app header; NOT the same thing as the old bug where
+       height: 100vh made the whole desktop-style column stick (that's
+       what height: auto below actually fixes — a short bar, not a
+       full-height one). */
+    position: sticky;
+    top: 0;
     height: auto;
+    z-index: 20;
   }
   .sidebar .brand { padding: 0; }
   .nav-toggle { display: flex; }
@@ -480,11 +486,24 @@ a.panel:hover {
 
 .engine-opt {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   padding: 6px 8px;
   border-radius: 8px;
   cursor: pointer;
+}
+.engine-opt .drag-handle,
+.engine-opt .engine-status,
+.engine-opt .expand-arrow {
+  /* .engine-opt is align-items: flex-start (not center) so the drag
+     handle sits at a predictable, fixed position — the top-left of the
+     card — regardless of how many lines .engine-info wraps to (name +
+     badges + meta can be 2-3 lines now that badges live in their own
+     row). flex-start alone would leave these three sitting flush with
+     the very top edge, though, which looks equally odd against a
+     SHORT single-line card — this nudge roughly centers them against
+     just the name line's own height instead. */
+  margin-top: 2px;
 }
 .engine-opt:hover { background: var(--surface-2); }
 
@@ -506,8 +525,21 @@ a.panel:hover {
 .engine-radio .fill { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
 
 .engine-info { flex: 1; min-width: 0; }
-.engine-name { font-weight: 600; font-size: 13.5px; display: flex; align-items: center; gap: 8px; }
-.engine-meta { font-size: 11.5px; color: var(--ink-faint); font-family: "IBM Plex Mono", monospace; margin-top: 1px; }
+.engine-name-row {
+  /* Name + badges share one row on desktop, where there's usually
+     plenty of horizontal room — only the mobile media query below
+     forces .engine-badges onto its own separate line, since that's
+     where a long name + 2 badges genuinely stops fitting on one line. */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.engine-name { font-weight: 600; font-size: 13.5px; }
+.engine-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.engine-badges:empty { display: none; }
+.engine-meta { font-size: 11.5px; color: var(--ink-faint); font-family: "IBM Plex Mono", monospace; margin-top: 3px; }
 
 .badge {
   font-size: 10px;
@@ -516,6 +548,7 @@ a.panel:hover {
   border-radius: 4px;
   font-weight: 600;
   letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 .badge-local { background: var(--good-soft); color: var(--good); }
 .badge-free { background: var(--good-soft); color: var(--good); }
@@ -680,7 +713,19 @@ a.panel:hover {
 .chip.active { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 
 .table-scroll { width: 100%; min-width: 0; overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+/* width: max-content, not 100%/min-width: 100% — with table-layout: auto
+   (the default), a percentage-based width still lets the browser shrink
+   columns down to fit THAT percentage before it ever considers actually
+   overflowing, so cell text kept wrapping badly on a narrow screen even
+   after switching width: 100% to min-width: 100% (confirmed live on
+   History's expanded run-detail table on a phone: "One / Outs", "episo
+   / de" wrapped mid-word regardless). max-content tells the browser to
+   size the table to its columns' natural, unwrapped widths — small on
+   a wide screen (no different from before), but on a narrow screen this
+   is what actually makes the table wider than its .table-scroll
+   container, which is what gives overflow-x: auto something real to
+   scroll to instead of squeezing columns to fit. */
+table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: 13px; }
 
 thead th {
   text-align: left;
@@ -897,8 +942,20 @@ th.sortable .sort-indicator {
   padding: 16px 20px;
   cursor: pointer;
 }
-.history-run-main { min-width: 0; }
+.history-run-main { min-width: 0; flex: 1; }
 .history-run-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.history-run-title .badge {
+  /* Unlike the Engines page's short static labels ("free tier"), this
+     badge holds a dynamically-built engine summary that can run long
+     (e.g. "Gemini Main gemini-3.1-flash-lite (+1 via Gemini Secondary
+     gemini-3.1-flash-lite)") — .badge's shared white-space: nowrap kept
+     it from ever wrapping or shrinking, so on a narrow screen it just
+     overflowed underneath .history-run-stats instead, visually
+     overlapping the files/ok/failed counts. Overridden back to normal
+     wrapping specifically for this badge. */
+  white-space: normal;
+  text-align: left;
+}
 .history-run-meta { font-size: 12px; color: var(--ink-faint); margin-top: 6px; font-family: "IBM Plex Mono", monospace; }
 .history-run-stats { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
 .history-stat { font-size: 12.5px; color: var(--ink-faint); white-space: nowrap; }
@@ -981,4 +1038,91 @@ th.sortable .sort-indicator {
   font-size: 12.5px;
   margin: 0;
   color: var(--ink);
+}
+
+/* ---------- Mobile responsive overrides ---------- */
+/* Kept in THIS file (not base.css), which loads AFTER base.css (see
+   base.html's <link> order) — with equal selector specificity, the
+   stylesheet that loads LAST always wins the cascade regardless of
+   which file's media query actually matches at the current viewport
+   width. Confirmed live: an earlier version of the .stats override
+   below lived in base.css and was silently beaten by THIS file's own
+   unrelated, non-media-queried 4-column .stats rule (line ~275) at
+   every phone width, since components.css loaded second. */
+@media (max-width: 980px) {
+  .shell,
+  .shell.sidebar-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+    /* Below this breakpoint .shell stacks into a single column — sidebar
+       row, then main row — and CSS Grid's default row sizing stretches
+       any leftover height onto that content, not just the LAST row.
+       min-height: 100vh (needed on desktop so a short page's sidebar
+       still reaches the bottom of the viewport) left a real gap of
+       empty space between the sidebar bar and main's actual content on
+       a short mobile page — confirmed live via DevTools: main's own box
+       was stretched far taller than its content needed. A mobile page
+       should just be as tall as its content and scroll normally. */
+    min-height: 0;
+  }
+  main { width: 100%; padding: 20px 16px 40px; }
+  .grid-2 { grid-template-columns: 1fr; }
+  .stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 520px) {
+  /* Real phone widths (not just tablet/narrow-desktop, the 980px
+     breakpoint above) — 2 stat cards per row is still cramped once each
+     card's own padding/label/number is accounted for at ~375-430px. */
+  .stats { grid-template-columns: 1fr; }
+  .page-head {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .panel-head {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  .progress-meta {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  .engine-opt .engine-info {
+    /* Still needs room to breathe against the status pills/arrow
+       siblings sharing the row, but no longer forced to its own full
+       line — a long instance name/model string wraps within itself
+       (min-width: 0 lets it shrink below its own text's natural width
+       instead of forcing the row wider than the viewport). */
+    min-width: 0;
+  }
+  .engine-status,
+  .expand-arrow {
+    flex-shrink: 0;
+  }
+  .engine-name-row {
+    /* On desktop, name + badges share one row (plenty of horizontal
+       room there) — on a phone-width screen, a long instance name plus
+       2 badges genuinely doesn't fit on one line, so badges are forced
+       onto their own row below the name instead of both fighting for
+       space on one cramped line. */
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+  }
+  .history-run-head {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  .history-run-stats {
+    /* flex-shrink: 0 (the base rule) is what's needed on a wide screen
+       so this block never gets squeezed illegibly thin — but combined
+       with .history-run-title's badge overflowing instead of wrapping
+       (now fixed above), it was also what forced this block to sit
+       pinned at a fixed width fighting for the same row as a title that
+       genuinely needs more room on a narrow screen. flex-basis: 100%
+       lets it drop to its own full-width row below the title via the
+       flex-wrap above once there isn't enough room, instead of both
+       blocks cramming onto one row. */
+    flex-basis: 100%;
+    justify-content: flex-end;
+  }
 }

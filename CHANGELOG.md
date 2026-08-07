@@ -3,6 +3,49 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.8.7]
+
+### Fixed
+- **Mobile/narrow-viewport layout**, across most pages — confirmed live
+  on a real phone via DevTools:
+  - Dashboard's stat-card grid, page header, Current-run title/Stop-
+    button row, and Rate/Failed/ETA row now wrap or drop to fewer
+    columns at real phone widths instead of squeezing 4 cards or a
+    fixed-width row into ~375-430px.
+  - Mobile's responsive `.stats`/`.shell`/`main`/`.grid-2` overrides
+    were living in `base.css`, which loads BEFORE `components.css` in
+    `base.html` — with equal selector specificity, the later-loading
+    stylesheet always wins regardless of which file's media query
+    actually matched, so `components.css`'s unconditional 4-column
+    `.stats` rule silently beat every mobile override at every width.
+    Moved into `components.css` instead, alongside the sidebar's
+    existing same-reasoning fix.
+  - `.shell`'s `min-height: 100vh` (needed on desktop) left a large
+    empty gap between the mobile top bar and page content on short
+    pages — confirmed via DevTools that `main`'s own box was stretched
+    far taller than its content, a side effect of CSS Grid's default
+    row-stretch behavior once `.shell` collapses to a single column.
+  - The mobile top bar is now `position: sticky` (was `static` —
+    scrolled away with the page).
+  - Any table wrapped in `.table-scroll` (Queue, History, Events) now
+    actually scrolls horizontally instead of squeezing every column to
+    fit and wrapping cell text mid-word — `table` needed `width:
+    max-content`, not `width: 100%`/`min-width: 100%`, since
+    `table-layout: auto` still shrinks columns to fit a percentage-based
+    width before ever considering real overflow.
+  - Engines page: each cascade row's name/badges/status/expand-arrow no
+    longer squeeze onto one unbreakable line — badges wrap as whole
+    units (previously wrapped mid-word, e.g. "recommend/ed"), and the
+    drag handle sits at a predictable position by the instance name
+    instead of centering against the row's full (and inconsistent)
+    wrapped height.
+  - History's collapsed run cards: a long dynamically-built engine-
+    summary badge (e.g. "Gemini Main gemini-3.1-flash-lite (+1 via
+    Gemini Secondary gemini-3.1-flash-lite)") overflowed underneath the
+    files/ok/failed stats instead of wrapping, visually overlapping
+    them — now wraps normally, and the stats block drops to its own row
+    below the title when there isn't room for both on one line.
+
 ## [0.8.6]
 
 ### Changed

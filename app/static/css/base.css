@@ -92,10 +92,13 @@ main {
 
 ::selection { background: var(--accent-soft); color: var(--accent); }
 
-@media (max-width: 980px) {
-  .shell,
-  .shell.sidebar-collapsed { grid-template-columns: minmax(0, 1fr); }
-  main { width: 100%; padding: 20px 16px 40px; }
-  .grid-2 { grid-template-columns: 1fr; }
-  .stats { grid-template-columns: repeat(2, 1fr); }
-}
+/* Mobile responsive overrides for THIS file's own rules (.shell, main,
+   .grid-2) are deliberately kept in components.css, not here — that
+   stylesheet loads AFTER base.css (see base.html's <link> order), and
+   with equal selector specificity the LATER stylesheet always wins the
+   cascade regardless of which file's media query actually matches.
+   Confirmed live: an earlier version of these overrides lived here and
+   was silently beaten by components.css's unrelated, non-media-queried
+   .stats rule (4-column grid) at every width, since components.css
+   loaded second. See components.css's own "Mobile responsive overrides"
+   section near the end of the file. */

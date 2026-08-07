@@ -47,11 +47,13 @@
         <div class="engine-opt" @click="toggleExpand(instance)">
           <span class="drag-handle" @click.stop @mousedown="dragEnabledId = instance.id">⠿</span>
           <div class="engine-info">
-            <div class="engine-name">
-              {% raw %}{{ editBuffers[instance.id].name }}{% endraw %}
-              <span class="badge" v-for="b in typeInfo(instance.provider_type).badges" :key="b"
-                    :class="b === 'recommended' ? '' : (b === 'local' ? 'badge-local' : (b === 'free tier' ? 'badge-free' : 'badge-paid'))"
-                    :style="b === 'recommended' ? 'background:#2f7d4f22;color:#2f7d4f;' : ''">{% raw %}{{ b }}{% endraw %}</span>
+            <div class="engine-name-row">
+              <div class="engine-name">{% raw %}{{ editBuffers[instance.id].name }}{% endraw %}</div>
+              <div class="engine-badges">
+                <span class="badge" v-for="b in typeInfo(instance.provider_type).badges" :key="b"
+                      :class="b === 'recommended' ? '' : (b === 'local' ? 'badge-local' : (b === 'free tier' ? 'badge-free' : 'badge-paid'))"
+                      :style="b === 'recommended' ? 'background:#2f7d4f22;color:#2f7d4f;' : ''">{% raw %}{{ b }}{% endraw %}</span>
+              </div>
             </div>
             <div class="engine-meta">{% raw %}{{ typeInfo(instance.provider_type).label }}{% endraw %} · {% raw %}{{ editBuffers[instance.id].config.model || editBuffers[instance.id].config.base_url || '' }}{% endraw %}</div>
           </div>
