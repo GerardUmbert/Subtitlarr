@@ -30,6 +30,17 @@ async def build_source_map(
     for sub in detail.subtitles:
         if not sub.path or sub.forced:
             continue
+        # Only .srt is supported — app/subtitles/srt_io.py's parser
+        # assumes SRT's index/timecode/text block structure and doesn't
+        # attempt to handle any other format. Confirmed live: Bazarr's own
+        # /api/subtitles/contents endpoint returned a 500 trying to serve
+        # an .ass file's content, so this is filtered out before ever
+        # being attempted as a translation source, not left to fail at
+        # fetch time. Same reasoning would apply to .ssa/.vtt/.sub/etc. —
+        # none of those are SRT-structured either, even if Bazarr happened
+        # to serve one successfully.
+        if not sub.path.lower().endswith(".srt"):
+            continue
         # Prefer a non-HI track over an HI one for the same language if
         # both exist; only keep the HI one if it's all we have for that code.
         existing = candidates.get(sub.code2)

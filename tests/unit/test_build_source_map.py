@@ -55,3 +55,31 @@ async def test_prefers_non_hi_over_hi_for_the_same_language():
     result = await build_source_map(client, "movie", 1)
     assert result["en"].hi is False
     assert result["en"].path == "/en.srt"
+
+
+@pytest.mark.asyncio
+async def test_excludes_ass_subtitles():
+    """Regression test: Bazarr's own /api/subtitles/contents endpoint
+    returned a real 500 trying to serve an .ass file's content — filtered
+    out here before ever being attempted as a translation source, since
+    srt_io.py's parser only understands .srt structure anyway."""
+    client = FakeClient([
+        SubtitleInfo(name="English", code2="en", code3="eng", forced=False, hi=False,
+                     path="/media/anime/One Outs - S01E24.ass", file_size=1,
+                     embedded_track_id=None),
+    ])
+    result = await build_source_map(client, "movie", 1)
+    assert result == {}
+
+
+@pytest.mark.asyncio
+async def test_falls_back_to_an_srt_track_when_an_ass_track_also_exists():
+    client = FakeClient([
+        SubtitleInfo(name="English", code2="en", code3="eng", forced=False, hi=False,
+                     path="/en.ass", file_size=1, embedded_track_id=None),
+        SubtitleInfo(name="Italian", code2="it", code3="ita", forced=False, hi=False,
+                     path="/it.srt", file_size=1, embedded_track_id=None),
+    ])
+    result = await build_source_map(client, "movie", 1)
+    assert "en" not in result
+    assert result["it"].path == "/it.srt"

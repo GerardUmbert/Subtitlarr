@@ -28,6 +28,14 @@ class NoSourceLanguageError(Exception):
     pass
 
 
+class RunCancelledError(Exception):
+    """Raised inside _translate_batches when cancel_check() reports the
+    run was stopped mid-item — unlike the old between-items-only cancel,
+    this can interrupt an item partway through its own batches. Caught by
+    translate_item and recorded as a distinct 'cancelled' outcome, not
+    lumped in with a genuine provider/translation failure."""
+
+
 async def resolve_source_language(
     existing_subtitle_paths: dict[str, str], source_priority: list[str]
 ) -> tuple[str, str]:
@@ -319,6 +327,7 @@ async def _translate_batches(
     run_id: int | None = None,
     concurrent_batch_window: int = NVIDIA_CONCURRENT_BATCH_WINDOW,
     on_call_result=None,
+    cancel_check=None,
 ) -> tuple[list, str, str]:
     """Runs all of an item's batches, sequentially unless the PRIMARY
     (cascade[0]) instance's provider_type is one of the cloud ones in
@@ -327,7 +336,15 @@ async def _translate_batches(
     possibly-customized .name, so a renamed "Gemini (main)" instance
     still gets concurrency). Returns (all translated subs in original
     order, engine_used, model_used — the last batch's engine/model wins if
-    a fallback occurred partway)."""
+    a fallback occurred partway).
+
+    cancel_check, if given, is called before EVERY batch (sequential path)
+    or before every WINDOW of batches (concurrent path — a window's
+    requests are already in flight together via asyncio.gather(), so
+    cancellation can't interrupt mid-window, only between them). Raises
+    RunCancelledError the moment it returns True, so a Stop click can
+    interrupt an item partway through its own batches, not just between
+    items."""
     translated_subs: list = []
     active_provider = cascade[0]
     engine_used = active_provider.name
@@ -336,6 +353,10 @@ async def _translate_batches(
 
     if active_provider.provider_type not in _CONCURRENT_PROVIDERS:
         for i, batch in enumerate(batches):
+            if cancel_check is not None and cancel_check():
+                raise RunCancelledError(
+                    f"Run cancelled after {i}/{batch_total} batch(es) for item {item_id}"
+                )
             batch_result, batch_engine, batch_model = await _translate_batch(
                 batch, source_lang, target_lang, cascade, item_id,
                 catalan_vegeta_insults, language_variants, retry_pause_seconds, run_id, i + 1, batch_total,
@@ -347,6 +368,10 @@ async def _translate_batches(
         return translated_subs, engine_used, model_used
 
     for window_start in range(0, len(batches), concurrent_batch_window):
+        if cancel_check is not None and cancel_check():
+            raise RunCancelledError(
+                f"Run cancelled after {window_start}/{batch_total} batch(es) for item {item_id}"
+            )
         window = batches[window_start : window_start + concurrent_batch_window]
         window_started = time.monotonic()
         results = await asyncio.gather(
@@ -413,6 +438,7 @@ async def translate_item(
     retry_pause_seconds: float = 0,
     concurrent_batch_window: int = NVIDIA_CONCURRENT_BATCH_WINDOW,
     on_call_result=None,
+    cancel_check=None,
 ) -> None:
     """Fetches the source subtitle (via Bazarr's API, or from a local
     scratch-cache file when cached_source_path is provided — see
@@ -472,7 +498,7 @@ async def translate_item(
         translated_subs, engine_used, model_used = await _translate_batches(
             batches, source_lang, target_lang, cascade, item_id,
             catalan_vegeta_insults, language_variants, retry_pause_seconds, run_id,
-            concurrent_batch_window, on_call_result,
+            concurrent_batch_window, on_call_result, cancel_check,
         )
         logger.info(
             "Item %d: all batches took %.2fs total (item started %.2fs ago)",
@@ -555,6 +581,25 @@ async def translate_item(
             engine_used=active_provider.name, model_used=active_provider.model,
             error_message=str(exc), error_detail=getattr(exc, "raw_detail", None),
             settings_snapshot=settings_snapshot,
+        )
+        if run_id is not None:
+            run_events.emit(run_id, item_id, 0, 0, "item_failed", str(exc))
+        raise
+    except RunCancelledError as exc:
+        # A partial translation exists in memory at this point but is
+        # deliberately discarded — reassembling/uploading a partially
+        # translated file would silently ship an incomplete subtitle.
+        # Marked 'failed' (not a new 'cancelled' status) so it surfaces on
+        # the Queue/History pages and is re-runnable exactly like any
+        # other failure, but with a message that makes clear this was a
+        # deliberate Stop, not a real translation problem.
+        repository.update_item_status(
+            conn, item_id, "failed", error_message=str(exc),
+        )
+        repository.log_item_attempt(
+            conn, item_id, run_id, "failed",
+            engine_used=active_provider.name, model_used=active_provider.model,
+            error_message=str(exc), settings_snapshot=settings_snapshot,
         )
         if run_id is not None:
             run_events.emit(run_id, item_id, 0, 0, "item_failed", str(exc))

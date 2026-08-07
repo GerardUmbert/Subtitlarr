@@ -3,6 +3,32 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.8.6]
+
+### Changed
+- **Stopping a run now interrupts an item mid-translation, not just
+  between items.** Previously, clicking Stop only took effect once the
+  currently in-flight item finished ALL of its batches — a large
+  multi-batch item could keep running for minutes after Stop was
+  clicked. `_translate_batches()` now takes a `cancel_check` callable,
+  polled before every batch (sequential engines) or before every window
+  of batches (concurrent engines — a window already in flight via
+  `asyncio.gather()` can't be interrupted mid-window, only between
+  them). A new `RunCancelledError` marks the interrupted item as
+  `failed` with a clear "cancelled" message — a partial translation is
+  never uploaded.
+
+### Fixed
+- **`.srt`-only source subtitle filtering**: `app/subtitles/srt_io.py`'s
+  parser only understands `.srt` structure, but `build_source_map()`
+  previously accepted any subtitle path Bazarr returned regardless of
+  extension. Confirmed live: Bazarr's own `/api/subtitles/contents`
+  endpoint 500'd trying to serve an `.ass` file's content. Non-`.srt`
+  source candidates (`.ass`, `.ssa`, `.vtt`, `.sub`, etc.) are now
+  filtered out before ever being attempted as a translation source,
+  falling back to another available language's `.srt` track if one
+  exists instead of failing the item outright.
+
 ## [0.8.5]
 
 ### Fixed

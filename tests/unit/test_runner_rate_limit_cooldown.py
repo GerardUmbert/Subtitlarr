@@ -276,3 +276,38 @@ async def test_cancel_current_stops_the_run_after_the_in_flight_item(conn, monke
 def test_cancel_current_returns_false_when_no_run_is_active(conn):
     controller = RunController(conn, lambda: object(), Settings())
     assert controller.cancel_current() is False
+
+
+@pytest.mark.asyncio
+async def test_cancel_mid_item_stops_the_run_without_starting_the_next_item(conn, monkeypatch):
+    """A Stop click arriving mid-item (simulated here by translate_item
+    itself raising RunCancelledError, which is what happens once
+    translator.py's cancel_check trips between batches) must count that
+    item as processed/failed, then stop the run — not treat it like an
+    ordinary per-item failure that moves on to the next item."""
+    from app.engine import translator as translator_module
+
+    engine_instances_repo.create_instance(
+        conn, name="gemini", provider_type="gemini", config={"api_key": "x", "model": "m"}
+    )
+    items = _seed_pending_items(conn, 5)
+    monkeypatch.setattr(runner_module.selector, "resolve_and_gate", _fake_resolve_and_gate)
+
+    controller = RunController(conn, lambda: object(), Settings(pause_between_items_seconds=0))
+
+    call_count = 0
+
+    async def fake_translate_item(conn, client, item, source_lang, source_path, cascade, run_id, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 2:
+            raise translator_module.RunCancelledError("cancelled mid-batch")
+
+    monkeypatch.setattr(runner_module.translator, "translate_item", fake_translate_item)
+
+    progress = await controller.run_batch(items, triggered_by="manual_full")
+
+    assert call_count == 2  # never reached items 3-5
+    assert progress.processed == 2
+    assert progress.failed == 1
+    assert progress.cancel_requested is False  # this test never actually called cancel_current()

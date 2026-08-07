@@ -463,3 +463,69 @@ async def test_repetition_loop_never_retries_the_same_cascade_position_twice():
         await _translate_batches(_repetition_loop_batch(), "en", "es", _cascade(provider), item_id=1)
 
     assert provider.attempts == 1  # never called again after the first failure
+
+
+@pytest.mark.asyncio
+async def test_cancel_check_stops_the_sequential_path_between_batches():
+    """A Stop click must be able to interrupt an item partway through its
+    own batches, not just between items — cancel_check() is polled before
+    EVERY batch on the sequential (non-concurrent-provider) path."""
+    from app.engine.translator import RunCancelledError
+
+    provider = TrackingProvider("ollama")  # not in _CONCURRENT_PROVIDERS
+    batches = _batches(5)
+
+    calls = 0
+
+    def cancel_after_two():
+        nonlocal calls
+        calls += 1
+        return calls > 2  # lets batches 1 and 2 through, stops before 3
+
+    with pytest.raises(RunCancelledError):
+        await _translate_batches(
+            batches, "en", "es", _cascade(provider), item_id=1, cancel_check=cancel_after_two,
+        )
+
+    assert provider.call_order == [1, 2]  # batch 3 never sent
+
+
+@pytest.mark.asyncio
+async def test_cancel_check_stops_the_concurrent_path_between_windows():
+    """Same guarantee on the windowed-concurrency path (NVIDIA/Gemini/etc)
+    — cancel_check() can't interrupt a window already in flight via
+    asyncio.gather(), but it IS polled before starting the next window."""
+    from app.engine.translator import RunCancelledError
+
+    provider = TrackingProvider("nvidia")  # IS in _CONCURRENT_PROVIDERS
+    batches = _batches(6)  # 2 windows at window size 3
+
+    calls = 0
+
+    def cancel_after_first_window():
+        nonlocal calls
+        calls += 1
+        return calls > 1  # lets window 1 through, stops before window 2
+
+    with pytest.raises(RunCancelledError):
+        await _translate_batches(
+            batches, "en", "es", _cascade(provider), item_id=1,
+            concurrent_batch_window=3, cancel_check=cancel_after_first_window,
+        )
+
+    assert sorted(provider.call_order) == [1, 2, 3]  # window 2 (batches 4-6) never sent
+
+
+@pytest.mark.asyncio
+async def test_no_cancel_check_means_no_cancellation_ever():
+    """cancel_check defaults to None — existing callers that don't pass it
+    (e.g. any test/caller written before this feature) must see no
+    behavior change at all."""
+    provider = TrackingProvider("ollama")
+    batches = _batches(3)
+
+    translated_subs, _, _ = await _translate_batches(
+        batches, "en", "es", _cascade(provider), item_id=1,
+    )
+
+    assert len(translated_subs) == 3

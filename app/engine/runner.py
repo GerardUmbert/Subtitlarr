@@ -48,13 +48,16 @@ class RunProgress:
     # very long run's memory doesn't grow unboundedly.
     _recent_completions: deque[float] = field(default_factory=lambda: deque(maxlen=20))
     # Set by RunController.cancel_current() (e.g. a "Stop" button on the
-    # Queue/Dashboard page). Checked BETWEEN items, never mid-item — an
-    # item already in the middle of translate_item() (a real in-flight LLM
-    # call, possibly mid-batch across several requests) always finishes or
-    # fails on its own terms first, so a cancel can't leave that one item's
-    # DB row in a half-written state. The remaining not-yet-started items
-    # are left untouched (still 'pending'/'queued'), not marked failed —
-    # cancelling is not a claim that they were tried and didn't work.
+    # Queue/Dashboard page). Checked BETWEEN items, and also BETWEEN
+    # BATCHES within the item currently translating (see translator.py's
+    # cancel_check param) — a Stop click no longer has to wait for a large
+    # multi-batch item to finish all its batches first. Whatever's already
+    # in flight when the check fires (a single translate() call already
+    # sent, or a whole concurrent window of them via asyncio.gather())
+    # still completes — only the NEXT batch/window is skipped. The item
+    # that was interrupted is marked 'failed' (a partial translation is
+    # never uploaded), and every remaining not-yet-started item is left
+    # untouched (still 'pending'/'queued').
     cancel_requested: bool = False
 
     def record_completion(self) -> None:
@@ -249,9 +252,27 @@ class RunController:
                         retry_pause_seconds=pause_seconds,
                         concurrent_batch_window=concurrent_batch_window,
                         on_call_result=_on_call_result_for(name_to_instance_id),
+                        cancel_check=lambda: progress.cancel_requested,
                     )
+                except translator.RunCancelledError:
+                    # Cancelled partway through THIS item's own batches
+                    # (not just between items) — the item is already
+                    # marked 'failed' by translate_item itself. Counts
+                    # toward processed/failed like any other outcome, then
+                    # the run stops here rather than moving on to the next
+                    # item, same as a between-items cancel already did.
+                    progress.failed += 1
+                    progress.processed += 1
+                    progress.record_completion()
+                    logger.info(
+                        "Run %s cancelled mid-item (item %s) — %d item(s) left untouched",
+                        run_id, item_id, len(ready_items) - i - 1,
+                    )
+                    break
                 except Exception:  # noqa: BLE001 - one item's failure must not abort the batch
                     progress.failed += 1
+                    progress.processed += 1
+                    progress.record_completion()
                     logger.exception("Translation failed for item %s", item_id)
                 else:
                     # Only clean up the cached source on SUCCESS — a failed
@@ -260,7 +281,6 @@ class RunController:
                     # can be investigated against the exact source that
                     # caused it.
                     prefetch.cleanup_scratch_file(cached_path)
-                finally:
                     progress.processed += 1
                     progress.record_completion()
                 # A short rest between items so a long batch doesn't peg the
