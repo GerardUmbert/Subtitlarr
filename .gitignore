@@ -9,3 +9,5 @@ ollama-data/
 *.db
 .pytest_cache/
 node_modules/
+plans/
+TODO.md

@@ -4,12 +4,49 @@ source picked over an embedded-only English track for "Georgie & Mandy's
 First Marriage") without needing to hand the Bazarr API key to anyone
 inspecting the issue. Safe to delete once the investigation is done."""
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 
 from app import state
 from app.bazarr.client import BazarrClient
+from app.db import engine_instances_repo
 
 router = APIRouter(prefix="/api/debug", tags=["debug"])
+
+
+@router.get("/gemini/{instance_id}/models")
+async def list_gemini_models(
+    instance_id: int, filter: str | None = None, conn=Depends(state.get_conn)
+):
+    """Lists the real model IDs Google's Gemini API exposes for the given
+    instance's already-saved API key — the AI Studio dashboard shows
+    friendly display names ("Gemma 4 26B") that don't map 1:1 to the
+    actual API model string, so this hits Google's own ListModels
+    endpoint directly instead of guessing. `filter` (optional,
+    case-insensitive substring) narrows the result — e.g. filter=gemma.
+    Reads the key server-side; never echoes it back. Safe to delete once
+    no longer needed."""
+    instance = engine_instances_repo.get_instance(conn, instance_id)
+    if instance is None or instance["provider_type"] != "gemini":
+        raise HTTPException(status_code=404, detail="Gemini instance not found")
+    api_key = instance["config"].get("api_key")
+    if not api_key:
+        raise HTTPException(status_code=400, detail="This instance has no API key saved")
+
+    async with httpx.AsyncClient(
+        base_url="https://generativelanguage.googleapis.com/v1beta",
+        headers={"x-goog-api-key": api_key},
+        timeout=30.0,
+    ) as client:
+        resp = await client.get("/models")
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"Gemini API error: {resp.text}")
+
+    models = resp.json().get("models", [])
+    names = [m["name"].removeprefix("models/") for m in models]
+    if filter:
+        names = [n for n in names if filter.lower() in n.lower()]
+    return {"count": len(names), "models": sorted(names)}
 
 
 @router.get("/episode/{sonarr_episode_id}/detail")
