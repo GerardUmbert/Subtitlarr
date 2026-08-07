@@ -62,6 +62,8 @@ createApp({
       pageSize: 20,
       statusFilter: "",
       typeFilter: "",
+      modelFilter: "",
+      availableModels: [],
       searchInput: "",
       search: "",
       runningItemId: null,
@@ -99,6 +101,7 @@ createApp({
     const params = new URLSearchParams(window.location.search);
     if (params.has("status")) this.statusFilter = params.get("status");
     if (params.has("item_type")) this.typeFilter = params.get("item_type");
+    if (params.has("model")) this.modelFilter = params.get("model");
     if (params.has("search")) {
       this.search = params.get("search");
       this.searchInput = this.search;
@@ -118,6 +121,15 @@ createApp({
     },
     displayedItems() {
       return this.currentBatchOnly ? this.currentRunItems : this.items;
+    },
+    showModelColumn() {
+      // Done/pending-upload items never carry an error — showing the Error
+      // column there is always an empty dash. Model is the useful column
+      // instead: which engine/model actually produced this translation, so
+      // items translated by a weaker fallback model (e.g. gemini-3.1 subbing
+      // in for gemini-3.5) can be found and re-run once the primary is
+      // available again.
+      return this.statusFilter === "done" || this.statusFilter === "translated_pending_upload";
     },
   },
   methods: {
@@ -140,6 +152,13 @@ createApp({
     setTypeFilter(value) {
       this.currentBatchOnly = false;
       this.typeFilter = value;
+      this.page = 1;
+      this.syncUrl();
+      this.refresh();
+    },
+    setModelFilter(value) {
+      this.currentBatchOnly = false;
+      this.modelFilter = value;
       this.page = 1;
       this.syncUrl();
       this.refresh();
@@ -195,6 +214,7 @@ createApp({
       const params = new URLSearchParams();
       if (this.statusFilter) params.set("status", this.statusFilter);
       if (this.typeFilter) params.set("item_type", this.typeFilter);
+      if (this.modelFilter) params.set("model", this.modelFilter);
       if (this.search) params.set("search", this.search);
       if (this.page > 1) params.set("page", String(this.page));
       if (this.currentBatchOnly) params.set("batch", "1");
@@ -216,6 +236,7 @@ createApp({
       const params = {};
       if (this.statusFilter) params.status = this.statusFilter;
       if (this.typeFilter) params.item_type = this.typeFilter;
+      if (this.modelFilter) params.model = this.modelFilter;
       if (this.search) params.search = this.search;
       return params;
     },
@@ -336,6 +357,12 @@ createApp({
     this.pageLoading = false;
     this.schedulePoll();
     document.addEventListener("visibilitychange", this.onVisibilityChange);
+    try {
+      const result = await Api.getUsedModels();
+      this.availableModels = result.models;
+    } catch (_) {
+      // model filter chips just won't populate — not worth blocking the page over
+    }
   },
   unmounted() {
     if (this._pollHandle) clearTimeout(this._pollHandle);

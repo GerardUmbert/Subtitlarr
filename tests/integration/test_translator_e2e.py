@@ -86,6 +86,7 @@ class FakeBazarrClient:
 class FakeProvider(TranslationProvider):
     name = "fake"
     provider_type = "fake"
+    model = "test-model"
 
     def __init__(self):
         self.received_catalan_vegeta_insults: list[bool] = []
@@ -219,6 +220,7 @@ async def test_failed_translation_still_logs_engine_used(conn, monkeypatch):
     class AlwaysFailsProvider(TranslationProvider):
         name = "fake-failing"
         provider_type = "fake-failing"
+        model = "test-model"
 
         async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
             # Garbage response the reconciler can't align to any cue —
@@ -451,6 +453,7 @@ class EchoProvider(TranslationProvider):
 
     name = "echo"
     provider_type = "echo"
+    model = "test-model"
 
     async def translate(
         self, dialogue_text: str, source_lang: str, target_lang: str,

@@ -38,6 +38,7 @@ class TrackingProvider(TranslationProvider):
     def __init__(self, name: str, delays: dict[int, float] | None = None):
         self.name = name
         self.provider_type = name
+        self.model = "test-model"
         self._delays = delays or {}
         self.in_flight = 0
         self.max_in_flight = 0
@@ -113,7 +114,7 @@ async def test_concurrent_batches_preserve_original_order_despite_out_of_order_c
     provider = TrackingProvider("nvidia", delays={1: 0.15, 2: 0.05, 3: 0.03, 4: 0.01})
     batches = _batches(4)
 
-    translated_subs, engine_used = await _translate_batches(
+    translated_subs, engine_used, model_used = await _translate_batches(
         batches, "en", "es", _cascade(provider), item_id=1
     )
 
@@ -132,7 +133,7 @@ async def test_nvidia_windows_dont_exceed_batch_count_for_small_items():
     provider = TrackingProvider("nvidia")
     batches = _batches(1)
 
-    translated_subs, _ = await _translate_batches(batches, "en", "es", _cascade(provider), item_id=1)
+    translated_subs, _, _ = await _translate_batches(batches, "en", "es", _cascade(provider), item_id=1)
 
     assert len(translated_subs) == 1
     assert provider.call_order == [1]
@@ -148,6 +149,7 @@ async def test_nvidia_falls_back_per_batch_on_rate_limit_within_a_window():
     class FlakyProvider(TranslationProvider):
         name = "nvidia"
         provider_type = "nvidia"
+        model = "test-model"
 
         async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
             index = int(dialogue_text.split("\n", 1)[0])
@@ -161,7 +163,7 @@ async def test_nvidia_falls_back_per_batch_on_rate_limit_within_a_window():
     fallback = TrackingProvider("gemini")
     batches = _batches(4)
 
-    translated_subs, engine_used = await _translate_batches(
+    translated_subs, engine_used, model_used = await _translate_batches(
         batches, "en", "es", _cascade(FlakyProvider(), fallback), item_id=1
     )
 
@@ -180,6 +182,7 @@ async def test_transient_failure_retries_same_provider_before_falling_back():
     class FailsOnceProvider(TranslationProvider):
         name = "nvidia"
         provider_type = "nvidia"
+        model = "test-model"
 
         def __init__(self):
             self.attempts: list[int] = []
@@ -198,7 +201,7 @@ async def test_transient_failure_retries_same_provider_before_falling_back():
     fallback = TrackingProvider("gemini")
     batches = _batches(4)
 
-    translated_subs, engine_used = await _translate_batches(
+    translated_subs, engine_used, model_used = await _translate_batches(
         batches, "en", "es", _cascade(provider, fallback), item_id=1
     )
 
@@ -221,6 +224,7 @@ async def test_retry_and_fallback_emit_run_events():
     class RecoversOnRetryProvider(TranslationProvider):
         name = "nvidia"
         provider_type = "nvidia"
+        model = "test-model"
 
         def __init__(self):
             self.attempts: list[int] = []
@@ -238,6 +242,7 @@ async def test_retry_and_fallback_emit_run_events():
     class AlwaysFailsProvider(TranslationProvider):
         name = "nvidia"
         provider_type = "nvidia"
+        model = "test-model"
 
         async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
             raise ProviderRateLimitedError("simulated persistent 504")
@@ -285,6 +290,7 @@ async def test_content_blocked_falls_back_immediately_without_same_provider_retr
     class AlwaysBlocksProvider(TranslationProvider):
         name = "gemini"
         provider_type = "gemini"
+        model = "test-model"
 
         def __init__(self):
             self.attempts: list[int] = []
@@ -301,7 +307,7 @@ async def test_content_blocked_falls_back_immediately_without_same_provider_retr
     fallback = TrackingProvider("nvidia")
     batches = _batches(1)
 
-    translated_subs, engine_used = await _translate_batches(
+    translated_subs, engine_used, model_used = await _translate_batches(
         batches, "en", "es", _cascade(provider, fallback), item_id=1
     )
 
@@ -321,6 +327,7 @@ async def test_content_blocked_reraises_when_no_fallback_configured():
     class AlwaysBlocksProvider(TranslationProvider):
         name = "gemini"
         provider_type = "gemini"
+        model = "test-model"
 
         async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
             raise ProviderContentBlockedError("blocked: PROHIBITED_CONTENT")
@@ -348,6 +355,7 @@ class RepetitionLoopProvider(TranslationProvider):
     def __init__(self, name: str):
         self.name = name
         self.provider_type = name
+        self.model = "test-model"
         self.attempts = 0
 
     async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
@@ -366,6 +374,7 @@ class GoodTranslationProvider(TranslationProvider):
     def __init__(self, name: str):
         self.name = name
         self.provider_type = name
+        self.model = "test-model"
         self.attempts = 0
         self.call_order: list[int] = []
 
@@ -391,7 +400,7 @@ async def test_repetition_loop_falls_back_to_a_different_provider():
     provider = RepetitionLoopProvider("gemini")
     fallback = GoodTranslationProvider("nvidia")
 
-    translated_subs, engine_used = await _translate_batches(
+    translated_subs, engine_used, model_used = await _translate_batches(
         _repetition_loop_batch(), "en", "es", _cascade(provider, fallback), item_id=1
     )
 
@@ -430,7 +439,7 @@ async def test_repetition_loop_falls_back_to_a_same_named_but_distinct_cascade_i
     provider = RepetitionLoopProvider("gemini")
     fallback = GoodTranslationProvider("gemini")  # same name, different (healthy) instance
 
-    translated_subs, engine_used = await _translate_batches(
+    translated_subs, engine_used, model_used = await _translate_batches(
         _repetition_loop_batch(), "en", "es", _cascade(provider, fallback), item_id=1
     )
 

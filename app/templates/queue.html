@@ -28,6 +28,12 @@
       <input v-model="searchInput" @input="onSearchInput" placeholder="Search by title…"
              style="margin-left:auto; max-width:220px; padding:5px 11px; border-radius:99px; border:1px solid var(--border); background:var(--surface); font-size:12px; color:var(--ink);" />
     </div>
+    <div class="queue-toolbar" v-if="showModelColumn && availableModels.length">
+      <span :class="['chip', { active: !modelFilter }]" @click="setModelFilter('')">All models</span>
+      <span v-for="m in availableModels" :key="m"
+            :class="['chip', { active: modelFilter === m }]"
+            @click="setModelFilter(m)">{% raw %}{{ m }}{% endraw %}</span>
+    </div>
     <div class="queue-toolbar">
       <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink); cursor:pointer;">
         <input type="checkbox" v-model="excludeNoSource" @change="onExcludeNoSourceChange" />
@@ -48,7 +54,8 @@
             <th class="sortable" @click="setSort('status')">Status <span class="sort-indicator">{% raw %}{{ sortIndicator('status') }}{% endraw %}</span></th>
             <th class="sortable" @click="setSort('updated')">Updated <span class="sort-indicator">{% raw %}{{ sortIndicator('updated') }}{% endraw %}</span></th>
             <th>Duration</th>
-            <th>Error</th>
+            <th v-if="showModelColumn">Model</th>
+            <th v-else>Error</th>
             <th></th>
           </tr>
         </thead>
@@ -69,7 +76,8 @@
             <td><span :class="'status-pill status-' + item.status"><span class="dot"></span>{% raw %}{{ statusLabel(item.status) }}{% endraw %}</span></td>
             <td class="row-time">{% raw %}{{ timeAgo(item.last_updated) }}{% endraw %}</td>
             <td class="row-time">{% raw %}{{ duration(item) }}{% endraw %}</td>
-            <td
+            <td v-if="showModelColumn" class="row-time">{% raw %}{{ item.model_used || '—' }}{% endraw %}</td>
+            <td v-else
               :class="item.error_message ? 'row-time error-cell' : 'row-time'"
               :title="item.error_message ? 'Click for full error' : ''"
               @click="item.error_message && openErrorModal(item)"

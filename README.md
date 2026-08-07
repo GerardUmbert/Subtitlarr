@@ -69,6 +69,39 @@ entirely in Subtitlarr's own database — there's no environment variable for
 engine setup anymore. The provider interface is written so more engines can
 be added later without changes to the rest of the app.
 
+### Recommended cascade
+
+Google's Gemini free tier gives each *model* its own separate 500-requests/day
+quota, and that quota is tied to the API key (i.e. the Google account), not
+to Subtitlarr — and those two things (2 models × 2 accounts) stack. Two
+consequences worth using deliberately:
+
+- Two Gemini API keys from two different Google accounts, each added as
+  **two** instances (one per fast free-tier model), for **4 instances
+  total** — 2000 requests/day combined instead of 500:
+  1. **"Gemini Main"** — key from account A, model **`gemini-3.5-flash-lite`**
+  2. **"Gemini Main gemini-3.1-flash-lite"** — key from account A, model
+     **`gemini-3.1-flash-lite`**
+  3. **"Gemini Secondary"** — key from account B, model
+     **`gemini-3.5-flash-lite`**
+  4. **"Gemini Secondary gemini-3.1-flash-lite"** — key from account B,
+     model **`gemini-3.1-flash-lite`**
+
+  Order them in the cascade so both of account A's models are tried before
+  falling to account B — the cascade only spends an instance's quota once
+  everything ahead of it is exhausted or rate-limited.
+- Put your fastest, most reliable free-tier Gemini model(s) at the top of
+  the cascade, add a **separator** right after them, and leave your local
+  engines (Ollama, llama.cpp) below the separator, disabled from automatic
+  fallback. This keeps a scheduled run from silently burning hours of local
+  GPU/CPU time as a fallback for what's usually just temporary cloud
+  rate-limiting — instead, once every Gemini instance above the separator
+  is exhausted for the day, the run stops with the remaining items still
+  `pending`, and you can pick up the leftovers with a manual run against a
+  local engine (or just wait for tomorrow's quota reset).
+- See [`docs/api-keys-setup.md`](docs/api-keys-setup.md) for exact steps to
+  get Gemini/NVIDIA keys and the token budgets to set per engine.
+
 ## Requirements
 
 - A running Bazarr instance and its API key (Bazarr → Settings → General).
@@ -144,7 +177,7 @@ entirely in the **Translation Engine** page — see above — not in this table.
 | `AGE_THRESHOLD_DAYS` | Days a subtitle must be missing before a scheduled run will translate it | `14` |
 | `DAILY_TRANSLATION_LIMIT` | Max items translated per day by scheduled/full runs (0 = unlimited); per-item re-runs bypass this | `100` |
 | `PAUSE_BETWEEN_ITEMS_SECONDS` | Rest between translations so the GPU isn't pegged non-stop | `30` |
-| `QUEUE_UPLOADS_ENABLED` | Hold translated subtitles locally instead of uploading immediately — push them all later in one batch from the Jobs page | `false` |
+| `QUEUE_UPLOADS_ENABLED` | Hold translated subtitles locally instead of uploading immediately — push them all later in one batch from the Jobs page (see note below) | `false` |
 | `SYNC_MEDIA_CRON` | Optional cron to auto-refresh Bazarr's wanted list; blank = manual only | *(blank)* |
 | `SYNC_SUBS_CRON` | Optional cron to auto pre-fetch source subtitle content; blank = manual only | *(blank)* |
 | `DB_PATH` | SQLite file path inside the container | `/data/subtitlarr.db` |
@@ -155,10 +188,28 @@ entirely in the **Translation Engine** page — see above — not in this table.
 listens on `8000` internally (map it to any host port you like via Docker's
 own port mapping).
 
+**On `QUEUE_UPLOADS_ENABLED`**: if your Bazarr host (or its storage — e.g. a
+NAS array) spins down disks when idle, leave this `false` (upload
+immediately) only if the disks are already awake for other reasons, or set
+it `true` and push the queued batch manually from the Jobs page once you're
+ready — that way a scheduled overnight run doesn't wake sleeping disks once
+per item. If your disks never spin down anyway, it doesn't matter either
+way — leave it `false` for simplicity.
+
 Source-language priority (e.g. prefer English, then Italian) and the set of
 managed target languages are configured from the **Language Rules** page in
 the UI, not as environment variables — they're structured lists that persist
-in Subtitlarr's own database.
+in Subtitlarr's own database. That page also has two translation-style
+toggles worth knowing about:
+
+- **European Spanish** — on by default, and only affects the `es` target
+  language. Steers the LLM toward Spain Spanish phrasing/vocabulary instead
+  of a generic or Latin American register.
+- **Catalan Vegeta insults** — only affects the `ca` (Catalan) target
+  language. Off by default; when enabled, insults/put-downs in the source
+  dialogue are translated in the flavor of Vegeta's iconic Catalan dub
+  (proud, colorful, larger-than-life), not literally. Has no effect on any
+  other target language.
 
 ## Development
 

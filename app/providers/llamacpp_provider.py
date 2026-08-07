@@ -75,6 +75,7 @@ class LlamaCppProvider(TranslationProvider):
             self.name = instance_name
         self._base_url = base_url.rstrip("/")
         self._model = model
+        self.model = model or "(server default)"
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else None
         self._client = httpx.AsyncClient(base_url=self._base_url, timeout=timeout, headers=headers)
 

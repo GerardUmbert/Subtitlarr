@@ -115,7 +115,8 @@ def get_filtered_translatable_queue(
     status: str | None = None,
     item_type: str | None = None,
     search: str | None = None,
+    model: str | None = None,
 ) -> list[sqlite3.Row]:
     return repository.get_translatable_queue_filtered(
-        conn, status=status, item_type=item_type, search=search
+        conn, status=status, item_type=item_type, search=search, model=model
     )

@@ -167,9 +167,9 @@ async def _translate_batch(
     batch_index: int = 1,
     batch_total: int = 1,
     on_call_result=None,
-) -> tuple[list, str]:
+) -> tuple[list, str, str]:
     """Translates and reconciles ONE batch of cues, walking the cascade on
-    failure. Returns (reassembled_subs_for_this_batch, engine_used).
+    failure. Returns (reassembled_subs_for_this_batch, engine_used, model_used).
 
     cascade[0] is the primary/active instance; cascade[1:] are fallback
     candidates, in order — a run's caller builds this fresh per item from
@@ -193,6 +193,7 @@ async def _translate_batch(
     dialogue_text = srt_io.extract_dialogue_text(batch)
     active_provider = cascade[0]
     engine_used = active_provider.name
+    model_used = active_provider.model
     engine_index = 0
 
     try:
@@ -238,6 +239,7 @@ async def _translate_batch(
                 retry_pause_seconds, run_id, retry_exc, on_call_result,
             )
             engine_used = cascade[engine_index].name
+            model_used = cascade[engine_index].model
     except ProviderContentBlockedError as blocked_exc:
         # No same-instance retry here — unlike ProviderRateLimitedError,
         # retrying the SAME instance on a content-policy block would just
@@ -255,9 +257,10 @@ async def _translate_batch(
             retry_pause_seconds, run_id, blocked_exc, on_call_result,
         )
         engine_used = cascade[engine_index].name
+        model_used = cascade[engine_index].model
 
     try:
-        return reassemble(batch, llm_response), engine_used
+        return reassemble(batch, llm_response), engine_used, model_used
     except (TranslationAlignmentError, TranslationIntegrityError) as exc:
         # A repetition loop or otherwise-unreliable response is a property
         # of THIS provider's output, not a request-level failure the
@@ -279,7 +282,8 @@ async def _translate_batch(
             retry_pause_seconds, run_id, exc, on_call_result,
         )
         engine_used = cascade[engine_index].name
-        return reassemble(batch, llm_response), engine_used
+        model_used = cascade[engine_index].model
+        return reassemble(batch, llm_response), engine_used, model_used
 
 
 # Cloud-provider-only (NVIDIA, OpenRouter, Groq, Gemini): their endpoints
@@ -315,30 +319,32 @@ async def _translate_batches(
     run_id: int | None = None,
     concurrent_batch_window: int = NVIDIA_CONCURRENT_BATCH_WINDOW,
     on_call_result=None,
-) -> tuple[list, str]:
+) -> tuple[list, str, str]:
     """Runs all of an item's batches, sequentially unless the PRIMARY
     (cascade[0]) instance's provider_type is one of the cloud ones in
     _CONCURRENT_PROVIDERS (windowed concurrency there — see
     NVIDIA_CONCURRENT_BATCH_WINDOW; keyed off provider_type, not the
     possibly-customized .name, so a renamed "Gemini (main)" instance
     still gets concurrency). Returns (all translated subs in original
-    order, engine_used — the last batch's engine wins if a fallback
-    occurred partway)."""
+    order, engine_used, model_used — the last batch's engine/model wins if
+    a fallback occurred partway)."""
     translated_subs: list = []
     active_provider = cascade[0]
     engine_used = active_provider.name
+    model_used = active_provider.model
     batch_total = len(batches)
 
     if active_provider.provider_type not in _CONCURRENT_PROVIDERS:
         for i, batch in enumerate(batches):
-            batch_result, batch_engine = await _translate_batch(
+            batch_result, batch_engine, batch_model = await _translate_batch(
                 batch, source_lang, target_lang, cascade, item_id,
                 catalan_vegeta_insults, european_spanish, retry_pause_seconds, run_id, i + 1, batch_total,
                 on_call_result,
             )
             translated_subs.extend(batch_result)
             engine_used = batch_engine
-        return translated_subs, engine_used
+            model_used = batch_model
+        return translated_subs, engine_used, model_used
 
     for window_start in range(0, len(batches), concurrent_batch_window):
         window = batches[window_start : window_start + concurrent_batch_window]
@@ -358,10 +364,11 @@ async def _translate_batches(
             item_id, active_provider.name, len(window), window_start + 1,
             time.monotonic() - window_started,
         )
-        for batch_result, batch_engine in results:  # gather() preserves input order
+        for batch_result, batch_engine, batch_model in results:  # gather() preserves input order
             translated_subs.extend(batch_result)
             engine_used = batch_engine
-    return translated_subs, engine_used
+            model_used = batch_model
+    return translated_subs, engine_used, model_used
 
 
 def _batch_token_budget(num_ctx: int, override: int = 0) -> int:
@@ -462,7 +469,7 @@ async def translate_item(
         catalan_vegeta_insults = repository.get_config(conn, "catalan_vegeta_insults", default=False)
         european_spanish = repository.get_config(conn, "european_spanish", default=True)
         translate_started = time.monotonic()
-        translated_subs, engine_used = await _translate_batches(
+        translated_subs, engine_used, model_used = await _translate_batches(
             batches, source_lang, target_lang, cascade, item_id,
             catalan_vegeta_insults, european_spanish, retry_pause_seconds, run_id,
             concurrent_batch_window, on_call_result,
@@ -496,7 +503,8 @@ async def translate_item(
             upload_queue.save_pending_upload(upload_queue.DEFAULT_QUEUE_ROOT, item_id, srt_bytes)
             repository.update_item_status(
                 conn, item_id, "translated_pending_upload",
-                source_language=source_lang, engine_used=engine_used, mark_completed=True,
+                source_language=source_lang, engine_used=engine_used, model_used=model_used,
+                mark_completed=True,
             )
         else:
             if item["item_type"] == "episode":
@@ -515,11 +523,12 @@ async def translate_item(
 
             repository.update_item_status(
                 conn, item_id, "done",
-                source_language=source_lang, engine_used=engine_used, mark_completed=True,
+                source_language=source_lang, engine_used=engine_used, model_used=model_used,
+                mark_completed=True,
             )
         repository.log_item_attempt(
             conn, item_id, run_id, "done",
-            engine_used=engine_used, settings_snapshot=settings_snapshot,
+            engine_used=engine_used, model_used=model_used, settings_snapshot=settings_snapshot,
         )
 
     except (
@@ -543,7 +552,7 @@ async def translate_item(
         )
         repository.log_item_attempt(
             conn, item_id, run_id, "failed",
-            engine_used=active_provider.name,
+            engine_used=active_provider.name, model_used=active_provider.model,
             error_message=str(exc), error_detail=getattr(exc, "raw_detail", None),
             settings_snapshot=settings_snapshot,
         )
@@ -557,7 +566,7 @@ async def translate_item(
         )
         repository.log_item_attempt(
             conn, item_id, run_id, "failed",
-            engine_used=active_provider.name,
+            engine_used=active_provider.name, model_used=active_provider.model,
             error_message=str(exc), error_detail=getattr(exc, "raw_detail", None),
             settings_snapshot=settings_snapshot,
         )

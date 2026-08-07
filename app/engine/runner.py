@@ -345,14 +345,20 @@ class RunController:
         return await self.run_batch(items, triggered_by="manual_filtered", enforce_daily_limit=False)
 
     async def run_filtered(
-        self, status: str | None, item_type: str | None, search: str | None
+        self,
+        status: str | None,
+        item_type: str | None,
+        search: str | None,
+        model: str | None = None,
     ) -> RunProgress:
         """Runs every translatable item matching the given Queue-page filter
-        (status/type/search) — e.g. 'all TV episodes', 'everything matching
-        a title search'. Respects the normal daily cap/age gate like a
-        scheduled run, since a large filtered set shouldn't bypass the
-        GPU-load protections just because it was chosen explicitly."""
+        (status/type/search/model) — e.g. 'all TV episodes', 'everything
+        matching a title search', 'everything translated by a specific
+        model' (for re-running items a weaker fallback model produced).
+        Respects the normal daily cap/age gate like a scheduled run, since
+        a large filtered set shouldn't bypass the GPU-load protections just
+        because it was chosen explicitly."""
         items = selector.get_filtered_translatable_queue(
-            self._conn, status=status, item_type=item_type, search=search
+            self._conn, status=status, item_type=item_type, search=search, model=model
         )
         return await self.run_batch(items, triggered_by="manual_filtered")

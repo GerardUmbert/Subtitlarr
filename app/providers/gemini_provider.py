@@ -83,6 +83,7 @@ class GeminiProvider(TranslationProvider):
             self.name = instance_name
         self._api_key = api_key
         self._model = model
+        self.model = model
         # The key goes in the x-goog-api-key HEADER, not a ?key= query
         # param — Google's REST API accepts both, but a query param ends
         # up in every httpx/uvicorn access log line verbatim (confirmed

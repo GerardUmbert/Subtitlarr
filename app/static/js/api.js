@@ -44,6 +44,7 @@ const Api = (() => {
       return request("GET", `/api/queue${qs ? "?" + qs : ""}`);
     },
     getCurrentRunItems: () => request("GET", "/api/queue/current-run"),
+    getUsedModels: () => request("GET", "/api/queue/models"),
 
     pullOllamaModel: (model, base_url) =>
       request("POST", "/api/config/engines/ollama/pull", { model, base_url }),

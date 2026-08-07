@@ -240,6 +240,7 @@ def update_item_status(
     *,
     source_language: str | None = None,
     engine_used: str | None = None,
+    model_used: str | None = None,
     error_message: str | None = None,
     error_detail: str | None = None,
     mark_attempt: bool = False,
@@ -254,6 +255,9 @@ def update_item_status(
     if engine_used is not None:
         fields.append("engine_used = ?")
         values.append(engine_used)
+    if model_used is not None:
+        fields.append("model_used = ?")
+        values.append(model_used)
     if error_message is not None:
         fields.append("error_message = ?")
         values.append(error_message)
@@ -334,6 +338,7 @@ def _build_queue_filter(
     item_type: str | None,
     search: str | None,
     exclude_no_source: bool = False,
+    model: str | None = None,
 ) -> tuple[list[str], list]:
     conditions: list[str] = []
     params: list = []
@@ -353,6 +358,9 @@ def _build_queue_filter(
     # contradict that explicit request.
     if exclude_no_source and status != "skipped_no_source":
         conditions.append("status != 'skipped_no_source'")
+    if model:
+        conditions.append("model_used = ?")
+        params.append(model)
     return conditions, params
 
 
@@ -363,6 +371,7 @@ def list_queue(
     item_type: str | None = None,
     search: str | None = None,
     exclude_no_source: bool = False,
+    model: str | None = None,
     page: int = 1,
     page_size: int = 50,
     sort: str = "title",
@@ -371,7 +380,7 @@ def list_queue(
 ) -> tuple[list[sqlite3.Row], int]:
     default_order = _QUEUE_SORTS.get(sort, _QUEUE_SORTS["title"])
     order_by = _order_by_clause(_QUEUE_SORT_COLUMNS, sort_by, sort_dir, default_order)
-    conditions, params = _build_queue_filter(status, item_type, search, exclude_no_source)
+    conditions, params = _build_queue_filter(status, item_type, search, exclude_no_source, model)
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
     total = conn.execute(
@@ -386,6 +395,17 @@ def list_queue(
         (*params, page_size, (page - 1) * page_size),
     ).fetchall()
     return rows, total
+
+
+def list_used_models(conn: sqlite3.Connection) -> list[str]:
+    """Every distinct model_used value seen across all items — powers the
+    Queue page's model filter chips. Only items that actually completed a
+    translation attempt (success or failure) have this set; a still-
+    'pending' item does not, so this never includes untried models."""
+    rows = conn.execute(
+        "SELECT DISTINCT model_used FROM items WHERE model_used IS NOT NULL ORDER BY model_used"
+    ).fetchall()
+    return [r["model_used"] for r in rows]
 
 
 def list_items_by_ids(conn: sqlite3.Connection, item_ids: list[int]) -> list[sqlite3.Row]:
@@ -413,6 +433,7 @@ def get_translatable_queue_filtered(
     status: str | None = None,
     item_type: str | None = None,
     search: str | None = None,
+    model: str | None = None,
 ) -> list[sqlite3.Row]:
     """Same filters as list_queue, but returns the FULL matched set (not a
     page) restricted to items a bulk run can actually act on — used by
@@ -431,7 +452,7 @@ def get_translatable_queue_filtered(
     since indiscriminately re-translating everything already finished
     would be surprising/wasteful for an unfiltered bulk action."""
     RERUNNABLE_STATUSES = {"pending", "queued", "failed", "done", "skipped_no_source"}
-    conditions, params = _build_queue_filter(status, item_type, search)
+    conditions, params = _build_queue_filter(status, item_type, search, model=model)
     if status:
         if status not in RERUNNABLE_STATUSES:
             return []
@@ -502,6 +523,7 @@ def log_item_attempt(
     run_id: int | None,
     status: str,
     engine_used: str | None = None,
+    model_used: str | None = None,
     error_message: str | None = None,
     error_detail: str | None = None,
     settings_snapshot: dict | None = None,
@@ -516,11 +538,11 @@ def log_item_attempt(
         conn.execute(
             """
             INSERT INTO item_run_log
-                (item_id, run_id, status, engine_used, error_message, error_detail, settings_snapshot, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (item_id, run_id, status, engine_used, model_used, error_message, error_detail, settings_snapshot, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                item_id, run_id, status, engine_used, error_message, error_detail,
+                item_id, run_id, status, engine_used, model_used, error_message, error_detail,
                 json.dumps(settings_snapshot) if settings_snapshot is not None else None,
                 _now(),
             ),

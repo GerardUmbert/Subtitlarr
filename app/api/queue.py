@@ -29,6 +29,7 @@ async def list_queue(
     item_type: str | None = None,
     search: str | None = None,
     exclude_no_source: bool = False,
+    model: str | None = None,
     page: int = 1,
     page_size: int = 50,
     sort: str = "title",
@@ -38,10 +39,17 @@ async def list_queue(
 ):
     rows, total = repository.list_queue(
         conn, status=status, item_type=item_type, search=search,
-        exclude_no_source=exclude_no_source, page=page, page_size=page_size, sort=sort,
-        sort_by=sort_by, sort_dir=sort_dir,
+        exclude_no_source=exclude_no_source, model=model, page=page, page_size=page_size,
+        sort=sort, sort_by=sort_by, sort_dir=sort_dir,
     )
     return {"data": _with_cached_flag(rows), "total": total, "page": page, "page_size": page_size}
+
+
+@router.get("/models")
+async def list_used_models(conn=Depends(state.get_conn)):
+    """Every distinct model_used value seen across all items — populates
+    the Queue page's model filter chips."""
+    return {"models": repository.list_used_models(conn)}
 
 
 @router.get("/matching-count")
@@ -49,6 +57,7 @@ async def get_matching_count(
     status: str | None = None,
     item_type: str | None = None,
     search: str | None = None,
+    model: str | None = None,
     conn=Depends(state.get_conn),
 ):
     """How many currently-translatable (pending/queued/failed, or an
@@ -56,7 +65,7 @@ async def get_matching_count(
     Queue page's 'Run all N matching' bulk action to show an accurate
     count before the user commits to it."""
     items = selector.get_filtered_translatable_queue(
-        conn, status=status, item_type=item_type, search=search
+        conn, status=status, item_type=item_type, search=search, model=model
     )
     return {"count": len(items)}
 
@@ -66,15 +75,17 @@ async def run_filtered(
     status: str | None = None,
     item_type: str | None = None,
     search: str | None = None,
+    model: str | None = None,
     runner=Depends(state.get_runner),
 ):
     """Runs every translatable item matching the given filter (same
-    status/item_type/search params as GET /api/queue) — e.g. 'all TV',
-    'everything matching a title search'. Respects the normal daily
-    cap/age gate, same as a scheduled run."""
+    status/item_type/search/model params as GET /api/queue) — e.g. 'all TV',
+    'everything matching a title search', 'everything a specific model
+    translated' (re-run items produced by a weaker fallback model).
+    Respects the normal daily cap/age gate, same as a scheduled run."""
     if runner.current is not None and runner.current.active:
         return {"started": False, "reason": "A run is already in progress"}
-    asyncio.create_task(runner.run_filtered(status, item_type, search))
+    asyncio.create_task(runner.run_filtered(status, item_type, search, model))
     return {"started": True}
 
 

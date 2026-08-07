@@ -56,8 +56,8 @@ def test_run_filtered_starts_a_run(client, monkeypatch):
 
     captured = {}
 
-    async def fake_run_filtered(self, status, item_type, search):
-        captured["args"] = (status, item_type, search)
+    async def fake_run_filtered(self, status, item_type, search, model=None):
+        captured["args"] = (status, item_type, search, model)
 
     monkeypatch.setattr(RunController, "run_filtered", fake_run_filtered)
 

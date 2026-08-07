@@ -53,6 +53,7 @@ class OllamaProvider(TranslationProvider):
             self.name = instance_name
         self._base_url = base_url.rstrip("/")
         self._model = model
+        self.model = model
         # Ollama defaults to a conservative 4096-token context regardless of
         # what the model actually supports (Gemma 3 supports up to 128K) —
         # without this, a batch of subtitle cues larger than 4096 tokens

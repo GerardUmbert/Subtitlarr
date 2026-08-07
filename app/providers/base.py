@@ -70,6 +70,15 @@ class TranslationProvider(ABC):
     # name.
     name: str
     provider_type: str
+    # The actual model string sent to the provider's API (e.g.
+    # "gemini-3.5-flash-lite") — distinct from `name`, which is the
+    # instance's display name and may not mention the model at all (e.g.
+    # two instances named "Gemini Main"/"Gemini Secondary" sharing a
+    # model, or one changed to a different model without renaming the
+    # instance). Persisted per-item as items.model_used so the Queue page
+    # can filter/re-run by actual model regardless of which instance name
+    # produced it.
+    model: str
 
     @abstractmethod
     async def translate(

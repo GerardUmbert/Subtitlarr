@@ -58,6 +58,7 @@ class GroqProvider(TranslationProvider):
             self.name = instance_name
         self._api_key = api_key
         self._model = model
+        self.model = model
         self._client = httpx.AsyncClient(
             base_url=_API_BASE,
             headers={"Authorization": f"Bearer {api_key}"},

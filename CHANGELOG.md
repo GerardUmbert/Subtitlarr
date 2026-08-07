@@ -3,6 +3,55 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.8.1]
+
+### Added
+- **Per-item model tracking**: every `TranslationProvider` now exposes its
+  real `model` string (e.g. `gemini-3.5-flash-lite`), separate from the
+  instance's display `name`. Threaded through the whole translate/retry/
+  cascade chain and persisted as `items.model_used` /
+  `item_run_log.model_used` (new migration `0009_add_model_used.sql`) —
+  distinct from `engine_used` (the instance name), since two instances can
+  share a model, or the same instance name can be repointed at a different
+  model over time.
+- **Model filter + column on the Queue page**: on the **Done** and
+  **Pending upload** tabs specifically (where the existing Error column is
+  always empty), the column is replaced with **Model**, and a row of
+  filter chips (populated from `GET /api/queue/models`, the distinct
+  `model_used` values actually seen) lets you isolate everything a
+  specific model translated — e.g. everything that fell back to a weaker
+  model — and bulk re-run just those via the existing "Run all N
+  matching" action, now with a `model` param wired through
+  `GET/POST /api/queue`, `/matching-count`, and `/run-filtered`. The Error
+  column and its click-to-expand full-error modal are unchanged on every
+  other tab.
+- `README.md`: **Recommended cascade** section documents stacking 2
+  Gemini models × 2 Google accounts for 2000 requests/day, plus a
+  quality-first alternative that skips the weaker fallback model. New
+  `docs/api-keys-setup.md` walks through getting Gemini/NVIDIA keys and
+  the exact per-engine batch token budgets confirmed to work
+  (`gemini-3.5-flash-lite`/`gemini-3.1-flash-lite`: 4000, NVIDIA
+  DeepSeek V4 Flash: 700, Ollama `gemma3:4b`: 400), including a table
+  mirroring the actual Translation Engine page cascade order.
+- `.github/workflows/ci.yml` (pytest on push/PR) and
+  `docker-release.yml` (build + push to GHCR on `vX.Y.Z` tags, matching
+  the existing tag convention) — the project now has CI and an automated
+  Docker release pipeline for the first time.
+
+### Changed
+- README, `.env.example`, `docker-compose.yml`, and the Unraid template
+  (`unraid/subtitlarr.xml`) rewritten to drop the old `ACTIVE_ENGINE`/
+  `FALLBACK_ENGINE`/per-provider-type env vars removed in 0.8.0's cascade
+  rewrite (they'd gone stale, still describing the pre-cascade setup) and
+  point at the Translation Engine page and the real published
+  `ghcr.io/gerardumbert/subtitlarr` image instead of a placeholder
+  username.
+
+### Removed
+- `plans/` and `TODO.md` are no longer tracked in git (internal working
+  docs with no value to someone pulling the published image) — gitignored
+  going forward, still present locally.
+
 ## [0.8.0]
 
 ### Added
