@@ -68,7 +68,7 @@
               </div>
               <div class="title-type">{% raw %}{{ item.season_episode ? item.season_episode + ' · episode' : 'movie' }}{% endraw %}</div>
             </td>
-            <td>
+            <td class="lang-cell">
               <span class="lang-tag">{% raw %}{{ (item.source_language || '?').toUpperCase() }}{% endraw %}</span>
               <span class="arrow">→</span>
               <span class="lang-tag">{% raw %}{{ item.target_language.toUpperCase() }}{% endraw %}</span>

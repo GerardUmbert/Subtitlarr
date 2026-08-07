@@ -3,6 +3,25 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.8.5]
+
+### Fixed
+- **Queue page**: the Language column (`EN → ES`) had no `white-space:
+  nowrap`, so once the row's available width got squeezed by the Error
+  column's own wrap fix (0.8.4), the arrow/target-language span could
+  end up wrapped onto its own line. New `.lang-cell` class keeps the
+  whole language pair on one line.
+
+### Added
+- A public docs/landing site under `docs/` (index, install, engine
+  setup, features with real screenshots, and an auto-generated
+  changelog page via `docs/assets/build_changelog.py`), plus a
+  `docs-pages.yml` GitHub Actions workflow to deploy it to GitHub Pages
+  on every push touching `docs/`. Not yet live — GitHub Pages requires
+  the repo to be public first, and Pages itself has no private option
+  on the Free plan, so this stays dormant until that's a deliberate
+  choice.
+
 ## [0.8.4]
 
 ### Added

@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Engine Setup — Subtitlarr</title>
+<link rel="icon" href="assets/icon.svg">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+
+<header class="site-header">
+  <a class="brand" href="index.html">
+    <span class="brand-mark">S</span>
+    Subtitlarr
+  </a>
+  <nav class="site-nav">
+    <a href="index.html">Home</a>
+    <a href="install.html">Install</a>
+    <a href="api-keys.html" class="active">Engine Setup</a>
+    <a href="features.html">Features</a>
+    <a href="changelog.html">Changelog</a>
+  </nav>
+  <div class="site-actions">
+    <a class="btn" href="https://github.com/GerardUmbert/Subtitlarr">GitHub</a>
+  </div>
+</header>
+
+<main>
+  <h1>Engine Setup</h1>
+  <p class="lede">Getting free-tier API keys for the cloud engines, and the token budgets confirmed to work well for each — so a fresh install doesn't have to rediscover them by trial and error. All of this is configured from the <strong>Translation Engine</strong> page.</p>
+
+  <div class="toc">
+    <a href="#gemini">Google Gemini</a>
+    <a href="#nvidia">NVIDIA NIM</a>
+    <a href="#ollama">Local Ollama</a>
+    <a href="#cascade">Recommended cascade shape</a>
+  </div>
+
+  <h2 id="gemini">Google Gemini</h2>
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body"><p>Go to <a href="https://aistudio.google.com">aistudio.google.com</a> and sign in with a Google account.</p></div>
+  </div>
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body"><p>Click <strong>Get API key</strong> (left sidebar) → <strong>Create API key</strong>. Copy it.</p></div>
+  </div>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body"><p>In Subtitlarr, add a new engine instance: provider <strong>Gemini</strong>, name it <strong>"Gemini Main"</strong>, paste the key, and set the model to <code>gemini-3.5-flash-lite</code>.</p></div>
+  </div>
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body"><p>Batch token budget: <code>4000</code></p></div>
+  </div>
+
+  <h3>Stacking a second model on the same key</h3>
+  <p>Gemini's free-tier daily request quota (500/day) is tracked <em>per model</em>, not once per account — so a second instance using the <strong>same</strong> key but a <strong>different</strong> fast model gets its own independent 500/day pool:</p>
+  <ol>
+    <li>Add another instance: name it <strong>"Gemini Main gemini-3.1-flash-lite"</strong>, same API key as "Gemini Main", model set to <code>gemini-3.1-flash-lite</code> — the confirmed real API model ID (AI Studio's dashboard shows a friendlier display name that doesn't map 1:1 to this string).</li>
+    <li>Batch token budget: <code>4000</code></li>
+  </ol>
+  <p>This alone doubles account A's usable quota to 1000/day, with zero extra signups.</p>
+
+  <div class="callout">
+    <strong>Quality note:</strong> Gemini 3.5 Flash-Lite gives noticeably better translation quality, better context handling, and higher throughput (~350 tokens/sec) than 3.1 Flash-Lite. Adding a 3.1 instance below 3.5 doubles daily throughput, but every item that spills over gets the weaker model's output. If quality matters more than the extra 500/day, skip the 3.1 instance and let overflow items fall through to your next cascade tier instead.
+  </div>
+
+  <h3>Doubling again with a second account</h3>
+  <p>The same 2-models-per-key trick works again with a second Google account and its own key, for <strong>4 Gemini instances total</strong> and 2000 requests/day combined:</p>
+  <ol>
+    <li>Repeat the steps above with a second Google account (a second free Gmail account works fine).</li>
+    <li>Add it as <strong>"Gemini Secondary"</strong>, model <code>gemini-3.5-flash-lite</code>, batch token budget <code>4000</code>.</li>
+    <li>Optional — add <strong>"Gemini Secondary gemini-3.1-flash-lite"</strong>, same key, model <code>gemini-3.1-flash-lite</code>, budget <code>4000</code>.</li>
+    <li>Order the cascade Main → Secondary → Main (3.1) → Secondary (3.1), so BOTH accounts' stronger model is tried before either account's weaker fallback model.</li>
+  </ol>
+  <p>This is legitimate use of separate free tiers — each account's quota is used independently and entirely for that account's own usage.</p>
+  <p>If you'd rather keep quality consistent across the whole cascade, skip both 3.1 instances and just use <strong>"Gemini Main"</strong> + <strong>"Gemini Secondary"</strong> (both <code>gemini-3.5-flash-lite</code>) for 1000/day — half the ceiling, but every item gets the better model.</p>
+
+  <h2 id="nvidia">NVIDIA NIM</h2>
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body"><p>Go to <a href="https://build.nvidia.com">build.nvidia.com</a> and sign in / create an account.</p></div>
+  </div>
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body"><p>Open any model page (e.g. search for DeepSeek), click <strong>Get API Key</strong>, and copy it.</p></div>
+  </div>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body"><p>In Subtitlarr, add a new engine instance: provider <strong>NVIDIA</strong>, paste the key, and set the model to a real instructable chat model — the default, <code>deepseek-ai/deepseek-v4-flash</code>, is confirmed working. NVIDIA also hosts dedicated translation-only models (e.g. Riva Translate) — do <strong>not</strong> use one of those, they don't support the formatting this app relies on.</p></div>
+  </div>
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body"><p>Batch token budget: <code>700</code>. Free tier is capped at roughly 40 requests/minute — no daily cap confirmed, unlike Gemini.</p></div>
+  </div>
+
+  <h2 id="ollama">Local Ollama</h2>
+  <p>No API key needed — this is your own local (or LAN) inference server.</p>
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body"><p>Install <a href="https://ollama.com">Ollama</a> and pull a model:</p><pre><code>ollama pull gemma3:4b</code></pre></div>
+  </div>
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body"><p>In Subtitlarr, add a new engine instance: provider <strong>Ollama</strong>, base URL pointing at your Ollama server (e.g. <code>http://localhost:11434</code> or <code>http://&lt;lan-ip&gt;:11434</code>), model <code>gemma3:4b</code>.</p></div>
+  </div>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body"><p>Batch token budget: <code>400</code>. Small local models lose reliable output formatting well before they run out of raw context window — this is calibrated for <code>gemma3:4b</code>'s formatting reliability, not its context limit. A larger/more capable local model may support a higher budget.</p></div>
+  </div>
+
+  <h2 id="cascade">Recommended cascade shape</h2>
+  <p>Put your free-tier Gemini instance(s) at the top of the cascade, then a <strong>separator</strong>, then your local engine(s) below it. This stops a run from silently falling back to slow local inference for hours just because Gemini hit a temporary rate limit, while still leaving local engines available for a deliberate manual run.</p>
+
+  <p>This is what the <strong>Translation Engine</strong> page should look like, top to bottom, once everything above is set up (max-throughput version, 2000/day):</p>
+  <table>
+    <thead><tr><th>Order</th><th>Instance name</th><th>Provider · Model</th><th>Batch budget</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Gemini Main</td><td>Gemini · <code>gemini-3.5-flash-lite</code></td><td><code>4000</code></td></tr>
+      <tr><td>2</td><td>Gemini Secondary</td><td>Gemini · <code>gemini-3.5-flash-lite</code></td><td><code>4000</code></td></tr>
+      <tr><td>3</td><td>Gemini Main gemini-3.1-flash-lite <em>(optional — see quality note above)</em></td><td>Gemini · <code>gemini-3.1-flash-lite</code></td><td><code>4000</code></td></tr>
+      <tr><td>4</td><td>Gemini Secondary gemini-3.1-flash-lite <em>(optional)</em></td><td>Gemini · <code>gemini-3.1-flash-lite</code></td><td><code>4000</code></td></tr>
+      <tr><td>—</td><td colspan="3"><em>— cascade stops here — anything below is never tried as a fallback —</em></td></tr>
+      <tr><td>5</td><td>Ollama</td><td>Ollama · <code>gemma3:4b</code></td><td><code>400</code></td></tr>
+    </tbody>
+  </table>
+  <p>Drop rows 3 and 4 for the quality-first version instead (1000/day, every item on <code>gemini-3.5-flash-lite</code>).</p>
+  <p>Optionally add an NVIDIA instance (<code>deepseek-ai/deepseek-v4-flash</code>, budget <code>700</code>) either above the separator as a 5th cloud fallback, or below it alongside Ollama, depending on whether you want it tried automatically or reserved for manual runs.</p>
+</main>
+
+<footer class="site-footer">
+  Subtitlarr is open source — <a href="https://github.com/GerardUmbert/Subtitlarr">source on GitHub</a>
+</footer>
+
+</body>
+</html>

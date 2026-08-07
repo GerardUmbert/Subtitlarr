@@ -718,6 +718,7 @@ tbody tr:last-child td { border-bottom: none; }
 }
 
 .arrow { color: var(--ink-faint); margin: 0 5px; font-size: 11px; }
+.lang-cell { white-space: nowrap; }
 
 .status-pill {
   display: inline-flex;

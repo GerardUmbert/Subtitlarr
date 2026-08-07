@@ -80,16 +80,19 @@ consequences worth using deliberately:
   **two** instances (one per fast free-tier model), for **4 instances
   total** — 2000 requests/day combined instead of 500:
   1. **"Gemini Main"** — key from account A, model **`gemini-3.5-flash-lite`**
-  2. **"Gemini Main gemini-3.1-flash-lite"** — key from account A, model
-     **`gemini-3.1-flash-lite`**
-  3. **"Gemini Secondary"** — key from account B, model
+  2. **"Gemini Secondary"** — key from account B, model
      **`gemini-3.5-flash-lite`**
+  3. **"Gemini Main gemini-3.1-flash-lite"** — key from account A, model
+     **`gemini-3.1-flash-lite`**
   4. **"Gemini Secondary gemini-3.1-flash-lite"** — key from account B,
      model **`gemini-3.1-flash-lite`**
 
-  Order them in the cascade so both of account A's models are tried before
-  falling to account B — the cascade only spends an instance's quota once
-  everything ahead of it is exhausted or rate-limited.
+  Order them in the cascade so BOTH accounts' stronger model
+  (`gemini-3.5-flash-lite`) is tried before either account's weaker
+  fallback model — the cascade only spends an instance's quota once
+  everything ahead of it is exhausted or rate-limited, so this keeps
+  translation quality as high as possible for as long as possible before
+  any item ever gets the weaker 3.1 model's output.
 - Put your fastest, most reliable free-tier Gemini model(s) at the top of
   the cascade, add a **separator** right after them, and leave your local
   engines (Ollama, llama.cpp) below the separator, disabled from automatic
@@ -141,8 +144,11 @@ add an Ollama engine instance pointing at `http://ollama:11434`.
   [`unraid/subtitlarr.xml`](unraid/subtitlarr.xml) as a starting point, then
   add it as a template in Unraid's Docker tab (Add Container → Template →
   paste the raw file URL or import it manually). It points at the published
-  `ghcr.io/gerardumbert/subtitlarr` image and documents every environment
-  variable below as a proper UI field.
+  `ghcr.io/gerardumbert/subtitlarr` image and only exposes the fields that
+  genuinely can't be configured from the web UI afterward: **WebUI Port**,
+  **Data** path, and **PUID**/**PGID**. Everything else — Bazarr
+  connection, translation engines, scheduling, all other settings — is set
+  from the app's own UI once it's running, not from the container form.
 - **Manual container**: create a container from
   `ghcr.io/gerardumbert/subtitlarr:latest` with:
   - **Port**: `7777` (container) → keep the host side matching `7777` too if
@@ -151,31 +157,37 @@ add an Ollama engine instance pointing at `http://ollama:11434`.
     Tailscale hostname URL even though LAN access still works)
   - **Volume**: a host path (e.g. `/mnt/user/appdata/subtitlarr`) → `/data`
     (this is Subtitlarr's own database, *not* a media path)
+  - **PUID**/**PGID**: match whatever owns that host path (Unraid's default
+    `nobody:users` is `99:100`) — the container starts as root, `chown`s
+    `/data` to the requested uid/gid, then drops to that user before
+    running the app
   - **Network type**: `bridge` works for most setups. If Bazarr/Ollama are
     reachable only from a specific custom Docker network (e.g. a macvlan
     `br0` network some Tailscale subnet-router setups use), switch
     Subtitlarr to that same network in Unraid's network-type dropdown so
     it can reach them by container name.
-  - **Environment variables** (see table below) — set `BAZARR_BASE_URL` to
-    reach your existing Bazarr container, e.g. `http://<unraid-ip>:6767`, or
-    the container name if they're on the same custom Docker network. Engine
-    connection details (Ollama/Gemini/etc.) are configured from the web UI
-    after first start, not via environment variables.
+  - Everything else (Bazarr URL/key, engines, scheduling) — set it from the
+    web UI after first start. None of it is required at container-start
+    time.
 
 No media folders need to be mounted into this container — that's
 intentional.
 
 ## Configuration
 
-Everything below can be set as an environment variable at container start,
-and all of it can also be changed live from the web UI afterward (Settings /
-Language Rules / Bazarr Connection pages). Translation engine setup lives
-entirely in the **Translation Engine** page — see above — not in this table.
+None of this needs to be touched at container start — click through the
+form doing nothing (or run `docker run` with just a port and volume, no
+`-e` flags at all) and configure every one of these from the web UI
+afterward (Settings / Language Rules / Bazarr Connection pages) instead.
+The table below exists purely as a reference for what each setting does
+and its default — not a setup requirement. Translation engine setup lives
+entirely in the **Translation Engine** page — see above — not in this
+table.
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `BAZARR_BASE_URL` | Bazarr root URL | *(required)* |
-| `BAZARR_API_KEY` | Bazarr API key | *(required)* |
+| `BAZARR_BASE_URL` | Bazarr root URL | *(set from the Bazarr Connection page)* |
+| `BAZARR_API_KEY` | Bazarr API key | *(set from the Bazarr Connection page)* |
 | `SCHEDULE_CRON` | 5-field cron expression for the main scheduled translation job | `0 3 * * *` |
 | `AGE_THRESHOLD_DAYS` | Days a subtitle must be missing before a scheduled run will translate it | `14` |
 | `DAILY_TRANSLATION_LIMIT` | Max items translated per day by scheduled/full runs (0 = unlimited); per-item re-runs bypass this | `100` |

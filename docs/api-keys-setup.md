@@ -55,9 +55,11 @@ combined:
 3. (Optional — see the quality note above) Add **"Gemini Secondary
    gemini-3.1-flash-lite"**, same key, model **`gemini-3.1-flash-lite`**,
    batch token budget `4000`.
-4. Order the cascade Main → Main (3.1, if used) → Secondary → Secondary
-   (3.1, if used) (drag to reorder), so account A's model(s) are exhausted
-   before account B's quota is ever spent.
+4. Order the cascade Main → Secondary → Main (3.1, if used) → Secondary
+   (3.1, if used) (drag to reorder), so BOTH accounts' stronger model is
+   tried before either account's weaker fallback model — keeps quality
+   as high as possible for as long as possible before any item ever gets
+   the weaker 3.1 model's output.
 
 This is legitimate use of separate free tiers — it is not evading any
 single account's limit, since each account's quota is used independently
@@ -116,14 +118,14 @@ bottom, once everything above is set up (max-throughput version, 2000/day):
 | Order | Instance name | Provider · Model | Batch token budget |
 |---|---|---|---|
 | 1 | Gemini Main | Gemini · `gemini-3.5-flash-lite` | `4000` |
-| 2 | Gemini Main gemini-3.1-flash-lite *(optional — see quality note above)* | Gemini · `gemini-3.1-flash-lite` | `4000` |
-| 3 | Gemini Secondary | Gemini · `gemini-3.5-flash-lite` | `4000` |
+| 2 | Gemini Secondary | Gemini · `gemini-3.5-flash-lite` | `4000` |
+| 3 | Gemini Main gemini-3.1-flash-lite *(optional — see quality note above)* | Gemini · `gemini-3.1-flash-lite` | `4000` |
 | 4 | Gemini Secondary gemini-3.1-flash-lite *(optional)* | Gemini · `gemini-3.1-flash-lite` | `4000` |
 | — | *— cascade stops here — anything below is never tried as a fallback —* | *(separator)* | — |
-
-Drop rows 2 and 4 for the quality-first version instead (1000/day, every
-item on `gemini-3.5-flash-lite`).
 | 5 | Ollama | Ollama · `gemma3:4b` | `400` |
+
+Drop rows 3 and 4 for the quality-first version instead (1000/day, every
+item on `gemini-3.5-flash-lite`).
 
 Optionally add an NVIDIA instance (`deepseek-ai/deepseek-v4-flash`, budget
 `700`) either above the separator as a 5th cloud fallback, or below it

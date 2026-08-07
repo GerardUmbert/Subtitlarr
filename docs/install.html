@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install — Subtitlarr</title>
+<link rel="icon" href="assets/icon.svg">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+
+<header class="site-header">
+  <a class="brand" href="index.html">
+    <span class="brand-mark">S</span>
+    Subtitlarr
+  </a>
+  <nav class="site-nav">
+    <a href="index.html">Home</a>
+    <a href="install.html" class="active">Install</a>
+    <a href="api-keys.html">Engine Setup</a>
+    <a href="features.html">Features</a>
+    <a href="changelog.html">Changelog</a>
+  </nav>
+  <div class="site-actions">
+    <a class="btn" href="https://github.com/GerardUmbert/Subtitlarr">GitHub</a>
+  </div>
+</header>
+
+<main>
+  <h1>Install</h1>
+  <p class="lede">Three ways to run Subtitlarr, depending on your setup. No media folder is ever mounted — only a small SQLite database.</p>
+
+  <div class="toc">
+    <a href="#docker">Docker (published image)</a>
+    <a href="#compose">Docker Compose</a>
+    <a href="#unraid">Unraid</a>
+    <a href="#config">Configuration</a>
+  </div>
+
+  <h2 id="docker">Docker (published image)</h2>
+  <p>The fastest path if you already run other containers by hand:</p>
+  <pre><code>docker run -d \
+  --name subtitlarr \
+  -p 7777:7777 \
+  -v ./data:/data \
+  -e BAZARR_BASE_URL=http://&lt;your-bazarr-host&gt;:6767 \
+  -e BAZARR_API_KEY=&lt;your-bazarr-api-key&gt; \
+  ghcr.io/gerardumbert/subtitlarr:latest</code></pre>
+  <p>Open <code>http://localhost:7777</code>, then add at least one engine instance from the <strong>Translation Engine</strong> page before running a translation.</p>
+
+  <h2 id="compose">Docker Compose</h2>
+  <p>Good for local dev, or if you don't already run Ollama:</p>
+  <pre><code>cp .env.example .env   # fill in BAZARR_BASE_URL, BAZARR_API_KEY, etc.
+docker compose up -d</code></pre>
+  <p>The example compose file also starts an Ollama container — add an Ollama engine instance pointing at <code>http://ollama:11434</code>.</p>
+
+  <h2 id="unraid">Unraid</h2>
+  <div class="panel">
+    <p><strong>Community Applications template</strong> — use <a href="https://github.com/GerardUmbert/Subtitlarr/blob/master/unraid/subtitlarr.xml">unraid/subtitlarr.xml</a> as a starting point in Unraid's Docker tab (Add Container → Template). It points at the published <code>ghcr.io/gerardumbert/subtitlarr</code> image and only exposes the fields that genuinely can't be configured from the web UI afterward: <strong>WebUI Port</strong>, <strong>Data</strong> path, and <strong>PUID</strong>/<strong>PGID</strong>. Everything else — Bazarr connection, engines, scheduling — is set from the app's own UI once it's running, not from the container form.</p>
+  </div>
+  <p>Manual container setup:</p>
+  <ul>
+    <li><strong>Port</strong>: container listens on <code>7777</code> — map to whatever host port you like</li>
+    <li><strong>Volume</strong>: a host path (e.g. <code>/mnt/user/appdata/subtitlarr</code>) → <code>/data</code> — this is Subtitlarr's own database, not a media path</li>
+    <li><strong>PUID/PGID</strong>: match whatever owns your data folder (Unraid's default <code>nobody:users</code> is <code>99:100</code>) — the container starts as root, <code>chown</code>s <code>/data</code>, then drops to that user</li>
+    <li><strong>Network type</strong>: <code>bridge</code> works for most setups</li>
+    <li>Everything else (Bazarr URL/key, engines, scheduling) — set it from the web UI after first start</li>
+  </ul>
+  <div class="callout">
+    Using Unraid's built-in Tailscale integration? Keep the host port mapping identical to the container's internal port (e.g. <code>7777:7777</code>, not <code>7777:8000</code>) — Unraid's Tailscale Serve hook proxies to the host-mapped port number, so a mismatch silently breaks the Tailscale hostname URL even though LAN access still works fine.
+  </div>
+
+  <h2 id="config">Configuration</h2>
+  <p>None of this needs to be touched at container start — click through the form doing nothing and configure every one of these from the web UI afterward instead. This table is a reference for what each setting does and its default, not a setup requirement.</p>
+  <table>
+    <thead><tr><th>Variable</th><th>Purpose</th><th>Default</th></tr></thead>
+    <tbody>
+      <tr><td><code>BAZARR_BASE_URL</code></td><td>Bazarr root URL</td><td><em>set from the UI</em></td></tr>
+      <tr><td><code>BAZARR_API_KEY</code></td><td>Bazarr API key</td><td><em>set from the UI</em></td></tr>
+      <tr><td><code>SCHEDULE_CRON</code></td><td>Cron expression for the main translation job</td><td><code>0 3 * * *</code></td></tr>
+      <tr><td><code>AGE_THRESHOLD_DAYS</code></td><td>Days missing before a scheduled run translates it</td><td><code>14</code></td></tr>
+      <tr><td><code>DAILY_TRANSLATION_LIMIT</code></td><td>Max items/day for scheduled runs (0 = unlimited)</td><td><code>100</code></td></tr>
+      <tr><td><code>PAUSE_BETWEEN_ITEMS_SECONDS</code></td><td>Rest between translations</td><td><code>30</code></td></tr>
+      <tr><td><code>QUEUE_UPLOADS_ENABLED</code></td><td>Hold uploads for a manual batch push instead of immediate</td><td><code>false</code></td></tr>
+    </tbody>
+  </table>
+  <p>See the <a href="https://github.com/GerardUmbert/Subtitlarr#configuration">full README</a> for the complete list.</p>
+</main>
+
+<footer class="site-footer">
+  Subtitlarr is open source — <a href="https://github.com/GerardUmbert/Subtitlarr">source on GitHub</a>
+</footer>
+
+</body>
+</html>

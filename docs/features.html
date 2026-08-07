@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Features — Subtitlarr</title>
+<link rel="icon" href="assets/icon.svg">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+
+<header class="site-header">
+  <a class="brand" href="index.html">
+    <span class="brand-mark">S</span>
+    Subtitlarr
+  </a>
+  <nav class="site-nav">
+    <a href="index.html">Home</a>
+    <a href="install.html">Install</a>
+    <a href="api-keys.html">Engine Setup</a>
+    <a href="features.html" class="active">Features</a>
+    <a href="changelog.html">Changelog</a>
+  </nav>
+  <div class="site-actions">
+    <a class="btn" href="https://github.com/GerardUmbert/Subtitlarr">GitHub</a>
+  </div>
+</header>
+
+<main class="wide">
+  <h1>Features</h1>
+  <p class="lede">A tour of the actual UI — what each page does and why it's built that way.</p>
+
+  <h2>Dashboard</h2>
+  <p>At-a-glance view of the current run (if any), recent activity, and quick stats. The place to check "is anything happening right now."</p>
+  <div class="screenshot-frame">
+    <img src="assets/screenshots/dashboard.png" alt="Subtitlarr dashboard showing a translation run in progress">
+  </div>
+
+  <h2>Queue</h2>
+  <p>Every item Subtitlarr has tracked and what happened to it — filterable by status, type, and search. Any row, including already-done ones, can be re-run individually. On the Done/Pending-upload tabs, the Error column becomes a Model column instead, since those items have no error — letting you find and bulk re-run everything a specific (e.g. weaker fallback) model translated.</p>
+  <div class="screenshot-frame">
+    <img src="assets/screenshots/queue.png" alt="Subtitlarr Queue page showing filterable status/type chips and per-item run status">
+  </div>
+
+  <h2>Translation Engine</h2>
+  <p>Build an ordered cascade of any mix of engines — Ollama, llama.cpp, Gemini, NVIDIA NIM, OpenRouter, Groq. Drag to reorder, insert a separator to fence off a group from automatic fallback, and each instance gets its own independent rate-limit cooldown.</p>
+  <div class="screenshot-frame">
+    <img src="assets/screenshots/engines.png" alt="Subtitlarr Translation Engines page showing an ordered cascade with separators">
+  </div>
+
+  <h2>Language Rules</h2>
+  <p>Source-language priority for picking which existing subtitle to translate from when an item has several, plus per-language regional-variant control — Spanish (Spain/Mexican/Argentine/Latin American), Portuguese (Portugal/Brazil), English (American/British), French (France/Québécois/Belgian/Swiss), and Chinese (Simplified/Traditional).</p>
+  <div class="screenshot-frame">
+    <img src="assets/screenshots/language-rules.png" alt="Subtitlarr Language Rules page showing regional variant dropdowns for Spanish, Portuguese, English, French, and Chinese">
+  </div>
+
+  <h2>History</h2>
+  <p>Every past run with a full per-item breakdown, plus a live structured event log (rate limits, fallbacks, content blocks) and aggregate stats across all runs.</p>
+  <div class="screenshot-frame">
+    <img src="assets/screenshots/history.png" alt="Subtitlarr History page showing past runs with per-run stats">
+  </div>
+
+  <h2>Jobs</h2>
+  <p>Manually trigger the scheduled translation job, sync jobs, or reset local queue/run data if it's gotten out of sync with Bazarr — without waiting for the next cron fire.</p>
+  <div class="screenshot-frame">
+    <img src="assets/screenshots/jobs.png" alt="Subtitlarr Jobs page with manual triggers for scheduled and sync jobs">
+  </div>
+
+  <h2>At a glance</h2>
+  <div class="feature-grid">
+    <div class="feature-card">
+      <h3>Automatic rate-limit cooldown</h3>
+      <p>3 consecutive failures against an engine instance trip a 24h cooldown, skipped without a live round-trip — clearable early via a Test Connection or the Jobs page's manual "clear all rate limits."</p>
+    </div>
+    <div class="feature-card">
+      <h3>Per-item model tracking</h3>
+      <p>Every translated item records the exact model that produced it, separate from the instance's display name — filterable and bulk-re-runnable from the Queue page.</p>
+    </div>
+    <div class="feature-card">
+      <h3>Stop a running batch</h3>
+      <p>An in-app way to cancel a run cleanly after the in-flight item finishes, without killing the whole server process.</p>
+    </div>
+    <div class="feature-card">
+      <h3>Queue uploads for a batch push</h3>
+      <p>Hold translated subtitles locally and push them all to Bazarr in one burst later — useful if uploading wakes a sleeping NAS.</p>
+    </div>
+  </div>
+</main>
+
+<footer class="site-footer">
+  Subtitlarr is open source — <a href="https://github.com/GerardUmbert/Subtitlarr">source on GitHub</a>
+</footer>
+
+</body>
+</html>

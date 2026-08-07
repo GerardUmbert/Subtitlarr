@@ -12,8 +12,8 @@
   <Overview>Fills gaps in your Bazarr subtitle library by translating subtitles you already have (e.g. English) into languages you're missing (e.g. Spanish), using a local or cloud LLM. Never mounts your media folders — all reading and writing of subtitles happens through Bazarr's own REST API, so Bazarr remains the only thing with filesystem access to your library.&#13;&#10;&#13;&#10;Everything except the port and data path below is configured from the web UI after first start — Bazarr connection, translation engines (Ollama, llama.cpp, Gemini, NVIDIA NIM, OpenRouter, Groq), scheduling, and all other settings persist in Subtitlarr's own database, not container environment variables.&#13;&#10;&#13;&#10;No media path needs to be mapped into this container — only the /data path below, which is Subtitlarr's own small SQLite database, not your library.</Overview>
   <Category>MediaApp:Other Tools:</Category>
   <WebUI>http://[IP]:[PORT:7777]/</WebUI>
-  <TemplateURL/>
-  <Icon>https://raw.githubusercontent.com/GerardUmbert/Subtitlarr/master/unraid/icon.png</Icon>
+  <TemplateURL>https://raw.githubusercontent.com/GerardUmbert/Subtitlarr/master/unraid/subtitlarr.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/GerardUmbert/Subtitlarr/master/unraid/icon.svg</Icon>
   <ExtraParams>--memory=2g --memory-swap=2g --restart=unless-stopped --log-opt max-size=10m --log-opt max-file=3</ExtraParams>
   <PostArgs/>
   <CPUset/>

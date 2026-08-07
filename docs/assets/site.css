@@ -1,0 +1,271 @@
+:root {
+  --bg: #eef0f3;
+  --surface: #ffffff;
+  --surface-2: #e4e7ec;
+  --border: #d3d8e0;
+  --ink: #1b2028;
+  --ink-dim: #5b6473;
+  --ink-faint: #8891a0;
+  --accent: #3f6690;
+  --accent-ink: #ffffff;
+  --accent-soft: #dde6ef;
+  --good: #3f7d63;
+  --good-soft: #dfeee6;
+  --warn: #8a6d33;
+  --warn-soft: #f0e7d2;
+  --bad: #a24a45;
+  --bad-soft: #f3e0de;
+  --mono-shadow: 0 1px 2px rgba(20, 26, 36, 0.06);
+  --radius: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #20242c;
+    --surface: #272c36;
+    --surface-2: #2f3541;
+    --border: #3d4552;
+    --ink: #e2e5ea;
+    --ink-dim: #a7aebb;
+    --ink-faint: #757e8d;
+    --accent: #8fb3d9;
+    --accent-ink: #16202c;
+    --accent-soft: #34455a;
+    --good: #85c0a5;
+    --good-soft: #2a3c35;
+    --warn: #d3b871;
+    --warn-soft: #3c3627;
+    --bad: #dd968f;
+    --bad-soft: #402e2d;
+    --mono-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.6;
+}
+
+code, pre, .mono {
+  font-family: "IBM Plex Mono", "Consolas", monospace;
+}
+
+a { color: var(--accent); }
+
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 16px;
+}
+.brand-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "IBM Plex Mono", monospace;
+  font-weight: 700;
+}
+
+.site-nav { display: flex; gap: 20px; }
+.site-nav a {
+  color: var(--ink-dim);
+  text-decoration: none;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.site-nav a:hover, .site-nav a.active { color: var(--accent); }
+
+.site-actions { display: flex; gap: 10px; align-items: center; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+
+main { max-width: 920px; margin: 0 auto; padding: 40px 24px 80px; }
+main.wide { max-width: 1080px; }
+
+h1 { font-size: 32px; margin: 0 0 12px; }
+h2 { font-size: 22px; margin: 40px 0 12px; }
+h3 { font-size: 17px; margin: 28px 0 10px; }
+
+.lede { font-size: 17px; color: var(--ink-dim); max-width: 640px; }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--mono-shadow);
+  padding: 20px 24px;
+  margin: 16px 0;
+}
+
+.hero {
+  padding: 64px 24px 40px;
+  text-align: center;
+}
+.hero h1 { font-size: 40px; }
+.hero .lede { margin: 0 auto 28px; }
+.hero-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+.badge-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 18px 0; }
+.badge {
+  display: inline-flex;
+  padding: 4px 10px;
+  border-radius: 99px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 700;
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+.feature-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+}
+.feature-card h3 { margin-top: 0; font-size: 15px; }
+.feature-card p { font-size: 13.5px; color: var(--ink-dim); margin: 6px 0 0; }
+
+.screenshot-frame {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--mono-shadow);
+  margin: 16px 0 28px;
+  background: var(--surface);
+}
+.screenshot-frame img { display: block; width: 100%; height: auto; }
+.screenshot-placeholder {
+  aspect-ratio: 16 / 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-faint);
+  font-size: 13px;
+  background: var(--surface-2);
+}
+
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 16px 0; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-faint); }
+
+pre {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  font-size: 13px;
+}
+:not(pre) > code {
+  background: var(--surface-2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.callout {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  padding: 12px 16px;
+  border-radius: 0 8px 8px 0;
+  font-size: 13.5px;
+  margin: 16px 0;
+}
+
+.toc { display: flex; flex-direction: column; gap: 4px; margin: 16px 0; }
+.toc a { font-size: 13.5px; text-decoration: none; }
+
+.step {
+  display: flex;
+  gap: 14px;
+  margin: 20px 0;
+}
+.step-num {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+}
+.step-body h3 { margin: 0 0 4px; }
+.step-body p { margin: 0; font-size: 13.5px; color: var(--ink-dim); }
+
+.changelog-entry { margin-bottom: 32px; }
+.changelog-version {
+  font-family: "IBM Plex Mono", monospace;
+  font-weight: 700;
+  font-size: 18px;
+}
+.changelog-section-title {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-faint);
+  margin: 14px 0 6px;
+}
+.changelog-entry ul { margin: 0; padding-left: 20px; font-size: 13.5px; }
+.changelog-entry li { margin-bottom: 6px; }
+
+.site-footer {
+  border-top: 1px solid var(--border);
+  padding: 24px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
