@@ -33,19 +33,26 @@ _LINE_RE = re.compile(
     r"(?P<level>\w+) \[(?P<logger>[\w.]+)\] (?P<message>.*)$"
 )
 
+## Engine/fallback-engine names here used to be a fixed, always-space-free
+## set (provider_type strings like "gemini", "nvidia") when \S+ was written
+## — with engine_instances, a name is a free-text, user-editable instance
+## label (e.g. "Gemini (main)") that CAN contain spaces/parens. Every
+## engine-name capture group below uses a non-greedy .+? bounded by the
+## next literal in the line instead of \S+, so a spaced name still parses
+## correctly.
 _PATTERNS: list[tuple[EventType, re.Pattern]] = [
     (
         "sending",
         re.compile(
             r"^Sending translate\(\) call for item (?P<item_id>\d+) "
-            r"batch (?P<batch_index>\d+)/(?P<batch_total>\d+) to (?P<engine>\S+) "
+            r"batch (?P<batch_index>\d+)/(?P<batch_total>\d+) to (?P<engine>.+?) "
             r"\((?P<chars>\d+) chars\)$"
         ),
     ),
     (
         "response",
         re.compile(
-            r"^translate\(\) call for item (?P<item_id>\d+) \((?P<engine>\S+)\) "
+            r"^translate\(\) call for item (?P<item_id>\d+) \((?P<engine>.+?)\) "
             r"took (?P<seconds>[\d.]+)s$"
         ),
     ),
@@ -58,22 +65,22 @@ _PATTERNS: list[tuple[EventType, re.Pattern]] = [
     (
         "rate_limited_retry",
         re.compile(
-            r"^Provider (?P<engine>\S+) rate-limited/unreachable for item (?P<item_id>\d+) "
+            r"^Provider (?P<engine>.+?) rate-limited/unreachable for item (?P<item_id>\d+) "
             r"\((?P<detail>.*)\); retrying once after (?P<wait>[\d.]+)s$"
         ),
     ),
     (
         "provider_failed_fallback",
         re.compile(
-            r"^Provider (?P<engine>\S+) failed again for item (?P<item_id>\d+); "
-            r"falling back to (?P<fallback_engine>\S+)$"
+            r"^Provider (?P<engine>.+?) failed again for item (?P<item_id>\d+); "
+            r"falling back to (?P<fallback_engine>.+)$"
         ),
     ),
     (
         "content_blocked_fallback",
         re.compile(
-            r"^Provider (?P<engine>\S+) blocked content for item (?P<item_id>\d+) "
-            r"\((?P<detail>.*)\); falling back to (?P<fallback_engine>\S+)$"
+            r"^Provider (?P<engine>.+?) blocked content for item (?P<item_id>\d+) "
+            r"\((?P<detail>.*)\); falling back to (?P<fallback_engine>.+)$"
         ),
     ),
     (

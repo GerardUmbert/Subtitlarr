@@ -28,6 +28,7 @@ createApp({
       run: { active: false, processed: 0, total: 0, failed: 0, rate_per_min: 0 },
       recentItems: [],
       polling: false,
+      cancelling: false,
       _refreshTimerHandle: null,
     };
   },
@@ -89,6 +90,22 @@ createApp({
         this.scheduleRefresh();
       } catch (err) {
         alert(`Could not start run: ${err.message}`);
+      }
+    },
+    async cancelRun() {
+      this.cancelling = true;
+      try {
+        const result = await Api.cancelRun();
+        if (!result.cancelled) {
+          alert(result.reason || "Could not stop the run");
+          return;
+        }
+        Toast.show("Stopping after the current item finishes…");
+        await this.refreshRun();
+      } catch (err) {
+        alert(`Could not stop the run: ${err.message}`);
+      } finally {
+        this.cancelling = false;
       }
     },
     async triggerPoll() {

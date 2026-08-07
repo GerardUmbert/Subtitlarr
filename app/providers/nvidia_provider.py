@@ -58,13 +58,17 @@ class NvidiaProvider(TranslationProvider):
     requirement Ollama/Gemini already have."""
 
     name = "nvidia"
+    provider_type = "nvidia"
 
     def __init__(
         self,
         api_key: str,
         model: str = "deepseek-ai/deepseek-v4-flash",
         timeout: float = DEFAULT_NVIDIA_TIMEOUT_SECONDS,
+        instance_name: str | None = None,
     ):
+        if instance_name:
+            self.name = instance_name
         self._api_key = api_key
         self._model = model
         self._client = httpx.AsyncClient(

@@ -1,9 +1,11 @@
-"""Persists runtime-editable settings (Bazarr connection, engine config,
-schedule) to SQLite's app_config table, so they survive container restarts.
+"""Persists runtime-editable settings (Bazarr connection, schedule) to
+SQLite's app_config table, so they survive container restarts.
 Deployment-time defaults still come from env vars via app.config.Settings —
 this module lets values saved through the UI override those defaults for
 the lifetime of the data volume, the same way source_lang_priority already
-works."""
+works. Engine config lives in its OWN table (engine_instances, via
+app.db.engine_instances_repo) rather than here — see
+plans/multiple-engine-instances-cascade.md."""
 import sqlite3
 
 from app.config import Settings
@@ -15,32 +17,6 @@ from app.db import repository
 PERSISTED_KEYS = (
     "bazarr_base_url",
     "bazarr_api_key",
-    "active_engine",
-    "fallback_engine",
-    "ollama_base_url",
-    "ollama_model",
-    "ollama_num_ctx",
-    "ollama_batch_token_budget",
-    "llamacpp_base_url",
-    "llamacpp_model",
-    "llamacpp_api_key",
-    "llamacpp_batch_token_budget",
-    "gemini_api_key",
-    "gemini_model",
-    "gemini_batch_token_budget",
-    "gemini_concurrent_batch_window",
-    "nvidia_api_key",
-    "nvidia_model",
-    "nvidia_batch_token_budget",
-    "nvidia_concurrent_batch_window",
-    "openrouter_api_key",
-    "openrouter_model",
-    "openrouter_batch_token_budget",
-    "openrouter_concurrent_batch_window",
-    "groq_api_key",
-    "groq_model",
-    "groq_batch_token_budget",
-    "groq_concurrent_batch_window",
     "schedule_cron",
     "age_threshold_days",
     "daily_translation_limit",

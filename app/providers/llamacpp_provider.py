@@ -61,6 +61,7 @@ class LlamaCppProvider(TranslationProvider):
     when set."""
 
     name = "llamacpp"
+    provider_type = "llamacpp"
 
     def __init__(
         self,
@@ -68,7 +69,10 @@ class LlamaCppProvider(TranslationProvider):
         timeout: float = DEFAULT_LLAMACPP_TIMEOUT_SECONDS,
         api_key: str | None = None,
         model: str | None = None,
+        instance_name: str | None = None,
     ):
+        if instance_name:
+            self.name = instance_name
         self._base_url = base_url.rstrip("/")
         self._model = model
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else None

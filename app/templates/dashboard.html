@@ -55,8 +55,12 @@
         </div>
         <div class="panel-title-sub" v-else>No run in progress</div>
       </div>
-      <span class="pill pill-running" v-if="run.active"><span class="dot"></span>running</span>
+      <span class="pill pill-running" v-if="run.active && !run.cancel_requested"><span class="dot"></span>running</span>
+      <span class="pill pill-running" v-else-if="run.active && run.cancel_requested"><span class="dot"></span>stopping…</span>
       <span class="pill pill-idle" v-else>idle</span>
+      <button class="btn" v-if="run.active" @click.stop.prevent="cancelRun" :disabled="run.cancel_requested || cancelling">
+        {% raw %}{{ run.cancel_requested ? 'Stopping…' : (cancelling ? 'Stopping…' : 'Stop') }}{% endraw %}
+      </button>
     </div>
     <div class="panel-body" v-if="run.active">
       <div class="progress-row">

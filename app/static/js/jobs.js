@@ -33,6 +33,8 @@ createApp({
       clearResult: null,
       fixingStaleRuns: false,
       fixStaleRunsResult: null,
+      clearingRateLimits: false,
+      clearRateLimitsResult: null,
       error: "",
       _pollHandle: null,
     };
@@ -193,6 +195,18 @@ createApp({
         this.error = err.message;
       } finally {
         this.fixingStaleRuns = false;
+      }
+    },
+    async clearRateLimits() {
+      this.clearingRateLimits = true;
+      this.error = "";
+      this.clearRateLimitsResult = null;
+      try {
+        this.clearRateLimitsResult = await Api.clearEngineRateLimits();
+      } catch (err) {
+        this.error = err.message;
+      } finally {
+        this.clearingRateLimits = false;
       }
     },
     schedulePoll() {

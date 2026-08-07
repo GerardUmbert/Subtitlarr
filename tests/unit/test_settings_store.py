@@ -14,13 +14,13 @@ def conn(tmp_path):
 
 
 def test_saved_settings_survive_simulated_restart(conn):
-    """Regression test: Bazarr URL/key, engine config, and schedule config
-    must persist across restarts. Previously these only lived in the
-    in-memory Settings object and were silently lost on every restart."""
+    """Regression test: Bazarr URL/key and schedule config must persist
+    across restarts. Previously these only lived in the in-memory Settings
+    object and were silently lost on every restart. Engine config is NOT
+    covered here anymore — it lives in the engine_instances DB table (see
+    app.db.engine_instances_repo), not app_config/Settings."""
     settings_store.save_one(conn, "bazarr_base_url", "http://192.168.1.215:6767")
     settings_store.save_one(conn, "bazarr_api_key", "mykey123")
-    settings_store.save_one(conn, "ollama_base_url", "http://192.168.1.215:11434")
-    settings_store.save_one(conn, "ollama_model", "gemma3:4b")
     settings_store.save_one(conn, "age_threshold_days", 21)
 
     # Simulate a fresh process: brand-new Settings() with only env-var
@@ -33,8 +33,6 @@ def test_saved_settings_survive_simulated_restart(conn):
 
     assert fresh_settings.bazarr_base_url == "http://192.168.1.215:6767"
     assert fresh_settings.bazarr_api_key == "mykey123"
-    assert fresh_settings.ollama_base_url == "http://192.168.1.215:11434"
-    assert fresh_settings.ollama_model == "gemma3:4b"
     assert fresh_settings.age_threshold_days == 21
 
 

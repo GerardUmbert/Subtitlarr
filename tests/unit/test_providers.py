@@ -2,11 +2,10 @@ import httpx
 import pytest
 import respx
 
-from app.config import Settings
 from app.providers.base import ProviderError, ProviderRateLimitedError
 from app.providers.gemini_provider import GeminiProvider
 from app.providers.ollama_provider import OllamaProvider
-from app.providers.registry import get_active_provider, get_fallback_provider
+from app.providers.registry import build_cascade_providers, build_provider
 
 
 @pytest.mark.asyncio
@@ -213,50 +212,53 @@ async def test_gemini_unmapped_response_shape_still_raises_with_raw_detail():
     await provider.aclose()
 
 
-def test_registry_builds_active_and_fallback():
-    settings = Settings(
-        active_engine="ollama",
-        fallback_engine="gemini",
-        ollama_base_url="http://ollama.test:11434",
-        ollama_model="gemma3:4b",
-        gemini_api_key="testkey",
-        gemini_model="gemini-1.5-flash",
+def test_registry_builds_cascade_active_and_fallback():
+    instances = [
+        {
+            "id": 1,
+            "name": "ollama",
+            "provider_type": "ollama",
+            "config": {"base_url": "http://ollama.test:11434", "model": "gemma3:4b"},
+        },
+        {
+            "id": 2,
+            "name": "gemini",
+            "provider_type": "gemini",
+            "config": {"api_key": "testkey", "model": "gemini-1.5-flash"},
+        },
+    ]
+    cascade, name_to_id = build_cascade_providers(instances)
+    assert [p.name for p in cascade] == ["ollama", "gemini"]
+    assert name_to_id == {"ollama": 1, "gemini": 2}
+
+
+def test_registry_build_provider_uses_instance_name():
+    provider = build_provider(
+        "ollama",
+        {"base_url": "http://ollama.test:11434", "model": "gemma3:4b"},
+        instance_name="Ollama (backup)",
     )
-    active = get_active_provider(settings)
-    fallback = get_fallback_provider(settings)
-    assert active.name == "ollama"
-    assert fallback.name == "gemini"
-
-
-def test_registry_no_fallback_when_same_as_active():
-    settings = Settings(active_engine="ollama", fallback_engine="ollama")
-    assert get_fallback_provider(settings) is None
-
-
-def test_registry_no_fallback_when_unset():
-    settings = Settings(active_engine="ollama", fallback_engine="")
-    assert get_fallback_provider(settings) is None
+    assert provider.name == "Ollama (backup)"
+    assert provider.provider_type == "ollama"
 
 
 def test_registry_builds_nvidia():
-    settings = Settings(active_engine="nvidia", nvidia_api_key="testkey")
-    active = get_active_provider(settings)
-    assert active.name == "nvidia"
+    provider = build_provider("nvidia", {"api_key": "testkey", "model": "deepseek-ai/deepseek-v4-flash"})
+    assert provider.provider_type == "nvidia"
 
 
 def test_registry_builds_openrouter():
-    settings = Settings(active_engine="openrouter", openrouter_api_key="testkey")
-    active = get_active_provider(settings)
-    assert active.name == "openrouter"
+    provider = build_provider(
+        "openrouter", {"api_key": "testkey", "model": "google/gemma-4-26b-a4b-it:free"}
+    )
+    assert provider.provider_type == "openrouter"
 
 
 def test_registry_builds_groq():
-    settings = Settings(active_engine="groq", groq_api_key="testkey")
-    active = get_active_provider(settings)
-    assert active.name == "groq"
+    provider = build_provider("groq", {"api_key": "testkey", "model": "llama-3.1-8b-instant"})
+    assert provider.provider_type == "groq"
 
 
 def test_registry_builds_llamacpp():
-    settings = Settings(active_engine="llamacpp")
-    active = get_active_provider(settings)
-    assert active.name == "llamacpp"
+    provider = build_provider("llamacpp", {"base_url": "http://localhost:8080"})
+    assert provider.provider_type == "llamacpp"

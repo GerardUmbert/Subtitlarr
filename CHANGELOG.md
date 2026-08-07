@@ -3,6 +3,112 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.8.0]
+
+### Added
+- **Multiple engine instances with an ordered fallback cascade**, replacing
+  the old single `active_engine`/`fallback_engine` model. Any number of
+  independently-configured, individually-named instances (e.g. two
+  separate Gemini API keys) can now be added, reordered by drag-and-drop
+  on the Engines page, and enabled/disabled — a translation tries each
+  enabled instance top-to-bottom until one succeeds. A **separator** row
+  can be inserted anywhere in the list to stop the cascade at that point
+  (e.g. "no fallback at all" = a separator right under the first
+  instance); everything below a separator is excluded from the fallback
+  walk regardless of its own enabled state.
+- **Automatic 24h rate-limit cooldown per instance**: 3 consecutive
+  `ProviderRateLimitedError`s (429s, timeouts, transient 5xx) against the
+  same instance mark it rate-limited for 24 hours, and the cascade
+  builder skips it without a live round-trip. A successful manual "Test
+  connection" clears the cooldown early. Deliberately NOT a usage/quota
+  meter — no RPD/TPM counters, no per-provider reset-timezone tracking,
+  just a blunt "this looked dead, leave it alone for a while" signal (see
+  `plans/multiple-engine-instances-cascade.md` for why the original
+  usage-tracking design was dropped in favor of this simpler mechanism).
+- New `app/db/engine_instances_repo.py` (CRUD + cascade-building +
+  rate-limit-cooldown queries) and `app/api/engine_instances.py`
+  (`GET/POST /api/config/engine-instances`, `PUT`/`DELETE .../{id}`,
+  `POST .../reorder`, `POST .../{id}/test`) — replaces the old
+  `active_engine`/`fallback_engine` Settings fields and the per-provider-
+  type config fields (`gemini_api_key`, `nvidia_batch_token_budget`,
+  etc.), which are all removed. `app/providers/registry.py`'s `_build()`
+  is now `build_provider(provider_type, config_dict, instance_name=...)`,
+  reading from an instance's own `config_json` instead of global
+  `Settings` fields; `TranslationProvider.name` is now a per-instance
+  display name (settable at construction) distinct from the fixed
+  `provider_type` used for concurrency/behavior decisions.
+- `app/engine/translator.py`'s three near-identical retry/fallback
+  `except` blocks (rate-limited, content-blocked, unreliable-response)
+  are now one shared `_try_cascade()` helper that walks an ordered
+  `cascade: list[TranslationProvider]` instead of a fixed `active_provider`/
+  `fallback_provider` pair — same retry-once-then-fallback behavior,
+  generalized to any number of fallback instances.
+- The Engines page is now a **reorderable list of instance cards**
+  (drag-and-drop, browser-native `draggable`) instead of one radio button
+  per provider type — each card shows a rate-limit status badge, and an
+  "+ Add engine" menu creates a new instance of any provider type (or a
+  separator) at the end of the cascade.
+- **The engine cascade is now rebuilt fresh for every item in a run**,
+  not once at run start — confirmed live this was necessary: after an
+  instance tripped its rate-limit cooldown mid-run, every subsequent
+  item was still trying it first and paying for a guaranteed-to-fail
+  request plus the retry wait before falling back, because the cascade
+  snapshot taken at the start of the run never noticed the trip.
+- **Stop button** for an in-progress run (Dashboard's Current Run panel)
+  — stops after the in-flight item finishes (never mid-item), leaving
+  remaining items untouched (`pending`/`queued`, not marked failed)
+  rather than requiring a full server restart to interrupt a run.
+- **Ollama's reload-on-failure (force-unload + retry once) now covers
+  any server-responded-but-stuck/errored failure** — a watchdog timeout,
+  an httpx-level timeout, or a 5xx response — not just watchdog timeouts
+  as before. A `ConnectError` (Ollama unreachable) still skips reload
+  and fails immediately, since there's no loaded model state to clear if
+  the process was never reached in the first place. llama.cpp
+  intentionally has no equivalent (no reload/restart endpoint exists).
+- **"Clear all rate limits" job** (Jobs page, manual-only, no cron) —
+  immediately un-flags every engine instance currently in its 24h
+  rate-limit cooldown. For when a trip turns out to be a false positive
+  rather than genuine exhaustion (see the burst-debounce fix below) or
+  the underlying issue's already fixed, without waiting per-instance for
+  a Test Connection or the full 24h.
+- **Gemini 429 responses now log their full response body**, not just
+  the bare status code — needed to actually diagnose a live session
+  where the account's AI Studio dashboard showed RPM/TPM/RPD headroom
+  while the API kept returning real 429s (most likely the dashboard's
+  "last hour" view scoping to requests within that hour rather than
+  cumulative usage against the daily cap, not a bug in this app —
+  investigation deferred to a fresh-quota test).
+
+### Fixed
+- **Engines page**: dragging a card no longer hijacked text selection
+  inside its input fields (the whole card was `draggable`; now only its
+  ⠿ handle is), the "+ Add engine" dropdown menu was invisible (clipped
+  by its parent's `overflow: hidden`), and a card dragged without moving
+  stayed stuck at reduced opacity.
+- **A healthy engine could trip its 24h rate-limit cooldown from a single
+  burst, not sustained exhaustion.** Confirmed live: a Gemini account
+  with plenty of RPM/TPM/RPD headroom (per its own AI Studio dashboard)
+  still got flagged, because several batches fired concurrently
+  (`concurrent_batch_window`) all 429'd within milliseconds of each
+  other on a short burst limit distinct from the rolling per-minute
+  average, and each one independently counted as its own strike —
+  turning one burst event into 3 "consecutive" failures. Failures within
+  5 seconds of each other (`BURST_DEBOUNCE_SECONDS`) now collapse into a
+  single strike; only failures spaced further apart advance the counter.
+  New `engine_instances.last_failure_at` column tracks this
+  independently of `updated_at`, which is also touched by unrelated
+  writes (a name/config edit) that must never be mistaken for a recent
+  failure.
+
+### Removed
+- `active_engine`/`fallback_engine` and all per-provider-type Settings
+  fields (`ollama_base_url`, `gemini_api_key`, `nvidia_batch_token_budget`,
+  etc.) — engine configuration lives entirely in the `engine_instances`
+  DB table now. No migration path from the old settings was written
+  (pre-release software, no installs to preserve) — a fresh install
+  starts with an empty engine list and instances are added through the
+  Engines page.
+
 ## [0.7.0]
 
 ### Added

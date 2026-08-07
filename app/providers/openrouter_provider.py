@@ -51,13 +51,17 @@ class OpenRouterProvider(TranslationProvider):
     token-budget logic."""
 
     name = "openrouter"
+    provider_type = "openrouter"
 
     def __init__(
         self,
         api_key: str,
         model: str = "google/gemma-4-26b-a4b-it:free",
         timeout: float = DEFAULT_OPENROUTER_TIMEOUT_SECONDS,
+        instance_name: str | None = None,
     ):
+        if instance_name:
+            self.name = instance_name
         self._api_key = api_key
         self._model = model
         self._client = httpx.AsyncClient(

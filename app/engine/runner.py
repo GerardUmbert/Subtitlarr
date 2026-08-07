@@ -8,11 +8,17 @@ from typing import Callable
 
 from app.bazarr.client import BazarrClient
 from app.config import Settings
-from app.db import repository
+from app.db import engine_instances_repo, repository
 from app.engine import poller, prefetch, selector, translator
-from app.providers.registry import get_active_provider, get_fallback_provider
+from app.providers import registry
 
 logger = logging.getLogger(__name__)
+
+
+class NoEngineConfiguredError(Exception):
+    """Raised when a run is started but engine_instances has no enabled,
+    non-rate-limited instance before the first separator (or no instances
+    at all) — there's nothing left to translate with."""
 
 
 @dataclass
@@ -41,6 +47,15 @@ class RunProgress:
     # the run, even once throughput has long since recovered. Bounded so a
     # very long run's memory doesn't grow unboundedly.
     _recent_completions: deque[float] = field(default_factory=lambda: deque(maxlen=20))
+    # Set by RunController.cancel_current() (e.g. a "Stop" button on the
+    # Queue/Dashboard page). Checked BETWEEN items, never mid-item — an
+    # item already in the middle of translate_item() (a real in-flight LLM
+    # call, possibly mid-batch across several requests) always finishes or
+    # fails on its own terms first, so a cancel can't leave that one item's
+    # DB row in a half-written state. The remaining not-yet-started items
+    # are left untouched (still 'pending'/'queued'), not marked failed —
+    # cancelling is not a claim that they were tried and didn't work.
+    cancel_requested: bool = False
 
     def record_completion(self) -> None:
         self._recent_completions.append(time.monotonic())
@@ -129,59 +144,93 @@ class RunController:
             client, ready_items, prefetch.DEFAULT_SCRATCH_ROOT
         )
 
-        active_provider = get_active_provider(self._settings)
-        fallback_provider = get_fallback_provider(self._settings)
+        # Each cascade instance already carries its own batch_token_budget/
+        # concurrent_batch_window/num_ctx in config_json — no more global
+        # per-provider-TYPE lookup tables here (an earlier version of this
+        # code had one; engine_instances lets several instances of the
+        # SAME type coexist with different tuning, so a single table keyed
+        # by provider type can no longer express that).
+        #
+        # Rebuilt fresh for EVERY item (not once at run start) — an
+        # instance can trip its 24h rate-limit cooldown mid-run (see
+        # engine_instances_repo.record_rate_limited_failure), and a cascade
+        # snapshot taken before that happened would otherwise keep sending
+        # every remaining item's first attempt straight at an instance
+        # already known to be dead, burning a guaranteed-to-fail request +
+        # the one-retry wait on each one instead of skipping straight to
+        # whatever's next. Confirmed live: after Gemini Main tripped, every
+        # subsequent item still tried it first and waited out the retry
+        # before falling to Gemini Secondary.
+        def _build_cascade():
+            cascade_instances = engine_instances_repo.get_cascade(self._conn)
+            if not cascade_instances:
+                return None
+            cascade, name_to_instance_id = registry.build_cascade_providers(cascade_instances)
+            active_config = cascade_instances[0]["config"]
+            batch_token_budget_override, concurrent_batch_window = registry.batch_settings_for(
+                active_config
+            )
+            num_ctx = active_config.get("num_ctx", 8192)
+            return cascade, name_to_instance_id, batch_token_budget_override, concurrent_batch_window, num_ctx
+
+        if _build_cascade() is None:
+            repository.finish_run(self._conn, run_id, 0, 0)
+            progress.active = False
+            raise NoEngineConfiguredError(
+                "No enabled, non-rate-limited engine instance is configured — "
+                "add or re-enable one on the Engines page."
+            )
 
         pause_seconds = self._settings.pause_between_items_seconds
+        # EVERY provider object built across the whole run — a fresh
+        # cascade, and therefore fresh provider objects each with their
+        # OWN httpx client, is built per item (see above), so the same DB
+        # instance can produce many distinct provider objects over a long
+        # run. Every single one holds its own open connection pool and
+        # must be aclose()'d — closing only the first one seen per
+        # instance would leak the rest. Collected in a plain list instead
+        # of closing per-item so a still-in-flight client from a
+        # currently-failing item is never torn down out from under it;
+        # everything is closed together, once, in the outer finally block
+        # below.
+        all_providers_built: list = []
 
-        # Each engine's batch-size and concurrency settings are tuned for
-        # fundamentally different constraints: Ollama's small default
-        # protects local VRAM/GPU, while the cloud providers below have no
-        # such limit. Sharing one budget between them (as an earlier
-        # version of this code did) meant a newly added cloud provider
-        # silently inherited Ollama's GPU-safe default and ran far more
-        # sequential batches than it needed to — this table is the single
-        # place that gap gets closed for every current and future cloud
-        # provider, instead of a growing if/elif chain.
-        _CLOUD_ENGINE_SETTINGS = {
-            "nvidia": (
-                self._settings.nvidia_batch_token_budget,
-                self._settings.nvidia_concurrent_batch_window,
-            ),
-            "openrouter": (
-                self._settings.openrouter_batch_token_budget,
-                self._settings.openrouter_concurrent_batch_window,
-            ),
-            "groq": (
-                self._settings.groq_batch_token_budget,
-                self._settings.groq_concurrent_batch_window,
-            ),
-            "gemini": (
-                self._settings.gemini_batch_token_budget,
-                self._settings.gemini_concurrent_batch_window,
-            ),
-        }
-        # Local, non-concurrent providers (Ollama, llama.cpp) each still
-        # get their OWN batch-token-budget — sharing Ollama's would be
-        # fine by coincidence today (same conservative default value) but
-        # wrong in spirit, and would silently break if either default
-        # ever diverges.
-        _LOCAL_ENGINE_BATCH_BUDGETS = {
-            "ollama": self._settings.ollama_batch_token_budget,
-            "llamacpp": self._settings.llamacpp_batch_token_budget,
-        }
-        if active_provider.name in _CLOUD_ENGINE_SETTINGS:
-            batch_token_budget_override, concurrent_batch_window = _CLOUD_ENGINE_SETTINGS[
-                active_provider.name
-            ]
-        else:
-            batch_token_budget_override = _LOCAL_ENGINE_BATCH_BUDGETS.get(
-                active_provider.name, self._settings.ollama_batch_token_budget
-            )
-            concurrent_batch_window = 1  # unused for non-concurrent providers
+        def _on_call_result_for(name_to_instance_id: dict) -> Callable:
+            def _on_call_result(provider, rate_limited: bool) -> None:
+                instance_id = name_to_instance_id.get(provider.name)
+                if instance_id is None:
+                    return
+                if rate_limited:
+                    engine_instances_repo.record_rate_limited_failure(self._conn, instance_id)
+                else:
+                    engine_instances_repo.record_success(self._conn, instance_id)
+
+            return _on_call_result
 
         try:
             for i, entry in enumerate(ready_items):
+                if progress.cancel_requested:
+                    logger.info(
+                        "Run %s cancelled after %d/%d items — %d item(s) left untouched",
+                        run_id, progress.processed, progress.total, len(ready_items) - i,
+                    )
+                    break
+
+                built = _build_cascade()
+                if built is None:
+                    # Every instance is now disabled/rate-limited — this can
+                    # only happen mid-run (the pre-loop check above already
+                    # guaranteed at least one was available at the start).
+                    # Remaining items are left untouched, same as a cancel.
+                    logger.warning(
+                        "Run %s: no engine instance available anymore (all rate-limited or "
+                        "disabled) — stopping with %d/%d items left untouched",
+                        run_id, len(ready_items) - i, progress.total,
+                    )
+                    break
+                cascade, name_to_instance_id, batch_token_budget_override, concurrent_batch_window, num_ctx = built
+                all_providers_built.extend(cascade)
+
                 item_id = entry["item"]["id"]
                 cached_path = cached_paths.get(item_id)
                 try:
@@ -191,15 +240,15 @@ class RunController:
                         entry["item"],
                         entry["source_lang"],
                         entry["source_path"],
-                        active_provider,
-                        fallback_provider,
+                        cascade,
                         run_id,
-                        num_ctx=self._settings.ollama_num_ctx,
+                        num_ctx=num_ctx,
                         batch_token_budget_override=batch_token_budget_override,
                         cached_source_path=cached_path,
                         queue_uploads=self._settings.queue_uploads_enabled,
                         retry_pause_seconds=pause_seconds,
                         concurrent_batch_window=concurrent_batch_window,
+                        on_call_result=_on_call_result_for(name_to_instance_id),
                     )
                 except Exception:  # noqa: BLE001 - one item's failure must not abort the batch
                     progress.failed += 1
@@ -221,12 +270,22 @@ class RunController:
         finally:
             progress.active = False
             repository.finish_run(self._conn, run_id, progress.processed, progress.failed)
-            if hasattr(active_provider, "aclose"):
-                await active_provider.aclose()
-            if fallback_provider is not None and hasattr(fallback_provider, "aclose"):
-                await fallback_provider.aclose()
+            for provider in all_providers_built:
+                if hasattr(provider, "aclose"):
+                    await provider.aclose()
 
         return progress
+
+    def cancel_current(self) -> bool:
+        """Requests that the currently active run stop after its in-flight
+        item finishes (or fails) — never mid-item. Returns False if no run
+        is active, so the caller (the API route) can tell the difference
+        between "cancelled" and "nothing to cancel" rather than silently
+        no-op'ing either way."""
+        if self.current is None or not self.current.active:
+            return False
+        self.current.cancel_requested = True
+        return True
 
     async def poll(self) -> dict:
         """Refreshes Subtitlarr's local view of Bazarr's wanted list without

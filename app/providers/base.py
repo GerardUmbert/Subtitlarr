@@ -59,7 +59,17 @@ class ProviderRateLimitedError(Exception):
 
 
 class TranslationProvider(ABC):
+    # `name` is the user-facing display/log name — defaults to
+    # provider_type but can be overridden per-instance (e.g. "Gemini
+    # (main)" vs "Gemini (backup)" for two instances of the same type),
+    # since engine_instances lets several instances share one provider
+    # type. `provider_type` is the fixed factory key ("gemini", "nvidia",
+    # ...) and must NEVER be overridden — code that needs to know what
+    # KIND of provider this is (concurrency/windowing behavior, prompt
+    # quirks) keys off provider_type, never off the possibly-customized
+    # name.
     name: str
+    provider_type: str
 
     @abstractmethod
     async def translate(

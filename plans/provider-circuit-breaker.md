@@ -1,5 +1,19 @@
 # TODO: Circuit-breaker for a provider that's actually down
 
+> **STATUS: core mechanism shipped.** The multi-engine-cascade work
+> (`[[multiple-engine-instances-cascade]]`) implemented the "N
+> consecutive failures → mark the instance rate-limited for 24h,
+> subsequent items skip it" behavior this doc proposes below, plus the
+> critical detail this doc's Option B was reaching for: `runner.py`
+> rebuilds the cascade FRESH per item, so a trip mid-run is picked up by
+> the very next item, not just future runs. See
+> `app/db/engine_instances_repo.py` (`record_rate_limited_failure`,
+> `get_cascade`) and `app/engine/runner.py`'s `_build_cascade()` closure.
+> The sections below are kept for historical context (the original
+> incident + design reasoning) but are largely superseded. Remaining
+> open thread: `[[local-engine-reload-on-failure]]` (Ollama-specific
+> reload-before-strike behavior).
+
 ## What happened (live incident)
 
 Ran a 42-item filtered batch against NVIDIA. NVIDIA's endpoint was

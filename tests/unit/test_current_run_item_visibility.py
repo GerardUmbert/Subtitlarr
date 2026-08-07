@@ -29,9 +29,21 @@ def _seed_pending_items(conn, count: int) -> list:
 def stub_providers(monkeypatch):
     class FakeProvider:
         name = "fake"
+        provider_type = "fake"
 
-    monkeypatch.setattr(runner_module, "get_active_provider", lambda settings: FakeProvider())
-    monkeypatch.setattr(runner_module, "get_fallback_provider", lambda settings: None)
+    fake_instance = {
+        "id": 1, "name": "fake", "provider_type": "fake", "enabled": True,
+        "config": {}, "rate_limited_until": None,
+    }
+    monkeypatch.setattr(
+        runner_module.engine_instances_repo, "get_cascade", lambda conn: [fake_instance]
+    )
+    monkeypatch.setattr(
+        runner_module.registry,
+        "build_cascade_providers",
+        lambda instances: ([FakeProvider()], {"fake": 1}),
+    )
+    monkeypatch.setattr(runner_module.registry, "batch_settings_for", lambda config: (0, 1))
 
 
 @pytest.mark.asyncio

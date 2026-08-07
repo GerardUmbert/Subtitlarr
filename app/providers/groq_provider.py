@@ -45,13 +45,17 @@ class GroqProvider(TranslationProvider):
     existing chunk_cues() token-budget logic."""
 
     name = "groq"
+    provider_type = "groq"
 
     def __init__(
         self,
         api_key: str,
         model: str = "llama-3.1-8b-instant",
         timeout: float = DEFAULT_GROQ_TIMEOUT_SECONDS,
+        instance_name: str | None = None,
     ):
+        if instance_name:
+            self.name = instance_name
         self._api_key = api_key
         self._model = model
         self._client = httpx.AsyncClient(

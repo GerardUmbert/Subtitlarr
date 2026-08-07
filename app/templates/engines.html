@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Translation Engine{% endblock %}
+{% block title %}Translation Engines{% endblock %}
 {% block content %}
 <div id="engines-app">
   <div class="page-head">
     <div>
-      <h1>Translation Engine</h1>
-      <p class="page-sub">Choose which engine handles queued translations, and configure it.</p>
+      <h1>Translation Engines</h1>
+      <p class="page-sub">Every engine tried, top to bottom, until one succeeds. Drag to reorder — add a separator to stop the cascade at any point.</p>
     </div>
   </div>
 
@@ -14,460 +14,155 @@
     <p>Loading engine settings…</p>
   </div>
 
-  <div class="engine-card" v-else>
-    <div class="panel-title">Active engine</div>
-    <div class="panel-title-sub">Fallback engine is used if the active one rate-limits or fails</div>
-
+  <template v-else>
     <div class="note" style="margin-bottom:16px;">
       <strong>Recommended: Gemini.</strong> Live-benchmarked against every other engine here on the
-      same real content — Gemini (with a real-quota model, see below) came out roughly
-      <strong>4&ndash;25&times; faster per subtitle cue</strong> than NVIDIA, Ollama, OpenRouter, or Groq,
-      with a genuinely usable free tier (500 requests/day on the recommended model). The other
-      engines below are solid alternatives — useful as a fallback, or if you hit Gemini's daily cap —
-      but start here unless you have a specific reason not to.
+      same real content — Gemini (with a real-quota model) came out roughly
+      <strong>4&ndash;25&times; faster per subtitle cue</strong> than NVIDIA, Ollama, OpenRouter, or Groq.
+      The other engines are solid alternatives — useful as a fallback, or if you hit Gemini's daily cap.
     </div>
 
-    <div :class="['engine-opt', { selected: active === 'gemini' }]" @click="active = 'gemini'">
-      <div class="engine-radio"><div class="fill" v-if="active === 'gemini'"></div></div>
-      <div class="engine-info">
-        <div class="engine-name">Gemini <span class="badge badge-free">free tier</span> <span class="badge" style="background:#2f7d4f22;color:#2f7d4f;">recommended</span></div>
-        <div class="engine-meta">{% raw %}{{ geminiModel }}{% endraw %}</div>
-      </div>
-      <div :class="['engine-status', geminiHasKey ? '' : 'off']">
-        <span class="dot"></span>{% raw %}{{ geminiHasKey ? 'configured' : 'no key' }}{% endraw %}
-      </div>
+    <div v-if="!instances.length" class="panel">
+      <div class="empty-state" style="padding:40px 20px;">No engines configured yet — add one below.</div>
     </div>
 
-    <div class="engine-config" v-if="active === 'gemini'">
-      <div class="field">
-        <label>Model</label>
-        <input v-model="geminiModel" placeholder="gemini-3.5-flash-lite" />
-        <p class="field-hint">
-          <strong>Important: not every Gemini model name actually has free-tier quota on your
-          account.</strong> Confirmed live: <span class="mono">gemini-2.0-flash</span> (an old
-          default) had 0 RPM / 0 TPM / 0 RPD on a real account — every request 429'd instantly,
-          which looks like a rate-limit problem but is actually "this model isn't available to
-          you at all." Check <span class="mono">aistudio.google.com/rate-limit</span> for your
-          account's real per-model numbers before assuming a failure is your batch size or
-          pacing. <span class="mono">gemini-3.5-flash-lite</span> (the default here) had the best
-          confirmed free-tier quota of any text model at time of writing: 15 RPM, 250K TPM,
-          500 RPD.
-        </p>
-      </div>
-      <div class="field">
-        <label>API key {% raw %}{{ geminiKeyMasked ? '(' + geminiKeyMasked + ')' : '' }}{% endraw %}</label>
-        <input v-model="geminiApiKey" type="password" placeholder="leave blank to keep current key" />
-        <p class="field-hint">
-          Get a free key at <span class="mono">aistudio.google.com/apikey</span> — no billing
-          setup required for the free tier.
-        </p>
-      </div>
-      <div class="field">
-        <label>Batch size (dialogue tokens)</label>
-        <input v-model.number="geminiBatchTokenBudget" type="number" min="1" step="100" />
-        <p class="field-hint">
-          How many dialogue tokens go into one translation request. A real-quota model like
-          <span class="mono">gemini-3.5-flash-lite</span> has 250K TPM — enormous headroom, so
-          this can stay high (fewer, bigger requests). Lower it only if translations come back
-          with a low "recovered N/M cues" count, not in response to 429s — an instant 429 on the
-          very first request almost always means the MODEL has no quota, not that the batch is
-          too big (see the Model field's note above).
-        </p>
-      </div>
-      <div class="field">
-        <label>Concurrent batches</label>
-        <input v-model.number="geminiConcurrentBatchWindow" type="number" min="1" step="1" />
-        <p class="field-hint">
-          How many batches are sent to Gemini at once before waiting for that group to finish.
-          Confirmed live at 15 RPM for the recommended model — 3 keeps comfortable headroom
-          without running fully sequential. Re-check <span class="mono">aistudio.google.com/rate-limit</span>
-          before raising further; RPM is account/model-specific, not something Google publishes
-          as a stable number.
-        </p>
-      </div>
-      <div class="field-row">
-        <button class="btn" @click="testEngine('gemini')" :disabled="testing === 'gemini'">
-          {% raw %}{{ testing === 'gemini' ? 'Testing…' : 'Test connection' }}{% endraw %}
+    <div class="panel engine-cascade" v-else>
+    <div class="engine-card" v-for="instance in instances" :key="instance.id"
+         :draggable="dragEnabledId === instance.id"
+         @dragstart="dragStart(instance)"
+         @dragover="dragOver(instance, $event)"
+         @drop="dropOn(instance)"
+         @dragend="dragEnabledId = null; draggingId = null;"
+         :style="{ opacity: draggingId === instance.id ? 0.4 : 1 }">
+
+      <template v-if="isSeparator(instance)">
+        <div class="engine-opt separator-row">
+          <span class="drag-handle" @mousedown="dragEnabledId = instance.id">⠿</span>
+          <span class="separator-label">— cascade stops here — anything below is never tried as a fallback —</span>
+          <button class="link-btn" @click="deleteInstance(instance)">remove</button>
+        </div>
+      </template>
+
+      <template v-else>
+        <div class="engine-opt" @click="toggleExpand(instance)">
+          <span class="drag-handle" @click.stop @mousedown="dragEnabledId = instance.id">⠿</span>
+          <div class="engine-info">
+            <div class="engine-name">
+              {% raw %}{{ editBuffers[instance.id].name }}{% endraw %}
+              <span class="badge" v-for="b in typeInfo(instance.provider_type).badges" :key="b"
+                    :class="b === 'recommended' ? '' : (b === 'local' ? 'badge-local' : (b === 'free tier' ? 'badge-free' : 'badge-paid'))"
+                    :style="b === 'recommended' ? 'background:#2f7d4f22;color:#2f7d4f;' : ''">{% raw %}{{ b }}{% endraw %}</span>
+            </div>
+            <div class="engine-meta">{% raw %}{{ typeInfo(instance.provider_type).label }}{% endraw %} · {% raw %}{{ editBuffers[instance.id].config.model || editBuffers[instance.id].config.base_url || '' }}{% endraw %}</div>
+          </div>
+          <div :class="['engine-status', editBuffers[instance.id].enabled ? '' : 'off']">
+            <span class="dot"></span>{% raw %}{{ editBuffers[instance.id].enabled ? 'enabled' : 'disabled' }}{% endraw %}
+          </div>
+          <div v-if="instance.rate_limited_until" class="engine-status off" title="Rate-limited — 3+ consecutive failures. Clears automatically after 24h, or immediately on a successful Test connection.">
+            <span class="dot"></span>rate-limited
+          </div>
+          <span class="expand-arrow" :class="{ open: expandedId === instance.id }">▾</span>
+        </div>
+
+        <div class="engine-config" v-if="expandedId === instance.id">
+          <div class="field">
+            <label>Instance name</label>
+            <input v-model="editBuffers[instance.id].name" placeholder="e.g. Gemini (main)" />
+            <p class="field-hint">Shown in logs, History, and the Events tab — helpful if you add more than one instance of the same engine type.</p>
+          </div>
+
+          <template v-for="field in typeInfo(instance.provider_type).fields" :key="field.key">
+            <div class="field">
+              <label>
+                {% raw %}{{ field.label }}{% endraw %}
+                <template v-if="field.secret">
+                  {% raw %}{{ instance.config[field.key + '_masked'] ? '(' + instance.config[field.key + '_masked'] + ')' : (field.optional ? '(optional)' : '') }}{% endraw %}
+                </template>
+              </label>
+
+              <select v-if="field.type === 'numCtxSelect'" v-model.number="editBuffers[instance.id].config[field.key]">
+                <option v-for="opt in numCtxOptions" :key="opt" :value="opt">{% raw %}{{ formatNumCtx(opt) }}{% endraw %}</option>
+              </select>
+
+              <template v-else-if="field.ollamaModelPicker">
+                <input v-model="editBuffers[instance.id].config[field.key]" :placeholder="field.placeholder"
+                       :list="'ollama-models-' + instance.id" />
+                <datalist :id="'ollama-models-' + instance.id">
+                  <option v-for="m in (ollamaModels[instance.id] || [])" :key="m.name" :value="m.name">
+                    {% raw %}{{ m.parameter_size }} · {{ m.quantization }}{% endraw %}
+                  </option>
+                </datalist>
+                <p class="field-hint" v-if="loadingOllamaModels[instance.id]">Checking installed models…</p>
+                <p class="field-hint" v-else-if="ollamaModelsError[instance.id]">Could not list installed models: {% raw %}{{ ollamaModelsError[instance.id] }}{% endraw %}</p>
+              </template>
+
+              <input v-else-if="field.type === 'password'" v-model="editBuffers[instance.id].config[field.key]"
+                     type="password" :placeholder="instance.config[field.key + '_masked'] ? 'leave blank to keep current key' : field.placeholder" />
+
+              <input v-else-if="field.type === 'number'" v-model.number="editBuffers[instance.id].config[field.key]"
+                     type="number" :min="field.min" :step="field.step" />
+
+              <input v-else v-model="editBuffers[instance.id].config[field.key]" :placeholder="field.placeholder"
+                     @blur="field.key === 'base_url' && instance.provider_type === 'ollama' ? refreshOllamaModels(instance) : null" />
+
+              <p class="field-hint" v-if="field.hint">{% raw %}{{ field.hint }}{% endraw %}</p>
+            </div>
+          </template>
+
+          <div class="field-row">
+            <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+              <input type="checkbox" v-model="editBuffers[instance.id].enabled" />
+              Enabled
+            </label>
+          </div>
+
+          <div class="field-row">
+            <button class="btn" @click="testInstance(instance)" :disabled="testing === instance.id">
+              {% raw %}{{ testing === instance.id ? 'Testing…' : 'Test connection' }}{% endraw %}
+            </button>
+            <span v-if="testResults[instance.id]" :class="['test-result', { error: !testResults[instance.id].ok }]">
+              ● {% raw %}{{ testResults[instance.id].detail }}{% endraw %}
+            </span>
+          </div>
+
+          <div class="field-row" v-if="instance.provider_type === 'ollama'">
+            <button class="btn" @click="pullModel(instance)" :disabled="pull.active">
+              {% raw %}{{ pull.active ? 'Pulling…' : 'Pull model' }}{% endraw %}
+            </button>
+            <span v-if="pull.active" class="test-result">
+              ● {% raw %}{{ pull.status }}{% endraw %}{% raw %}{{ pull.total ? ' — ' + pull.pct + '%' : '' }}{% endraw %}
+            </span>
+            <span v-else-if="pull.done" class="test-result">● model ready</span>
+            <span v-else-if="pull.error" class="test-result error">● {% raw %}{{ pull.error }}{% endraw %}</span>
+          </div>
+          <div class="progress-track" v-if="instance.provider_type === 'ollama' && pull.active && pull.total" style="margin-top:8px;">
+            <div class="progress-fill" :style="{ width: pull.pct + '%' }"></div>
+          </div>
+
+          <div class="field-row" style="margin-top:10px;">
+            <button class="btn btn-primary" @click="saveInstance(instance)" :disabled="saving === instance.id">
+              {% raw %}{{ saving === instance.id ? 'Saving…' : 'Save' }}{% endraw %}
+            </button>
+            <span v-if="saved === instance.id" class="test-result">● saved</span>
+            <button class="link-btn" style="margin-left:auto; color:var(--bad);" @click="deleteInstance(instance)">remove from cascade</button>
+          </div>
+        </div>
+      </template>
+    </div>
+    </div>
+
+    <div class="add-engine-wrap">
+      <button class="btn" @click="addMenuOpen = !addMenuOpen">+ Add engine</button>
+      <div class="add-engine-menu" v-if="addMenuOpen">
+        <button v-for="(info, type) in providerTypes" :key="type" class="add-engine-opt" @click="startAdd(type)">
+          {% raw %}{{ info.label }}{% endraw %}
         </button>
-        <span v-if="testResults.gemini" :class="['test-result', { error: !testResults.gemini.ok }]">
-          ● {% raw %}{{ testResults.gemini.detail }}{% endraw %}
-        </span>
-      </div>
-    </div>
-
-    <div :class="['engine-opt', { selected: active === 'ollama' }]" style="margin-top:14px;" @click="active = 'ollama'">
-      <div class="engine-radio"><div class="fill" v-if="active === 'ollama'"></div></div>
-      <div class="engine-info">
-        <div class="engine-name">Ollama <span class="badge badge-local">local</span></div>
-        <div class="engine-meta">{% raw %}{{ ollamaModel }}{% endraw %} · {% raw %}{{ ollamaBaseUrl }}{% endraw %}</div>
-      </div>
-      <div :class="['engine-status', ollamaStatus.cls]"><span class="dot"></span>{% raw %}{{ ollamaStatus.label }}{% endraw %}</div>
-    </div>
-
-    <div class="engine-config" v-if="active === 'ollama'">
-      <div class="field">
-        <label>Model</label>
-        <input v-model="ollamaModel" placeholder="gemma3:4b" list="ollama-models-list" />
-        <datalist id="ollama-models-list">
-          <option v-for="m in ollamaModels" :key="m.name" :value="m.name">
-            {% raw %}{{ m.parameter_size }} · {{ m.quantization }}{% endraw %}
-          </option>
-        </datalist>
-        <p class="field-hint" v-if="loadingOllamaModels">Checking installed models…</p>
-        <p class="field-hint" v-else-if="ollamaModelsError">Could not list installed models: {% raw %}{{ ollamaModelsError }}{% endraw %} — you can still type a model name to pull.</p>
-        <p class="field-hint" v-else-if="ollamaModels.length">{% raw %}{{ ollamaModels.length }}{% endraw %} model{% raw %}{{ ollamaModels.length === 1 ? '' : 's' }}{% endraw %} installed — start typing to pick one, or enter a new name to pull it.</p>
-      </div>
-      <div class="field">
-        <label>Base URL</label>
-        <input v-model="ollamaBaseUrl" placeholder="http://ollama:11434" @blur="refreshOllamaModels" />
-      </div>
-      <div class="field">
-        <label>Context window (tokens)</label>
-        <select v-model.number="ollamaNumCtx">
-          <option v-for="opt in numCtxOptions" :key="opt" :value="opt">{% raw %}{{ formatNumCtx(opt) }}{% endraw %}</option>
-        </select>
-        <p class="field-hint">
-          Ollama defaults to 4096 regardless of what the model supports — long or verbose (e.g.
-          dual-language, heavily formatted) subtitle content can exceed that and get silently
-          truncated mid-response. Raise this if translations of longer or denser files come back
-          incomplete. Higher values use more RAM.
-        </p>
-      </div>
-      <div class="field">
-        <label>Batch size override (dialogue tokens)</label>
-        <input v-model.number="ollamaBatchTokenBudget" type="number" min="0" step="100" />
-        <p class="field-hint">
-          How many dialogue tokens go into one translation request. Small models can lose reliable
-          formatting on a big batch even though it technically fits the context window — a batch
-          that fits isn't a batch the model can format correctly.
-        </p>
-        <p class="field-hint">
-          <strong>0</strong> = auto (derives the batch size from the context window above — usually
-          the LARGEST setting, not the smallest). <strong>1</strong> = one cue per request, the most
-          reliable option but the slowest, since per-request overhead adds up. <strong>400–900</strong>
-          is the sweet spot — all land at roughly the same per-cue speed, but 900 has been seen to
-          drop into repeated/garbled output on some content, while 400 has not. <strong>400 (default)</strong>
-          is the safer pick; raise it once you've confirmed your content is fine at a bigger size.
-        </p>
-        <p class="field-hint">
-          Seeing untranslated lines or a "recovered N/M cues" failure? Lower this value.
-        </p>
-      </div>
-      <div class="field-row">
-        <button class="btn" @click="testEngine('ollama')" :disabled="testing === 'ollama'">
-          {% raw %}{{ testing === 'ollama' ? 'Testing…' : 'Test connection' }}{% endraw %}
+        <button class="add-engine-opt" @click="addSeparator" style="border-top:1px solid var(--border);">
+          — separator (stop cascade here) —
         </button>
-        <span v-if="testResults.ollama" :class="['test-result', { error: !testResults.ollama.ok }]">
-          ● {% raw %}{{ testResults.ollama.detail }}{% endraw %}
-        </span>
-      </div>
-
-      <div class="field-row">
-        <button class="btn" @click="pullModel" :disabled="pull.active">
-          {% raw %}{{ pull.active ? 'Pulling…' : 'Pull model' }}{% endraw %}
-        </button>
-        <span v-if="pull.active" class="test-result">
-          ● {% raw %}{{ pull.status }}{% endraw %}{% raw %}{{ pull.total ? ' — ' + pull.pct + '%' : '' }}{% endraw %}
-        </span>
-        <span v-else-if="pull.done" class="test-result">● model ready</span>
-        <span v-else-if="pull.error" class="test-result error">● {% raw %}{{ pull.error }}{% endraw %}</span>
-      </div>
-      <div class="progress-track" v-if="pull.active && pull.total" style="margin-top:8px;">
-        <div class="progress-fill" :style="{ width: pull.pct + '%' }"></div>
       </div>
     </div>
-
-    <div :class="['engine-opt', { selected: active === 'llamacpp' }]" style="margin-top:14px;" @click="active = 'llamacpp'">
-      <div class="engine-radio"><div class="fill" v-if="active === 'llamacpp'"></div></div>
-      <div class="engine-info">
-        <div class="engine-name">llama.cpp <span class="badge badge-local">local</span></div>
-        <div class="engine-meta">{% raw %}{{ llamacppBaseUrl }}{% endraw %}</div>
-      </div>
-    </div>
-
-    <div class="engine-config" v-if="active === 'llamacpp'">
-      <div class="field">
-        <label>Base URL</label>
-        <input v-model="llamacppBaseUrl" placeholder="http://localhost:8080" />
-        <p class="field-hint">
-          llama.cpp's own built-in local HTTP server (github.com/ggml-org/llama.cpp) — a
-          separate local runtime from Ollama, not another name for it. It has no web UI and no
-          model-switching endpoint: whatever model the server was started with (via its own CLI
-          flags) is what actually runs — start/stop and model selection both happen on the
-          llama.cpp server itself, not here.
-        </p>
-      </div>
-      <div class="field">
-        <label>Model name (optional)</label>
-        <input v-model="llamacppModel" placeholder="gemma3:4b" />
-        <p class="field-hint">
-          Most llama.cpp servers ignore this entirely — only one model is ever loaded, so it's
-          usually not needed. Some server builds/versions, and any reverse proxy sitting in front
-          (LiteLLM, etc.) enforcing strict OpenAI-spec requests, reject a request with no
-          <span class="mono">model</span> field at all — confirmed live with a real 400 "model
-          name is missing from the request" against a remote instance. Set this to whatever
-          <span class="mono">/v1/models</span> reports (shown after Test connection below) if you
-          hit that error; leave as-is otherwise.
-        </p>
-      </div>
-      <div class="field">
-        <label>API key {% raw %}{{ llamacppKeyMasked ? '(' + llamacppKeyMasked + ')' : '(optional)' }}{% endraw %}</label>
-        <input v-model="llamacppApiKey" type="password" placeholder="leave blank to keep current key" />
-        <p class="field-hint">
-          llama.cpp's own server has no built-in auth — only needed if the Base URL above points
-          at an instance sitting behind a reverse proxy/gateway that enforces its own auth (a
-          tunnel with auth added in front, a rented GPU host, etc). Sent as an
-          <span class="mono">Authorization: Bearer</span> header. Leave blank for a normal local or
-          unauthenticated llama.cpp server.
-        </p>
-      </div>
-      <div class="field">
-        <label>Batch size override (dialogue tokens)</label>
-        <input v-model.number="llamacppBatchTokenBudget" type="number" min="0" step="100" />
-        <p class="field-hint">
-          Same idea as Ollama's batch size — how many dialogue tokens go into one translation
-          request. Small/local models can lose reliable formatting on a big batch even though it
-          technically fits context. Lower this if translations come back with a low
-          "recovered N/M cues" count.
-        </p>
-      </div>
-      <div class="field-row">
-        <button class="btn" @click="testEngine('llamacpp')" :disabled="testing === 'llamacpp'">
-          {% raw %}{{ testing === 'llamacpp' ? 'Testing…' : 'Test connection' }}{% endraw %}
-        </button>
-        <span v-if="testResults.llamacpp" :class="['test-result', { error: !testResults.llamacpp.ok }]">
-          ● {% raw %}{{ testResults.llamacpp.detail }}{% endraw %}
-        </span>
-      </div>
-    </div>
-
-    <div :class="['engine-opt', { selected: active === 'nvidia' }]" style="margin-top:14px;" @click="active = 'nvidia'">
-      <div class="engine-radio"><div class="fill" v-if="active === 'nvidia'"></div></div>
-      <div class="engine-info">
-        <div class="engine-name">NVIDIA (DeepSeek V4 Flash) <span class="badge badge-free">free tier</span></div>
-        <div class="engine-meta">{% raw %}{{ nvidiaModel }}{% endraw %}</div>
-      </div>
-      <div :class="['engine-status', nvidiaHasKey ? '' : 'off']">
-        <span class="dot"></span>{% raw %}{{ nvidiaHasKey ? 'configured' : 'no key' }}{% endraw %}
-      </div>
-    </div>
-
-    <div class="engine-config" v-if="active === 'nvidia'">
-      <div class="field">
-        <label>Model</label>
-        <input v-model="nvidiaModel" placeholder="deepseek-ai/deepseek-v4-flash" />
-        <p class="field-hint">
-          Must be a real instructable chat model (like this default) — NVIDIA also hosts
-          dedicated translation-only models (e.g. Riva Translate) which don't support the
-          formatting instructions this app relies on and are not compatible here.
-        </p>
-      </div>
-      <div class="field">
-        <label>API key {% raw %}{{ nvidiaKeyMasked ? '(' + nvidiaKeyMasked + ')' : '' }}{% endraw %}</label>
-        <input v-model="nvidiaApiKey" type="password" placeholder="leave blank to keep current key" />
-        <p class="field-hint">
-          Get a free key at <span class="mono">build.nvidia.com</span>.
-        </p>
-      </div>
-      <div class="field">
-        <label>Batch size (dialogue tokens)</label>
-        <input v-model.number="nvidiaBatchTokenBudget" type="number" min="1" step="100" />
-        <p class="field-hint">
-          Separate from Ollama's batch size — NVIDIA's cloud model has no local GPU/VRAM
-          constraint, but larger batches have still shown repeated/degenerate output on real
-          content at moderate sizes.
-        </p>
-        <p class="field-hint">
-          <strong>1</strong> = one cue per request, the most reliable option but far more requests
-          for a long file (more likely to hit NVIDIA's rate limit). <strong>700 (default)</strong>
-          is confirmed reliable — same per-cue speed as 400, at roughly half the request count —
-          while 900 has reproducibly failed on real content. Raise it only after confirming your
-          content translates reliably at a bigger size.
-        </p>
-      </div>
-      <div class="field">
-        <label>Concurrent batches</label>
-        <input v-model.number="nvidiaConcurrentBatchWindow" type="number" min="1" step="1" />
-        <p class="field-hint">
-          How many batches are sent to NVIDIA at once before waiting for that group to finish
-          and starting the next. NVIDIA's free tier allows up to 40 requests/minute — since each
-          request typically takes several seconds, a small number here naturally stays well
-          under that limit without needing to be a literal requests-per-minute counter. Raising
-          this speeds up long files at the cost of more requests in flight simultaneously.
-        </p>
-      </div>
-      <div class="field-row">
-        <button class="btn" @click="testEngine('nvidia')" :disabled="testing === 'nvidia'">
-          {% raw %}{{ testing === 'nvidia' ? 'Testing…' : 'Test connection' }}{% endraw %}
-        </button>
-        <span v-if="testResults.nvidia" :class="['test-result', { error: !testResults.nvidia.ok }]">
-          ● {% raw %}{{ testResults.nvidia.detail }}{% endraw %}
-        </span>
-      </div>
-    </div>
-
-    <div :class="['engine-opt', { selected: active === 'openrouter' }]" style="margin-top:14px;" @click="active = 'openrouter'">
-      <div class="engine-radio"><div class="fill" v-if="active === 'openrouter'"></div></div>
-      <div class="engine-info">
-        <div class="engine-name">OpenRouter <span class="badge badge-paid">API key</span></div>
-        <div class="engine-meta">{% raw %}{{ openrouterModel }}{% endraw %}</div>
-      </div>
-      <div :class="['engine-status', openrouterHasKey ? '' : 'off']">
-        <span class="dot"></span>{% raw %}{{ openrouterHasKey ? 'configured' : 'no key' }}{% endraw %}
-      </div>
-    </div>
-
-    <div class="engine-config" v-if="active === 'openrouter'">
-      <div class="field">
-        <label>Model</label>
-        <input v-model="openrouterModel" placeholder="google/gemma-4-26b-a4b-it:free" />
-        <p class="field-hint">
-          Must be a real instructable chat model — OpenRouter routes to many different
-          underlying providers (OpenAI, Anthropic, Meta, etc.) under one API. See
-          <span class="mono">openrouter.ai/models</span> for the full lineup and model IDs.
-        </p>
-      </div>
-      <div class="field">
-        <label>API key {% raw %}{{ openrouterKeyMasked ? '(' + openrouterKeyMasked + ')' : '' }}{% endraw %}</label>
-        <input v-model="openrouterApiKey" type="password" placeholder="leave blank to keep current key" />
-        <p class="field-hint">
-          Get a key at <span class="mono">openrouter.ai/keys</span>.
-        </p>
-      </div>
-      <div class="field">
-        <label>Batch size (dialogue tokens)</label>
-        <input v-model.number="openrouterBatchTokenBudget" type="number" min="1" step="100" />
-        <p class="field-hint">
-          Same idea as NVIDIA/Ollama's batch size — how many dialogue tokens go into one
-          translation request. <strong>Free ":free" models are capped at 50 requests/DAY</strong>
-          (1000/day at $10+ purchased credits) on top of 20 requests/minute — keep this high so
-          one file doesn't burn a large chunk of the day's quota by itself. Lower it only if
-          translations come back with a low "recovered N/M cues" count.
-        </p>
-      </div>
-      <div class="field">
-        <label>Concurrent batches</label>
-        <input v-model.number="openrouterConcurrentBatchWindow" type="number" min="1" step="1" />
-        <p class="field-hint">
-          How many batches are sent to OpenRouter at once before waiting for that group to
-          finish and starting the next — same windowed-concurrency treatment as NVIDIA. Kept
-          well under the confirmed 20 requests/minute ceiling for free models. Concurrency
-          only speeds up getting through the day's quota faster — it doesn't raise the quota
-          itself, and once the daily cap is hit, further requests fail until it resets.
-        </p>
-      </div>
-      <div class="field-row">
-        <button class="btn" @click="testEngine('openrouter')" :disabled="testing === 'openrouter'">
-          {% raw %}{{ testing === 'openrouter' ? 'Testing…' : 'Test connection' }}{% endraw %}
-        </button>
-        <span v-if="testResults.openrouter" :class="['test-result', { error: !testResults.openrouter.ok }]">
-          ● {% raw %}{{ testResults.openrouter.detail }}{% endraw %}
-        </span>
-      </div>
-    </div>
-
-    <div :class="['engine-opt', { selected: active === 'groq' }]" style="margin-top:14px;" @click="active = 'groq'">
-      <div class="engine-radio"><div class="fill" v-if="active === 'groq'"></div></div>
-      <div class="engine-info">
-        <div class="engine-name">Groq <span class="badge badge-free">free tier</span></div>
-        <div class="engine-meta">{% raw %}{{ groqModel }}{% endraw %}</div>
-      </div>
-      <div :class="['engine-status', groqHasKey ? '' : 'off']">
-        <span class="dot"></span>{% raw %}{{ groqHasKey ? 'configured' : 'no key' }}{% endraw %}
-      </div>
-    </div>
-
-    <div class="engine-config" v-if="active === 'groq'">
-      <div class="field">
-        <label>Model</label>
-        <input v-model="groqModel" placeholder="llama-3.1-8b-instant" />
-        <p class="field-hint">
-          Must be a real instructable chat model — Groq serves a fixed lineup on its own LPU
-          hardware (Llama, GPT-OSS, Qwen, etc. — no Gemma or DeepSeek). See
-          <span class="mono">console.groq.com/docs/models</span> for the full lineup. Larger
-          models typically get a LOWER per-model rate limit than the default.
-        </p>
-      </div>
-      <div class="field">
-        <label>API key {% raw %}{{ groqKeyMasked ? '(' + groqKeyMasked + ')' : '' }}{% endraw %}</label>
-        <input v-model="groqApiKey" type="password" placeholder="leave blank to keep current key" />
-        <p class="field-hint">
-          Get a free key at <span class="mono">console.groq.com/keys</span>.
-        </p>
-      </div>
-      <div class="field">
-        <label>Batch size (dialogue tokens)</label>
-        <input v-model.number="groqBatchTokenBudget" type="number" min="1" step="100" />
-        <p class="field-hint">
-          Same idea as NVIDIA/OpenRouter's batch size. Groq's free tier for the default model
-          has generous request-count limits (<strong>30 requests/minute, 14,400/day</strong>),
-          but ALSO enforces a separate <strong>tokens-per-minute (TPM) cap of 6000</strong> for
-          this model — confirmed live via Groq's own error: a 4000-token dialogue budget (plus
-          system-prompt/response overhead) already exceeded it on the very first request. 1800
-          keeps the full round-trip safely under that ceiling. Lower it further only if
-          translations still come back with a low "recovered N/M cues" count.
-        </p>
-      </div>
-      <div class="field">
-        <label>Concurrent batches</label>
-        <input v-model.number="groqConcurrentBatchWindow" type="number" min="1" step="1" />
-        <p class="field-hint">
-          Defaults to <strong>1</strong> (sequential) rather than NVIDIA/OpenRouter's usual 4 —
-          the 6000 TPM cap above is a single rolling budget shared across every concurrent
-          request, so running several batches at once makes hitting it MORE likely, not less.
-          Only raise this after confirming your account has real per-minute token headroom
-          beyond what one sequential batch already uses.
-        </p>
-      </div>
-      <div class="field-row">
-        <button class="btn" @click="testEngine('groq')" :disabled="testing === 'groq'">
-          {% raw %}{{ testing === 'groq' ? 'Testing…' : 'Test connection' }}{% endraw %}
-        </button>
-        <span v-if="testResults.groq" :class="['test-result', { error: !testResults.groq.ok }]">
-          ● {% raw %}{{ testResults.groq.detail }}{% endraw %}
-        </span>
-      </div>
-    </div>
-
-    <div class="engine-opt disabled">
-      <div class="engine-radio"></div>
-      <div class="engine-info">
-        <div class="engine-name">Claude <span class="badge badge-paid">API key</span></div>
-        <div class="engine-meta">not available in this version</div>
-      </div>
-      <div class="engine-status off"><span class="dot"></span>off</div>
-    </div>
-
-    <div class="engine-opt disabled" style="margin-bottom:16px;">
-      <div class="engine-radio"></div>
-      <div class="engine-info">
-        <div class="engine-name">OpenAI <span class="badge badge-paid">API key</span></div>
-        <div class="engine-meta">not available in this version</div>
-      </div>
-      <div class="engine-status off"><span class="dot"></span>off</div>
-    </div>
-
-    <div class="engine-config">
-      <div class="field">
-        <label>Fallback engine</label>
-        <select v-model="fallback">
-          <option value="">None</option>
-          <option value="ollama">Ollama</option>
-          <option value="llamacpp">llama.cpp</option>
-          <option value="gemini">Gemini</option>
-          <option value="nvidia">NVIDIA (DeepSeek V4 Flash)</option>
-          <option value="openrouter">OpenRouter</option>
-          <option value="groq">Groq</option>
-        </select>
-      </div>
-      <div class="field-row">
-        <button class="btn btn-primary" @click="save" :disabled="saving">
-          {% raw %}{{ saving ? 'Saving…' : 'Save' }}{% endraw %}
-        </button>
-        <span v-if="saved" class="test-result">● saved</span>
-      </div>
-    </div>
-  </div>
+  </template>
 </div>
 {% endblock %}
 {% block scripts %}

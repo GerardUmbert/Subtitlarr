@@ -25,6 +25,7 @@ const Api = (() => {
     getRunEvents: (since = 0) => request("GET", `/api/run/events?since=${since}`),
     getLatestRunEventId: () => request("GET", "/api/run/events/latest_id"),
     runNow: () => request("POST", "/api/run/now"),
+    cancelRun: () => request("POST", "/api/run/cancel"),
     pollNow: () => request("POST", "/api/run/poll"),
     getPollNowStatus: () => request("GET", "/api/run/poll/status"),
     runItem: (id) => request("POST", `/api/queue/${id}/run`),
@@ -44,9 +45,6 @@ const Api = (() => {
     },
     getCurrentRunItems: () => request("GET", "/api/queue/current-run"),
 
-    getEngineConfig: () => request("GET", "/api/config/engines"),
-    setEngineConfig: (cfg) => request("POST", "/api/config/engines", cfg),
-    testEngine: (name, cfg) => request("POST", `/api/config/engines/${name}/test`, cfg),
     pullOllamaModel: (model, base_url) =>
       request("POST", "/api/config/engines/ollama/pull", { model, base_url }),
     getPullStatus: () => request("GET", "/api/config/engines/ollama/pull"),
@@ -54,6 +52,16 @@ const Api = (() => {
       const qs = base_url ? `?base_url=${encodeURIComponent(base_url)}` : "";
       return request("GET", `/api/config/engines/ollama/models${qs}`);
     },
+
+    listEngineInstances: () => request("GET", "/api/config/engine-instances"),
+    createEngineInstance: (data) => request("POST", "/api/config/engine-instances", data),
+    updateEngineInstance: (id, data) =>
+      request("PUT", `/api/config/engine-instances/${id}`, data),
+    deleteEngineInstance: (id) => request("DELETE", `/api/config/engine-instances/${id}`),
+    reorderEngineInstances: (ids) =>
+      request("POST", "/api/config/engine-instances/reorder", { ids }),
+    testEngineInstance: (id, config = {}) =>
+      request("POST", `/api/config/engine-instances/${id}/test`, { config }),
 
     getLanguageConfig: () => request("GET", "/api/config/languages"),
     setLanguageConfig: (cfg) => request("POST", "/api/config/languages", cfg),
@@ -70,6 +78,7 @@ const Api = (() => {
     runScheduledJobNow: () => request("POST", "/api/jobs/run-now"),
     clearDatabase: () => request("POST", "/api/jobs/clear-database"),
     closeStaleRuns: () => request("POST", "/api/jobs/close-stale-runs"),
+    clearEngineRateLimits: () => request("POST", "/api/jobs/clear-engine-rate-limits"),
     syncMedia: () => request("POST", "/api/jobs/sync-media"),
     syncSubs: () => request("POST", "/api/jobs/sync-subs"),
     pushUploads: () => request("POST", "/api/jobs/push-uploads"),

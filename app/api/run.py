@@ -61,7 +61,20 @@ async def get_current(runner=Depends(state.get_runner)):
         "failed": progress.failed,
         "rate_per_min": progress.rate_per_min,
         "eta_seconds": progress.eta_seconds,
+        "cancel_requested": progress.cancel_requested,
     }
+
+
+@router.post("/cancel")
+async def cancel_current_run(runner=Depends(state.get_runner)):
+    """Stops the active run after its in-flight item finishes — never
+    mid-item, see RunController.cancel_current(). Remaining not-yet-
+    started items are left untouched (still pending/queued), not marked
+    failed."""
+    cancelled = runner.cancel_current()
+    if not cancelled:
+        return {"cancelled": False, "reason": "No run is currently active"}
+    return {"cancelled": True}
 
 
 @router.get("/events/latest_id")

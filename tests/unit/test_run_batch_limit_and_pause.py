@@ -27,14 +27,27 @@ def _seed_pending_items(conn, count: int) -> list:
 
 @pytest.fixture(autouse=True)
 def stub_providers(monkeypatch):
-    """run_batch always calls get_active_provider/get_fallback_provider and
-    tries to aclose() them — stub with something inert so tests don't need
-    real engine config."""
+    """run_batch always calls engine_instances_repo.get_cascade() then
+    registry.build_cascade_providers() and tries to aclose() the results —
+    stub both with something inert so tests don't need a real engine_
+    instances row in the DB."""
     class FakeProvider:
         name = "fake"
+        provider_type = "fake"
 
-    monkeypatch.setattr(runner_module, "get_active_provider", lambda settings: FakeProvider())
-    monkeypatch.setattr(runner_module, "get_fallback_provider", lambda settings: None)
+    fake_instance = {
+        "id": 1, "name": "fake", "provider_type": "fake", "enabled": True,
+        "config": {}, "rate_limited_until": None,
+    }
+    monkeypatch.setattr(
+        runner_module.engine_instances_repo, "get_cascade", lambda conn: [fake_instance]
+    )
+    monkeypatch.setattr(
+        runner_module.registry,
+        "build_cascade_providers",
+        lambda instances: ([FakeProvider()], {"fake": 1}),
+    )
+    monkeypatch.setattr(runner_module.registry, "batch_settings_for", lambda config: (0, 1))
 
 
 @pytest.mark.asyncio

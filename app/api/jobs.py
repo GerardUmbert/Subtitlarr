@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app import state
 from app.config import settings
-from app.db import repository
+from app.db import engine_instances_repo, repository
 from app.engine import upload_queue
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -166,6 +166,18 @@ async def close_stale_runs(conn=Depends(state.get_conn), runner=Depends(state.ge
         )
     closed = repository.close_stale_open_runs(conn)
     return {"closed": closed}
+
+
+@router.post("/clear-engine-rate-limits")
+async def clear_engine_rate_limits(conn=Depends(state.get_conn)):
+    """Manually clears the rate-limit cooldown on every currently-flagged
+    engine instance at once — for when a trip turns out to be a false
+    positive (e.g. a burst-limit blip, confirmed against the provider's
+    own usage dashboard showing real headroom) rather than genuine
+    exhaustion, without waiting per-instance for a Test Connection or the
+    full 24h. Deliberately manual-only — no cron for this."""
+    cleared = engine_instances_repo.clear_all_rate_limits(conn)
+    return {"cleared": cleared}
 
 
 @router.post("/clear-database")

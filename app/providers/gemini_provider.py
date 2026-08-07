@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import time
 
 import httpx
@@ -12,6 +13,8 @@ from app.providers.base import (
     TranslationProvider,
 )
 from app.providers.prompts import build_system_prompt, build_user_prompt
+
+logger = logging.getLogger(__name__)
 
 # REST-only client (no google-generativeai SDK) to avoid that SDK's grpc
 # dependency, which has inconsistent musl/alpine wheel availability — see
@@ -67,8 +70,17 @@ class GeminiProvider(TranslationProvider):
     token-budget logic, same as every other cloud provider here."""
 
     name = "gemini"
+    provider_type = "gemini"
 
-    def __init__(self, api_key: str, model: str, timeout: float = DEFAULT_GEMINI_TIMEOUT_SECONDS):
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        timeout: float = DEFAULT_GEMINI_TIMEOUT_SECONDS,
+        instance_name: str | None = None,
+    ):
+        if instance_name:
+            self.name = instance_name
         self._api_key = api_key
         self._model = model
         # The key goes in the x-goog-api-key HEADER, not a ?key= query
@@ -128,6 +140,16 @@ class GeminiProvider(TranslationProvider):
             # same fallback NVIDIA/OpenRouter/Groq use when no header is
             # present. Sets the SHARED gate so every other batch/item on
             # this provider instance waits too.
+            #
+            # The response BODY is logged here (not just the bare status
+            # code) — confirmed live this matters: a real run saw a ~76%
+            # 429 rate against an account whose own AI Studio dashboard
+            # showed plenty of RPM/TPM/RPD headroom, and with no body
+            # logged there was no way to tell whether that was a genuine
+            # per-minute limit, a tighter undocumented per-second burst
+            # limit, or something else Google's error body would actually
+            # name (e.g. a QuotaFailure violation with a specific metric).
+            logger.warning("Gemini 429 response body: %s", resp.text)
             retry_after = resp.headers.get("Retry-After")
             wait_seconds = float(retry_after) if retry_after else 62.0
             self._rate_limited_until = time.monotonic() + wait_seconds

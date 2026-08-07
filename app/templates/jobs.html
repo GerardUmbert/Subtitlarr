@@ -109,6 +109,29 @@
   </div>
 
   <div class="engine-card" style="margin-top:16px;">
+    <div class="panel-title">Clear engine rate limits</div>
+    <div class="panel-title-sub">Immediately un-flags every engine currently in a 24h rate-limit cooldown</div>
+
+    <div class="engine-config" style="margin-top:0; border-top:none;">
+      <p class="field-hint">
+        An engine gets auto-flagged after 3 consecutive failures against it — usually genuine
+        exhaustion, but a short burst-limit blip can occasionally look the same. Use this after
+        confirming (e.g. on the provider's own usage dashboard) that an engine actually has
+        headroom left, instead of waiting out the full 24h or re-editing its config just to
+        trigger a Test Connection. No cron — this only runs when you click it.
+      </p>
+      <div class="field-row">
+        <button class="btn" @click="clearRateLimits" :disabled="clearingRateLimits">
+          {% raw %}{{ clearingRateLimits ? 'Clearing…' : 'Clear all rate limits' }}{% endraw %}
+        </button>
+      </div>
+      <p class="field-hint" v-if="clearRateLimitsResult">
+        {% raw %}{{ clearRateLimitsResult.cleared > 0 ? `● cleared ${clearRateLimitsResult.cleared} engine(s)` : '● nothing to clear — no engines currently rate-limited' }}{% endraw %}
+      </p>
+    </div>
+  </div>
+
+  <div class="engine-card" style="margin-top:16px;">
     <div class="panel-title">Reset local data</div>
     <div class="panel-title-sub">Clears queue and run history — does not touch any saved settings</div>
 

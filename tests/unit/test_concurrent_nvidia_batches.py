@@ -22,6 +22,14 @@ def _batches(n: int) -> list[list[srt.Subtitle]]:
     return [[_cue(i, f"Line {i}")] for i in range(1, n + 1)]
 
 
+def _cascade(*providers) -> list:
+    """_translate_batches now takes ONE ordered cascade list (cascade[0] is
+    primary, cascade[1:] are fallback candidates in order) instead of
+    separate active_provider/fallback_provider params — this is the direct
+    replacement for the old (provider, fallback) two-arg call shape."""
+    return list(providers)
+
+
 class TrackingProvider(TranslationProvider):
     """Records concurrency (max simultaneous in-flight calls) and can
     resolve out of order — later-started calls finish FIRST — to prove
@@ -29,6 +37,7 @@ class TrackingProvider(TranslationProvider):
 
     def __init__(self, name: str, delays: dict[int, float] | None = None):
         self.name = name
+        self.provider_type = name
         self._delays = delays or {}
         self.in_flight = 0
         self.max_in_flight = 0
@@ -60,7 +69,7 @@ async def test_nvidia_runs_batches_concurrently_up_to_the_window():
     provider = TrackingProvider("nvidia", delays={i: 0.05 for i in range(1, 9)})
     batches = _batches(8)  # 2 full windows at window size 4
 
-    await _translate_batches(batches, "en", "es", provider, None, item_id=1)
+    await _translate_batches(batches, "en", "es", _cascade(provider), item_id=1)
 
     assert provider.max_in_flight == NVIDIA_CONCURRENT_BATCH_WINDOW
 
@@ -74,7 +83,7 @@ async def test_non_concurrent_providers_stay_strictly_sequential():
     provider = TrackingProvider("ollama", delays={i: 0.02 for i in range(1, 6)})
     batches = _batches(5)
 
-    await _translate_batches(batches, "en", "es", provider, None, item_id=1)
+    await _translate_batches(batches, "en", "es", _cascade(provider), item_id=1)
 
     assert provider.max_in_flight == 1
 
@@ -89,7 +98,7 @@ async def test_openrouter_runs_batches_concurrently_up_to_the_window():
     batches = _batches(8)
 
     await _translate_batches(
-        batches, "en", "es", provider, None, item_id=1, concurrent_batch_window=4,
+        batches, "en", "es", _cascade(provider), item_id=1, concurrent_batch_window=4,
     )
 
     assert provider.max_in_flight == 4
@@ -105,7 +114,7 @@ async def test_concurrent_batches_preserve_original_order_despite_out_of_order_c
     batches = _batches(4)
 
     translated_subs, engine_used = await _translate_batches(
-        batches, "en", "es", provider, None, item_id=1
+        batches, "en", "es", _cascade(provider), item_id=1
     )
 
     assert [s.index for s in translated_subs] == [1, 2, 3, 4]
@@ -123,7 +132,7 @@ async def test_nvidia_windows_dont_exceed_batch_count_for_small_items():
     provider = TrackingProvider("nvidia")
     batches = _batches(1)
 
-    translated_subs, _ = await _translate_batches(batches, "en", "es", provider, None, item_id=1)
+    translated_subs, _ = await _translate_batches(batches, "en", "es", _cascade(provider), item_id=1)
 
     assert len(translated_subs) == 1
     assert provider.call_order == [1]
@@ -138,6 +147,7 @@ async def test_nvidia_falls_back_per_batch_on_rate_limit_within_a_window():
 
     class FlakyProvider(TranslationProvider):
         name = "nvidia"
+        provider_type = "nvidia"
 
         async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
             index = int(dialogue_text.split("\n", 1)[0])
@@ -152,7 +162,7 @@ async def test_nvidia_falls_back_per_batch_on_rate_limit_within_a_window():
     batches = _batches(4)
 
     translated_subs, engine_used = await _translate_batches(
-        batches, "en", "es", FlakyProvider(), fallback, item_id=1
+        batches, "en", "es", _cascade(FlakyProvider(), fallback), item_id=1
     )
 
     assert len(translated_subs) == 4
@@ -169,6 +179,7 @@ async def test_transient_failure_retries_same_provider_before_falling_back():
 
     class FailsOnceProvider(TranslationProvider):
         name = "nvidia"
+        provider_type = "nvidia"
 
         def __init__(self):
             self.attempts: list[int] = []
@@ -188,7 +199,7 @@ async def test_transient_failure_retries_same_provider_before_falling_back():
     batches = _batches(4)
 
     translated_subs, engine_used = await _translate_batches(
-        batches, "en", "es", provider, fallback, item_id=1
+        batches, "en", "es", _cascade(provider, fallback), item_id=1
     )
 
     assert len(translated_subs) == 4
@@ -209,6 +220,7 @@ async def test_retry_and_fallback_emit_run_events():
 
     class RecoversOnRetryProvider(TranslationProvider):
         name = "nvidia"
+        provider_type = "nvidia"
 
         def __init__(self):
             self.attempts: list[int] = []
@@ -225,6 +237,7 @@ async def test_retry_and_fallback_emit_run_events():
 
     class AlwaysFailsProvider(TranslationProvider):
         name = "nvidia"
+        provider_type = "nvidia"
 
         async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
             raise ProviderRateLimitedError("simulated persistent 504")
@@ -234,7 +247,7 @@ async def test_retry_and_fallback_emit_run_events():
 
     # Case 1: retry succeeds
     await _translate_batches(
-        _batches(1), "en", "es", RecoversOnRetryProvider(), None, item_id=1, run_id=42,
+        _batches(1), "en", "es", _cascade(RecoversOnRetryProvider()), item_id=1, run_id=42,
     )
     events = run_events.events_since(0)
     types = [e.event_type for e in events]
@@ -248,7 +261,7 @@ async def test_retry_and_fallback_emit_run_events():
     # Case 2: retry also fails, falls back
     fallback = TrackingProvider("gemini")
     await _translate_batches(
-        _batches(1), "en", "es", AlwaysFailsProvider(), fallback, item_id=1, run_id=42,
+        _batches(1), "en", "es", _cascade(AlwaysFailsProvider(), fallback), item_id=1, run_id=42,
     )
     events = run_events.events_since(0)
     types = [e.event_type for e in events]
@@ -271,6 +284,7 @@ async def test_content_blocked_falls_back_immediately_without_same_provider_retr
 
     class AlwaysBlocksProvider(TranslationProvider):
         name = "gemini"
+        provider_type = "gemini"
 
         def __init__(self):
             self.attempts: list[int] = []
@@ -288,7 +302,7 @@ async def test_content_blocked_falls_back_immediately_without_same_provider_retr
     batches = _batches(1)
 
     translated_subs, engine_used = await _translate_batches(
-        batches, "en", "es", provider, fallback, item_id=1
+        batches, "en", "es", _cascade(provider, fallback), item_id=1
     )
 
     assert len(translated_subs) == 1
@@ -306,6 +320,7 @@ async def test_content_blocked_reraises_when_no_fallback_configured():
 
     class AlwaysBlocksProvider(TranslationProvider):
         name = "gemini"
+        provider_type = "gemini"
 
         async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
             raise ProviderContentBlockedError("blocked: PROHIBITED_CONTENT")
@@ -314,7 +329,7 @@ async def test_content_blocked_reraises_when_no_fallback_configured():
             return ProviderStatus(ok=True)
 
     with pytest.raises(ProviderContentBlockedError):
-        await _translate_batches(_batches(1), "en", "es", AlwaysBlocksProvider(), None, item_id=1)
+        await _translate_batches(_batches(1), "en", "es", _cascade(AlwaysBlocksProvider()), item_id=1)
 
 
 def _repetition_loop_batch() -> list[list[srt.Subtitle]]:
@@ -332,6 +347,7 @@ class RepetitionLoopProvider(TranslationProvider):
 
     def __init__(self, name: str):
         self.name = name
+        self.provider_type = name
         self.attempts = 0
 
     async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
@@ -349,6 +365,7 @@ class GoodTranslationProvider(TranslationProvider):
 
     def __init__(self, name: str):
         self.name = name
+        self.provider_type = name
         self.attempts = 0
         self.call_order: list[int] = []
 
@@ -375,7 +392,7 @@ async def test_repetition_loop_falls_back_to_a_different_provider():
     fallback = GoodTranslationProvider("nvidia")
 
     translated_subs, engine_used = await _translate_batches(
-        _repetition_loop_batch(), "en", "es", provider, fallback, item_id=1
+        _repetition_loop_batch(), "en", "es", _cascade(provider, fallback), item_id=1
     )
 
     assert provider.attempts == 1  # no same-provider retry — reproducible failure
@@ -394,24 +411,46 @@ async def test_repetition_loop_reraises_when_no_fallback_configured():
     provider = RepetitionLoopProvider("gemini")
 
     with pytest.raises(TranslationAlignmentError):
-        await _translate_batches(_repetition_loop_batch(), "en", "es", provider, None, item_id=1)
+        await _translate_batches(_repetition_loop_batch(), "en", "es", _cascade(provider), item_id=1)
 
 
 @pytest.mark.asyncio
-async def test_repetition_loop_does_not_bounce_back_to_the_same_named_fallback():
-    """If active and fallback providers share the SAME name (e.g. both
-    configured as "gemini" by mistake, or a batch where the active
-    provider's name already equals the fallback's), the guard against
-    retrying the provider that just produced the bad output must key off
-    the NAME, not object identity — never call the fallback at all in
-    that case, and raise instead of silently repeating a reproducible
-    failure."""
+async def test_repetition_loop_falls_back_to_a_same_named_but_distinct_cascade_instance():
+    """The cascade walks strictly by POSITION, not by provider name — two
+    engine_instances rows can legitimately share a display name (or even
+    provider type, e.g. two separately-configured Gemini keys), and each
+    is still its own independently-tried instance. Confirmed: the second
+    cascade slot IS attempted here even though it happens to share a name
+    with the first, since it's a genuinely different (and, in this test,
+    healthier) instance — this only changed from the old active_engine/
+    fallback_engine model, where a same-NAME fallback was assumed to be a
+    misconfiguration and skipped; a same-name-but-distinct cascade entry
+    is now a legitimate, deliberate setup (see
+    plans/multiple-engine-instances-cascade.md)."""
+    provider = RepetitionLoopProvider("gemini")
+    fallback = GoodTranslationProvider("gemini")  # same name, different (healthy) instance
+
+    translated_subs, engine_used = await _translate_batches(
+        _repetition_loop_batch(), "en", "es", _cascade(provider, fallback), item_id=1
+    )
+
+    assert fallback.attempts == 1  # the second cascade slot WAS tried
+    assert engine_used == "gemini"
+    assert len(translated_subs) == 12
+
+
+@pytest.mark.asyncio
+async def test_repetition_loop_never_retries_the_same_cascade_position_twice():
+    """A repetition loop is reproducible on the SAME instance — the
+    cascade must move strictly forward (never revisit cascade[0] after it
+    already produced the bad output), even though nothing here prevents
+    trying a distinct LATER instance that happens to share its name (see
+    the test above)."""
     from app.subtitles.reconciler import TranslationAlignmentError
 
     provider = RepetitionLoopProvider("gemini")
-    fallback = RepetitionLoopProvider("gemini")  # same name, different instance
 
     with pytest.raises(TranslationAlignmentError):
-        await _translate_batches(_repetition_loop_batch(), "en", "es", provider, fallback, item_id=1)
+        await _translate_batches(_repetition_loop_batch(), "en", "es", _cascade(provider), item_id=1)
 
-    assert fallback.attempts == 0  # never even called
+    assert provider.attempts == 1  # never called again after the first failure

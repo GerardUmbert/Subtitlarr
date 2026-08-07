@@ -195,6 +195,37 @@ def test_sync_subs_refuses_when_a_run_is_active(client):
     state.run_controller.current = None  # cleanup
 
 
+def test_clear_engine_rate_limits_clears_flagged_instances(client):
+    from app.db import engine_instances_repo
+
+    conn = database.connect(settings.db_path)
+    instance = engine_instances_repo.create_instance(
+        conn, name="gemini", provider_type="gemini", config={"api_key": "x", "model": "m"}
+    )
+    for _ in range(engine_instances_repo.RATE_LIMIT_FAILURE_THRESHOLD):
+        engine_instances_repo.record_rate_limited_failure(conn, instance["id"])
+        conn.execute(
+            "UPDATE engine_instances SET last_failure_at = NULL WHERE id = ?", (instance["id"],)
+        )
+        conn.commit()
+    assert engine_instances_repo.get_instance(conn, instance["id"])["rate_limited_until"] is not None
+    conn.close()
+
+    resp = client.post("/api/jobs/clear-engine-rate-limits")
+    assert resp.status_code == 200
+    assert resp.json()["cleared"] == 1
+
+    check_conn = database.connect(settings.db_path)
+    assert engine_instances_repo.get_instance(check_conn, instance["id"])["rate_limited_until"] is None
+    check_conn.close()
+
+
+def test_clear_engine_rate_limits_reports_zero_when_nothing_flagged(client):
+    resp = client.post("/api/jobs/clear-engine-rate-limits")
+    assert resp.status_code == 200
+    assert resp.json()["cleared"] == 0
+
+
 def test_get_jobs_reports_sync_states(client):
     resp = client.get("/api/jobs")
     assert resp.status_code == 200

@@ -85,6 +85,7 @@ class FakeBazarrClient:
 
 class FakeProvider(TranslationProvider):
     name = "fake"
+    provider_type = "fake"
 
     def __init__(self):
         self.received_catalan_vegeta_insults: list[bool] = []
@@ -112,6 +113,30 @@ def conn(tmp_path):
     c.close()
 
 
+def stub_single_provider_cascade(monkeypatch, provider) -> None:
+    """Stubs run_batch's cascade-building (engine_instances_repo.get_cascade
+    + registry.build_cascade_providers) to return a ONE-instance cascade
+    wrapping the given already-constructed fake provider — the direct
+    replacement for the old get_active_provider/get_fallback_provider(None)
+    monkeypatch pattern now that engine config is a DB-backed ordered list
+    rather than two Settings fields. None of this file's tests configure a
+    real fallback, so a single-instance cascade covers all of them."""
+    import app.engine.runner as runner_module
+
+    fake_instance = {
+        "id": 1, "name": provider.name, "provider_type": getattr(provider, "provider_type", provider.name),
+        "enabled": True, "config": {}, "rate_limited_until": None,
+    }
+    monkeypatch.setattr(
+        runner_module.engine_instances_repo, "get_cascade", lambda conn: [fake_instance]
+    )
+    monkeypatch.setattr(
+        runner_module.registry,
+        "build_cascade_providers",
+        lambda instances: ([provider], {provider.name: 1}),
+    )
+
+
 @pytest.mark.asyncio
 async def test_full_translation_round_trip(conn, monkeypatch):
     repository.set_config(conn, "source_lang_priority", ["en"])
@@ -132,14 +157,8 @@ async def test_full_translation_round_trip(conn, monkeypatch):
     )
 
     from app.config import Settings
-    settings = Settings(active_engine="ollama", fallback_engine="")
-
-    monkeypatch.setattr(
-        "app.engine.runner.get_active_provider", lambda s: FakeProvider()
-    )
-    monkeypatch.setattr(
-        "app.engine.runner.get_fallback_provider", lambda s: None
-    )
+    settings = Settings()
+    stub_single_provider_cascade(monkeypatch, FakeProvider())
 
     controller = RunController(conn, lambda: fake_client, settings)
     progress = await controller.run_now()
@@ -167,7 +186,7 @@ async def test_full_translation_round_trip(conn, monkeypatch):
     ).fetchone()
     snapshot = json.loads(log_row["settings_snapshot"])
     assert snapshot["engine"] == "fake"
-    assert snapshot["num_ctx"] == settings.ollama_num_ctx
+    assert snapshot["num_ctx"] == 8192  # default when the stubbed instance's config has no num_ctx
     assert snapshot["resolved_batch_token_budget"] > 0
 
 
@@ -199,6 +218,7 @@ async def test_failed_translation_still_logs_engine_used(conn, monkeypatch):
 
     class AlwaysFailsProvider(TranslationProvider):
         name = "fake-failing"
+        provider_type = "fake-failing"
 
         async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
             # Garbage response the reconciler can't align to any cue —
@@ -210,14 +230,8 @@ async def test_failed_translation_still_logs_engine_used(conn, monkeypatch):
             return ProviderStatus(ok=True)
 
     from app.config import Settings
-    settings = Settings(active_engine="ollama", fallback_engine="")
-
-    monkeypatch.setattr(
-        "app.engine.runner.get_active_provider", lambda s: AlwaysFailsProvider()
-    )
-    monkeypatch.setattr(
-        "app.engine.runner.get_fallback_provider", lambda s: None
-    )
+    settings = Settings()
+    stub_single_provider_cascade(monkeypatch, AlwaysFailsProvider())
 
     controller = RunController(conn, lambda: fake_client, settings)
     progress = await controller.run_now()
@@ -262,11 +276,9 @@ async def test_catalan_vegeta_insults_setting_reaches_the_provider(conn, monkeyp
     )
 
     from app.config import Settings
-    settings = Settings(active_engine="ollama", fallback_engine="")
-
+    settings = Settings()
     fake_provider = FakeProvider()
-    monkeypatch.setattr("app.engine.runner.get_active_provider", lambda s: fake_provider)
-    monkeypatch.setattr("app.engine.runner.get_fallback_provider", lambda s: None)
+    stub_single_provider_cascade(monkeypatch, fake_provider)
 
     controller = RunController(conn, lambda: fake_client, settings)
     progress = await controller.run_now()
@@ -301,11 +313,9 @@ async def test_european_spanish_setting_defaults_on_and_reaches_the_provider(con
     )
 
     from app.config import Settings
-    settings = Settings(active_engine="ollama", fallback_engine="")
-
+    settings = Settings()
     fake_provider = FakeProvider()
-    monkeypatch.setattr("app.engine.runner.get_active_provider", lambda s: fake_provider)
-    monkeypatch.setattr("app.engine.runner.get_fallback_provider", lambda s: None)
+    stub_single_provider_cascade(monkeypatch, fake_provider)
 
     controller = RunController(conn, lambda: fake_client, settings)
     progress = await controller.run_now()
@@ -336,11 +346,9 @@ async def test_european_spanish_setting_can_be_disabled(conn, monkeypatch):
     )
 
     from app.config import Settings
-    settings = Settings(active_engine="ollama", fallback_engine="")
-
+    settings = Settings()
     fake_provider = FakeProvider()
-    monkeypatch.setattr("app.engine.runner.get_active_provider", lambda s: fake_provider)
-    monkeypatch.setattr("app.engine.runner.get_fallback_provider", lambda s: None)
+    stub_single_provider_cascade(monkeypatch, fake_provider)
 
     controller = RunController(conn, lambda: fake_client, settings)
     progress = await controller.run_now()
@@ -374,10 +382,8 @@ async def test_queue_uploads_enabled_holds_output_instead_of_uploading(conn, mon
     )
 
     from app.config import Settings
-    settings = Settings(active_engine="ollama", fallback_engine="", queue_uploads_enabled=True)
-
-    monkeypatch.setattr("app.engine.runner.get_active_provider", lambda s: FakeProvider())
-    monkeypatch.setattr("app.engine.runner.get_fallback_provider", lambda s: None)
+    settings = Settings(queue_uploads_enabled=True)
+    stub_single_provider_cascade(monkeypatch, FakeProvider())
     monkeypatch.setattr("app.engine.upload_queue.DEFAULT_QUEUE_ROOT", tmp_path / "upload-queue")
 
     controller = RunController(conn, lambda: fake_client, settings)
@@ -425,10 +431,8 @@ async def test_item_with_no_source_language_is_skipped(conn, monkeypatch):
         ]
     )
     from app.config import Settings
-    settings = Settings(active_engine="ollama", fallback_engine="")
-
-    monkeypatch.setattr("app.engine.runner.get_active_provider", lambda s: FakeProvider())
-    monkeypatch.setattr("app.engine.runner.get_fallback_provider", lambda s: None)
+    settings = Settings()
+    stub_single_provider_cascade(monkeypatch, FakeProvider())
 
     controller = RunController(conn, lambda: fake_client, settings)
     progress = await controller.run_now()
@@ -446,6 +450,7 @@ class EchoProvider(TranslationProvider):
     context-window truncation, as happened in the real bug this fixes)."""
 
     name = "echo"
+    provider_type = "echo"
 
     async def translate(
         self, dialogue_text: str, source_lang: str, target_lang: str,
@@ -543,10 +548,8 @@ async def test_large_subtitle_is_batched_and_fully_translated(conn, monkeypatch)
     fake_client = FakeMovieBazarrClient(cues)
 
     from app.config import Settings
-    settings = Settings(active_engine="ollama", fallback_engine="")
-
-    monkeypatch.setattr("app.engine.runner.get_active_provider", lambda s: EchoProvider())
-    monkeypatch.setattr("app.engine.runner.get_fallback_provider", lambda s: None)
+    settings = Settings()
+    stub_single_provider_cascade(monkeypatch, EchoProvider())
 
     controller = RunController(conn, lambda: fake_client, settings)
     progress = await controller.run_now()
@@ -587,10 +590,8 @@ async def test_run_single_item_can_rerun_an_already_done_item(conn, monkeypatch)
 
     fake_client = FakeBazarrClient()
     from app.config import Settings
-    settings = Settings(active_engine="ollama", fallback_engine="")
-
-    monkeypatch.setattr("app.engine.runner.get_active_provider", lambda s: FakeProvider())
-    monkeypatch.setattr("app.engine.runner.get_fallback_provider", lambda s: None)
+    settings = Settings()
+    stub_single_provider_cascade(monkeypatch, FakeProvider())
 
     controller = RunController(conn, lambda: fake_client, settings)
     progress = await controller.run_single_item(item["id"])
@@ -634,10 +635,8 @@ async def test_run_by_ids_runs_an_explicit_set_as_one_batch(conn, monkeypatch):
 
     fake_client = FakeBazarrClient()
     from app.config import Settings
-    settings = Settings(active_engine="ollama", fallback_engine="")
-
-    monkeypatch.setattr("app.engine.runner.get_active_provider", lambda s: FakeProvider())
-    monkeypatch.setattr("app.engine.runner.get_fallback_provider", lambda s: None)
+    settings = Settings()
+    stub_single_provider_cascade(monkeypatch, FakeProvider())
 
     controller = RunController(conn, lambda: fake_client, settings)
     # Only the ES item id is passed — the CA item (same series, same
@@ -670,10 +669,8 @@ async def test_run_by_ids_skips_missing_ids_without_failing_the_batch(conn, monk
 
     fake_client = FakeBazarrClient()
     from app.config import Settings
-    settings = Settings(active_engine="ollama", fallback_engine="")
-
-    monkeypatch.setattr("app.engine.runner.get_active_provider", lambda s: FakeProvider())
-    monkeypatch.setattr("app.engine.runner.get_fallback_provider", lambda s: None)
+    settings = Settings()
+    stub_single_provider_cascade(monkeypatch, FakeProvider())
 
     controller = RunController(conn, lambda: fake_client, settings)
     nonexistent_id = item["id"] + 99999

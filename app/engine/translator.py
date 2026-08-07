@@ -44,12 +44,121 @@ async def resolve_source_language(
     )
 
 
+async def _call_provider(
+    provider: TranslationProvider,
+    dialogue_text: str,
+    source_lang: str,
+    target_lang: str,
+    catalan_vegeta_insults: bool,
+    european_spanish: bool,
+    item_id: int,
+    batch_index: int,
+    batch_total: int,
+    on_call_result=None,
+) -> str:
+    """One raw translate() call with the diagnostic timing log lines —
+    factored out of _try_cascade so the sending/response log shape stays
+    identical to before this was a cascade instead of active/fallback.
+    on_call_result(provider, rate_limited: bool), if given, is called
+    after EVERY attempt — True on a ProviderRateLimitedError (feeds the
+    rate-limit cooldown counter), False on success (resets it) — before
+    a rate-limit exception propagates. Only ProviderRateLimitedError
+    triggers this; ProviderContentBlockedError/other failures aren't
+    evidence the INSTANCE itself is unreachable, just that this specific
+    content tripped its filter, so they don't count toward the cooldown."""
+    call_started = time.monotonic()
+    logger.info(
+        "Sending translate() call for item %d batch %d/%d to %s (%d chars)",
+        item_id, batch_index, batch_total, provider.name, len(dialogue_text),
+    )
+    try:
+        llm_response = await provider.translate(
+            dialogue_text, source_lang, target_lang, catalan_vegeta_insults, european_spanish
+        )
+    except ProviderRateLimitedError:
+        if on_call_result is not None:
+            on_call_result(provider, True)
+        raise
+    if on_call_result is not None:
+        on_call_result(provider, False)
+    logger.info(
+        "translate() call for item %d (%s) took %.2fs",
+        item_id, provider.name, time.monotonic() - call_started,
+    )
+    return llm_response
+
+
+def _fallback_log_line(prior_name: str, item_id: int, exc: Exception, next_name: str) -> str:
+    """Exact wording preserved from the original except blocks for the two
+    cases app.engine.log_events actually parses into a structured Events-
+    tab row ("failed again" / "blocked content (...)") — changing either
+    would silently break that regex match. The alignment/integrity case
+    was never a distinct parsed EventType even before this rewrite (its
+    log line had no matching pattern), so its wording here is free to be
+    whatever reads best."""
+    if isinstance(exc, ProviderContentBlockedError):
+        return (
+            f"Provider {prior_name} blocked content for item {item_id} "
+            f"({exc}); falling back to {next_name}"
+        )
+    if isinstance(exc, (TranslationAlignmentError, TranslationIntegrityError)):
+        return (
+            f"Provider {prior_name} produced an unreliable response for item {item_id} "
+            f"({exc}); falling back to {next_name}"
+        )
+    return f"Provider {prior_name} failed again for item {item_id}; falling back to {next_name}"
+
+
+async def _try_cascade(
+    cascade: list[TranslationProvider],
+    start_index: int,
+    dialogue_text: str,
+    source_lang: str,
+    target_lang: str,
+    catalan_vegeta_insults: bool,
+    european_spanish: bool,
+    item_id: int,
+    batch_index: int,
+    batch_total: int,
+    retry_pause_seconds: float,
+    run_id: int | None,
+    triggering_exc: Exception,
+    on_call_result=None,
+) -> tuple[str, int]:
+    """Tries cascade[start_index:], in order, returning
+    (llm_response, engine_index) on first success. `triggering_exc` is
+    whatever exception caused THIS hop to be attempted — its type/message
+    drives the log line's exact wording (see _fallback_log_line) so
+    Events-tab parsing keeps working. Raises the LAST error if every
+    remaining instance fails. Called with start_index == the index that
+    JUST failed + 1, so it never retries the instance that produced the
+    failure being handled."""
+    exc: Exception = triggering_exc
+    for index in range(start_index, len(cascade)):
+        provider = cascade[index]
+        prior = cascade[index - 1]
+        line = _fallback_log_line(prior.name, item_id, exc, provider.name)
+        logger.warning(line)
+        if run_id is not None:
+            run_events.emit(run_id, item_id, batch_index, batch_total, "fell_back", line)
+        try:
+            llm_response = await _call_provider(
+                provider, dialogue_text, source_lang, target_lang,
+                catalan_vegeta_insults, european_spanish, item_id, batch_index, batch_total,
+                on_call_result,
+            )
+            return llm_response, index
+        except (ProviderRateLimitedError, ProviderContentBlockedError) as new_exc:
+            exc = new_exc
+            continue
+    raise exc
+
+
 async def _translate_batch(
     batch: list,
     source_lang: str,
     target_lang: str,
-    active_provider: TranslationProvider,
-    fallback_provider: TranslationProvider | None,
+    cascade: list[TranslationProvider],
     item_id: int,
     catalan_vegeta_insults: bool = False,
     european_spanish: bool = True,
@@ -57,16 +166,22 @@ async def _translate_batch(
     run_id: int | None = None,
     batch_index: int = 1,
     batch_total: int = 1,
+    on_call_result=None,
 ) -> tuple[list, str]:
-    """Translates and reconciles ONE batch of cues, with fallback-provider
-    handling. Returns (reassembled_subs_for_this_batch, engine_used).
+    """Translates and reconciles ONE batch of cues, walking the cascade on
+    failure. Returns (reassembled_subs_for_this_batch, engine_used).
+
+    cascade[0] is the primary/active instance; cascade[1:] are fallback
+    candidates, in order — a run's caller builds this fresh per item from
+    the current engine_instances cascade (already filtered to enabled,
+    non-rate-limited instances).
 
     A ProviderRateLimitedError (429, timeout, connection failure, or a
-    transient 5xx server error — see nvidia_provider.py) gets ONE retry
-    against the SAME provider first, since these are often gone within
-    seconds and don't warrant abandoning the configured engine. Only if
-    that retry ALSO fails does it fall back to the fallback provider (if
-    configured) or give up.
+    transient 5xx server error — see nvidia_provider.py) against
+    cascade[0] gets ONE retry against that SAME instance first, since
+    these are often gone within seconds and don't warrant abandoning it
+    immediately. Only if that retry ALSO fails does it walk the rest of
+    the cascade.
 
     A real 429 (retry_after_seconds set) is NOT slept on here — the
     provider itself (see NvidiaProvider._rate_limited_until) already
@@ -76,32 +191,15 @@ async def _translate_batch(
     shared gate to rely on) sleeps for pause_between_items_seconds before
     its one retry."""
     dialogue_text = srt_io.extract_dialogue_text(batch)
-
+    active_provider = cascade[0]
     engine_used = active_provider.name
-    # Diagnostic timing: live runs showed 60-135s gaps between LLM requests
-    # with NO corresponding gap visible in httpx's own request logging
-    # (which only logs AFTER a call completes, not when it starts) — this
-    # pins down exactly how long is spent waiting on translate() itself
-    # vs. anything before/after it. The explicit "sending" line below is
-    # the ONLY log line that fires BEFORE the response comes back —
-    # without it, there is no way to distinguish "still waiting on the
-    # provider" from "request never went out" purely from the log; that
-    # previously had to be confirmed by inspecting live TCP connections
-    # instead (confirmed live: a real request sat with no log output for
-    # 2.5+ minutes, and only `Get-NetTCPConnection` could confirm it had
-    # actually reached Google's servers, not stalled locally).
-    call_started = time.monotonic()
-    logger.info(
-        "Sending translate() call for item %d batch %d/%d to %s (%d chars)",
-        item_id, batch_index, batch_total, active_provider.name, len(dialogue_text),
-    )
+    engine_index = 0
+
     try:
-        llm_response = await active_provider.translate(
-            dialogue_text, source_lang, target_lang, catalan_vegeta_insults, european_spanish
-        )
-        logger.info(
-            "translate() call for item %d (%s) took %.2fs",
-            item_id, active_provider.name, time.monotonic() - call_started,
+        llm_response = await _call_provider(
+            active_provider, dialogue_text, source_lang, target_lang,
+            catalan_vegeta_insults, european_spanish, item_id, batch_index, batch_total,
+            on_call_result,
         )
     except ProviderRateLimitedError as exc:
         # A real rate limit (retry_after_seconds set) relies entirely on
@@ -121,54 +219,42 @@ async def _translate_batch(
         if wait_seconds > 0:
             await asyncio.sleep(wait_seconds)
         try:
-            llm_response = await active_provider.translate(
-                dialogue_text, source_lang, target_lang, catalan_vegeta_insults, european_spanish
+            llm_response = await _call_provider(
+                active_provider, dialogue_text, source_lang, target_lang,
+                catalan_vegeta_insults, european_spanish, item_id, batch_index, batch_total,
+                on_call_result,
             )
             if run_id is not None:
                 run_events.emit(
                     run_id, item_id, batch_index, batch_total, "retry_succeeded",
                     f"{active_provider.name}: succeeded on retry",
                 )
-        except ProviderRateLimitedError:
-            if fallback_provider is None:
+        except ProviderRateLimitedError as retry_exc:
+            if len(cascade) < 2:
                 raise
-            logger.warning(
-                "Provider %s failed again for item %d; falling back to %s",
-                active_provider.name, item_id, fallback_provider.name,
+            llm_response, engine_index = await _try_cascade(
+                cascade, 1, dialogue_text, source_lang, target_lang,
+                catalan_vegeta_insults, european_spanish, item_id, batch_index, batch_total,
+                retry_pause_seconds, run_id, retry_exc, on_call_result,
             )
-            if run_id is not None:
-                run_events.emit(
-                    run_id, item_id, batch_index, batch_total, "fell_back",
-                    f"{active_provider.name} failed again — falling back to {fallback_provider.name}",
-                )
-            engine_used = fallback_provider.name
-            llm_response = await fallback_provider.translate(
-                dialogue_text, source_lang, target_lang, catalan_vegeta_insults, european_spanish
-            )
-    except ProviderContentBlockedError as exc:
-        # No same-provider retry here — unlike ProviderRateLimitedError,
-        # retrying the SAME provider on a content-policy block would just
+            engine_used = cascade[engine_index].name
+    except ProviderContentBlockedError as blocked_exc:
+        # No same-instance retry here — unlike ProviderRateLimitedError,
+        # retrying the SAME instance on a content-policy block would just
         # trip the same filter again (the content didn't change). Go
-        # straight to the fallback provider, if one is configured, since a
-        # different provider/model may not flag the same content at all.
-        # Confirmed live: a real batch failed outright on Gemini
-        # (PROHIBITED_CONTENT) with a fallback engine configured but never
-        # even attempted — this is the gap that fixes.
-        if fallback_provider is None:
+        # straight to the next cascade entry, if any, since a different
+        # provider/model may not flag the same content at all. Confirmed
+        # live: a real batch failed outright on Gemini (PROHIBITED_CONTENT)
+        # with a fallback engine configured but never even attempted —
+        # this is the gap that fixes.
+        if len(cascade) < 2:
             raise
-        logger.warning(
-            "Provider %s blocked content for item %d (%s); falling back to %s",
-            active_provider.name, item_id, exc, fallback_provider.name,
+        llm_response, engine_index = await _try_cascade(
+            cascade, 1, dialogue_text, source_lang, target_lang,
+            catalan_vegeta_insults, european_spanish, item_id, batch_index, batch_total,
+            retry_pause_seconds, run_id, blocked_exc, on_call_result,
         )
-        if run_id is not None:
-            run_events.emit(
-                run_id, item_id, batch_index, batch_total, "fell_back",
-                f"{active_provider.name} blocked this content — falling back to {fallback_provider.name}",
-            )
-        engine_used = fallback_provider.name
-        llm_response = await fallback_provider.translate(
-            dialogue_text, source_lang, target_lang, catalan_vegeta_insults, european_spanish
-        )
+        engine_used = cascade[engine_index].name
 
     try:
         return reassemble(batch, llm_response), engine_used
@@ -180,25 +266,19 @@ async def _translate_batch(
         # it just wasn't trustworthy. Confirmed live: several items failed
         # outright on Gemini repetition loops with a fallback engine
         # configured but never attempted, same class of gap as the
-        # content-block case above. Only retry once, against the fallback
-        # (if one is configured and wasn't already the engine that just
-        # produced this bad output) — never loop back to the SAME engine,
-        # since a repetition loop is generally reproducible on retry.
-        if fallback_provider is None or engine_used == fallback_provider.name:
+        # content-block case above. Only retry once, walking the cascade
+        # from the NEXT entry after whichever one just produced this bad
+        # output — never loop back to an instance that already produced an
+        # unreliable response, since a repetition loop is generally
+        # reproducible on retry.
+        if engine_index + 1 >= len(cascade):
             raise
-        logger.warning(
-            "Provider %s produced an unreliable response for item %d (%s); falling back to %s",
-            engine_used, item_id, exc, fallback_provider.name,
+        llm_response, engine_index = await _try_cascade(
+            cascade, engine_index + 1, dialogue_text, source_lang, target_lang,
+            catalan_vegeta_insults, european_spanish, item_id, batch_index, batch_total,
+            retry_pause_seconds, run_id, exc, on_call_result,
         )
-        if run_id is not None:
-            run_events.emit(
-                run_id, item_id, batch_index, batch_total, "fell_back",
-                f"{engine_used} produced an unreliable response — falling back to {fallback_provider.name}",
-            )
-        engine_used = fallback_provider.name
-        llm_response = await fallback_provider.translate(
-            dialogue_text, source_lang, target_lang, catalan_vegeta_insults, european_spanish
-        )
+        engine_used = cascade[engine_index].name
         return reassemble(batch, llm_response), engine_used
 
 
@@ -227,29 +307,34 @@ async def _translate_batches(
     batches: list[list],
     source_lang: str,
     target_lang: str,
-    active_provider: TranslationProvider,
-    fallback_provider: TranslationProvider | None,
+    cascade: list[TranslationProvider],
     item_id: int,
     catalan_vegeta_insults: bool = False,
     european_spanish: bool = True,
     retry_pause_seconds: float = 0,
     run_id: int | None = None,
     concurrent_batch_window: int = NVIDIA_CONCURRENT_BATCH_WINDOW,
+    on_call_result=None,
 ) -> tuple[list, str]:
-    """Runs all of an item's batches, sequentially for every provider
-    except the cloud ones in _CONCURRENT_PROVIDERS (windowed concurrency
-    there — see NVIDIA_CONCURRENT_BATCH_WINDOW). Returns (all translated
-    subs in original order, engine_used — the last batch's engine wins if
-    a fallback occurred partway)."""
+    """Runs all of an item's batches, sequentially unless the PRIMARY
+    (cascade[0]) instance's provider_type is one of the cloud ones in
+    _CONCURRENT_PROVIDERS (windowed concurrency there — see
+    NVIDIA_CONCURRENT_BATCH_WINDOW; keyed off provider_type, not the
+    possibly-customized .name, so a renamed "Gemini (main)" instance
+    still gets concurrency). Returns (all translated subs in original
+    order, engine_used — the last batch's engine wins if a fallback
+    occurred partway)."""
     translated_subs: list = []
+    active_provider = cascade[0]
     engine_used = active_provider.name
     batch_total = len(batches)
 
-    if active_provider.name not in _CONCURRENT_PROVIDERS:
+    if active_provider.provider_type not in _CONCURRENT_PROVIDERS:
         for i, batch in enumerate(batches):
             batch_result, batch_engine = await _translate_batch(
-                batch, source_lang, target_lang, active_provider, fallback_provider, item_id,
+                batch, source_lang, target_lang, cascade, item_id,
                 catalan_vegeta_insults, european_spanish, retry_pause_seconds, run_id, i + 1, batch_total,
+                on_call_result,
             )
             translated_subs.extend(batch_result)
             engine_used = batch_engine
@@ -261,9 +346,9 @@ async def _translate_batches(
         results = await asyncio.gather(
             *(
                 _translate_batch(
-                    batch, source_lang, target_lang, active_provider, fallback_provider, item_id,
+                    batch, source_lang, target_lang, cascade, item_id,
                     catalan_vegeta_insults, european_spanish, retry_pause_seconds, run_id,
-                    window_start + offset + 1, batch_total,
+                    window_start + offset + 1, batch_total, on_call_result,
                 )
                 for offset, batch in enumerate(window)
             )
@@ -311,8 +396,7 @@ async def translate_item(
     item: sqlite3.Row,
     source_lang: str,
     source_subtitle_path: str,
-    active_provider: TranslationProvider,
-    fallback_provider: TranslationProvider | None,
+    cascade: list[TranslationProvider],
     run_id: int | None,
     add_ai_disclaimer: bool = True,
     num_ctx: int = 8192,
@@ -321,17 +405,22 @@ async def translate_item(
     queue_uploads: bool = False,
     retry_pause_seconds: float = 0,
     concurrent_batch_window: int = NVIDIA_CONCURRENT_BATCH_WINDOW,
+    on_call_result=None,
 ) -> None:
     """Fetches the source subtitle (via Bazarr's API, or from a local
     scratch-cache file when cached_source_path is provided — see
     engine.prefetch — never touches the media filesystem directly either
-    way), translates it in batches sized to fit within the provider's
-    context window (a full movie/episode's dialogue can easily exceed a
-    small local model's limit if sent as one prompt — see srt_io.chunk_cues),
-    reassembles each batch onto its original timing, and uploads the merged
-    result back to Bazarr. Updates DB status throughout."""
+    way), translates it in batches sized to fit within the PRIMARY
+    (cascade[0]) instance's context window (a full movie/episode's
+    dialogue can easily exceed a small local model's limit if sent as one
+    prompt — see srt_io.chunk_cues), reassembles each batch onto its
+    original timing, and uploads the merged result back to Bazarr.
+    Updates DB status throughout. cascade[0] is used only for batch
+    sizing/log labeling here — the actual per-batch fallback walk through
+    cascade[1:] happens inside _translate_batch."""
     item_id = item["id"]
     target_lang = item["target_language"]
+    active_provider = cascade[0]
 
     resolved_batch_budget = _batch_token_budget(num_ctx, batch_token_budget_override)
     # Recorded on every item_run_log row so a later "why did this attempt
@@ -374,8 +463,9 @@ async def translate_item(
         european_spanish = repository.get_config(conn, "european_spanish", default=True)
         translate_started = time.monotonic()
         translated_subs, engine_used = await _translate_batches(
-            batches, source_lang, target_lang, active_provider, fallback_provider, item_id,
-            catalan_vegeta_insults, european_spanish, retry_pause_seconds, run_id, concurrent_batch_window,
+            batches, source_lang, target_lang, cascade, item_id,
+            catalan_vegeta_insults, european_spanish, retry_pause_seconds, run_id,
+            concurrent_batch_window, on_call_result,
         )
         logger.info(
             "Item %d: all batches took %.2fs total (item started %.2fs ago)",

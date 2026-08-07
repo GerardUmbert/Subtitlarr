@@ -39,10 +39,18 @@ def _default_timeout_for_context(num_ctx: int) -> float:
 
 class OllamaProvider(TranslationProvider):
     name = "ollama"
+    provider_type = "ollama"
 
     def __init__(
-        self, base_url: str, model: str, timeout: float | None = None, num_ctx: int = 8192
+        self,
+        base_url: str,
+        model: str,
+        timeout: float | None = None,
+        num_ctx: int = 8192,
+        instance_name: str | None = None,
     ):
+        if instance_name:
+            self.name = instance_name
         self._base_url = base_url.rstrip("/")
         self._model = model
         # Ollama defaults to a conservative 4096-token context regardless of
@@ -121,13 +129,20 @@ class OllamaProvider(TranslationProvider):
             source_lang, target_lang, catalan_vegeta_insults, european_spanish
         )
 
+        # Reload-then-retry (force-unload the model, exactly once) applies
+        # to failures that indicate the server RESPONDED but got stuck or
+        # errored — a watchdog timeout, an httpx-level timeout, or a 5xx —
+        # since those are the failure modes a wedged/crashed model process
+        # can actually recover from. Deliberately NOT attempted for
+        # httpx.ConnectError: if Ollama's process isn't even reachable,
+        # there's no loaded model state to clear, so a reload call there is
+        # just wasted time before the same connection failure repeats.
         for attempt in (1, 2):
             try:
                 resp = await asyncio.wait_for(
                     self._chat_request(system_prompt, dialogue_text),
                     timeout=WATCHDOG_TIMEOUT_SECONDS,
                 )
-                break
             except asyncio.TimeoutError:
                 if attempt == 2:
                     raise ProviderRateLimitedError(
@@ -140,10 +155,30 @@ class OllamaProvider(TranslationProvider):
                     WATCHDOG_TIMEOUT_SECONDS,
                 )
                 await self._force_unload_model()
+                continue
             except httpx.TimeoutException as exc:
-                raise ProviderRateLimitedError(f"Ollama request timed out: {exc}") from exc
+                if attempt == 2:
+                    raise ProviderRateLimitedError(f"Ollama request timed out: {exc}") from exc
+                logger.warning(
+                    "Ollama request timed out (%s); force-unloading model and retrying once.", exc
+                )
+                await self._force_unload_model()
+                continue
             except httpx.ConnectError as exc:
                 raise ProviderRateLimitedError(f"Ollama connection failed: {exc}") from exc
+
+            if resp.status_code >= 500:
+                if attempt == 2:
+                    raise ProviderRateLimitedError(
+                        f"Ollama returned {resp.status_code} again after reload+retry: {resp.text}"
+                    )
+                logger.warning(
+                    "Ollama returned %d (%s); force-unloading model and retrying once.",
+                    resp.status_code, resp.text,
+                )
+                await self._force_unload_model()
+                continue
+            break
 
         if resp.status_code == 429:
             raise ProviderRateLimitedError("Ollama returned 429")
