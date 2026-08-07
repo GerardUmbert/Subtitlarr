@@ -14,7 +14,9 @@
     <p>Loading language rules…</p>
   </div>
 
-  <div class="engine-card" v-else>
+  <template v-else>
+  <div class="panel">
+    <div class="panel-body">
     <div class="panel-title">Source language priority</div>
     <div class="panel-title-sub">
       A preference, not a requirement — leave empty and Subtitlarr uses whatever language each item
@@ -29,34 +31,45 @@
       </span>
     </div>
     <div class="field-row" style="margin-top:0;">
-      <input v-model="newSourceLang" placeholder="e.g. en" style="max-width:120px;"
+      <input v-model="newSourceLang" placeholder="e.g. en" class="inline-input" style="max-width:120px;"
              @keyup.enter="addSource" />
       <button class="btn" @click="addSource">Add</button>
     </div>
-
-    <div class="engine-config">
-      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-        <input type="checkbox" v-model="europeanSpanish" style="width:auto;" />
-        European (Castilian) Spanish, not Latin American
-      </label>
-      <p class="field-hint">When translating into Spanish, explicitly request Peninsular Spanish from Spain — vocabulary, verb conjugations (vosotros), and idioms as used in Spain. Enabled by default: the bare "es" language code is ambiguous, and confirmed live to default to Latin American colloquial phrasing without this. Uncheck if you actually want Latin American Spanish output. Doesn't affect any other language.</p>
-    </div>
-
-    <div class="engine-config">
-      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-        <input type="checkbox" v-model="catalanVegetaInsults" style="width:auto;" />
-        Vegeta-style insults for Catalan
-      </label>
-      <p class="field-hint">When translating into Catalan, adapt insults and profanity into the proud, colorful, non-literal style of Vegeta's Catalan dub (TV3's Bola de Drac Z) instead of a literal translation. Doesn't affect any other language.</p>
-    </div>
-
-    <div class="field-row" style="margin-top:16px;">
-      <button class="btn btn-primary" @click="save" :disabled="saving">
-        {% raw %}{{ saving ? 'Saving…' : 'Save' }}{% endraw %}
-      </button>
-      <span v-if="saved" class="test-result">● saved</span>
     </div>
   </div>
+
+  <div class="panel" style="margin-top:16px;">
+    <div class="panel-body">
+    <div class="panel-title" style="margin-bottom:4px;">Regional variants</div>
+    <p class="field-hint" style="margin-top:0;">A bare language code (e.g. "es") is ambiguous whenever a language has more than one widely-used regional standard — Bazarr's own language codes don't distinguish es-ES from es-MX, for example. Each row below picks which standard to explicitly request when translating into that language. Only languages with a small number of clearly dominant standards are covered; every other language is left alone.</p>
+    <div v-for="code in variantLanguageCodes" :key="code" class="field" style="max-width:320px;">
+      <label>{% raw %}{{ languageName(code) }}{% endraw %} ({% raw %}{{ code }}{% endraw %})</label>
+      <select :value="variantFor(code)" @change="setVariant(code, $event.target.value)">
+        <option v-for="(label, key) in availableVariants[code]" :key="key" :value="key">
+          {% raw %}{{ label }}{% endraw %}{% raw %}{{ key === variantDefaults[code] ? ' (default)' : '' }}{% endraw %}
+        </option>
+      </select>
+    </div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px;">
+    <div class="panel-body">
+    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+      <input type="checkbox" v-model="catalanVegetaInsults" style="width:auto;" />
+      Vegeta-style insults for Catalan
+    </label>
+    <p class="field-hint">When translating into Catalan, adapt insults and profanity into the proud, colorful, non-literal style of Vegeta's Catalan dub (TV3's Bola de Drac Z) instead of a literal translation. Doesn't affect any other language.</p>
+    </div>
+  </div>
+
+  <div class="field-row" style="margin-top:16px;">
+    <button class="btn btn-primary" @click="save" :disabled="saving">
+      {% raw %}{{ saving ? 'Saving…' : 'Save' }}{% endraw %}
+    </button>
+    <span v-if="saved" class="test-result">● saved</span>
+  </div>
+  </template>
 </div>
 {% endblock %}
 {% block scripts %}

@@ -3,6 +3,58 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.8.4]
+
+### Added
+- **Regional language variants**, replacing the old single European-Spanish
+  toggle: Spanish (Spain / Mexican / Argentine / generic Latin American),
+  Portuguese (Portugal / Brazil), English (American / British), French
+  (France / Québécois / Belgian / Swiss), and Chinese (Simplified/Mainland
+  / Traditional/Taiwan-HK) each get their own dropdown on the Language
+  Rules page, defaulting to that language's own "home" standard except
+  English (defaults to American, the more commonly expected target).
+  `app/providers/prompts.py`'s `LANGUAGE_VARIANTS`/
+  `DEFAULT_LANGUAGE_VARIANTS` registry replaces the old
+  `european_spanish` bool everywhere it was threaded through (every
+  provider's `translate()`, the whole translator.py cascade/retry chain,
+  `/api/config/languages`) — persisted as a single `language_variants`
+  dict (`{"es": "es-MX", ...}`) instead of one boolean.
+- Unraid template (`unraid/subtitlarr.xml`) `ExtraParams` now defaults to
+  `--memory=2g --memory-swap=2g --restart=unless-stopped --log-opt
+  max-size=10m --log-opt max-file=3` — a sensible memory ceiling (with
+  swap disabled beyond it) and bounded Docker log file growth for a
+  long-running background service, instead of shipping with no limits at
+  all.
+
+### Fixed
+- **History and Queue pages**: a long, space-free error message (e.g. a
+  URL-ish string) had nowhere to wrap under `.error-cell`'s inherited
+  `white-space: nowrap` with no scroll room, so the browser fell back to
+  wrapping it one character per line. Capped with `max-width` +
+  `overflow-wrap: break-word` instead.
+- **History page**: the expanded run table's `re-run`/`events` action
+  columns had the same one-character-per-line wrap once the Error
+  column's fix above made more of the table's width contended — fixed
+  with `white-space: nowrap` on `.row-action`.
+- **History page**: a stray bottom border rendered under the Runs-tab sort
+  chips and the Events-tab filter row, left over from `.queue-toolbar`'s
+  border-to-table-below styling being reused in a context with no table
+  directly beneath it in the same panel.
+- **Jobs, Settings, Language Rules, Bazarr Connection pages**: all four
+  used `.engine-card`, a class with no background of its own (originally
+  meant only as a row inside the Engines page's `.engine-cascade`
+  container) — this rendered as a visibly different, unstyled background
+  compared to every other page's `.panel`-based cards. Converted to
+  `.panel` + a new `.panel-body` class (plain padding, no background,
+  unlike `.engine-config`'s inset-expansion look). Language Rules'
+  Regional Variants section also gained proper `.field`/`select` styling
+  (previously a bare unstyled `<select>`) and now renders as its own
+  separate card rather than crammed into the same box as source-language
+  priority.
+- `.engine-config` (the Engines page's per-instance config-reveal panel)
+  changed from a solid `--surface-2` fill to a `--surface-2`-colored
+  outline instead.
+
 ## [0.8.3]
 
 ### Changed

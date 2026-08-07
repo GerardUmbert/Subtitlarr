@@ -124,10 +124,10 @@ class OllamaProvider(TranslationProvider):
         source_lang: str,
         target_lang: str,
         catalan_vegeta_insults: bool = False,
-        european_spanish: bool = True,
+        language_variants: dict[str, str] | None = None,
     ) -> str:
         system_prompt = build_system_prompt(
-            source_lang, target_lang, catalan_vegeta_insults, european_spanish
+            source_lang, target_lang, catalan_vegeta_insults, language_variants
         )
 
         # Reload-then-retry (force-unload the model, exactly once) applies

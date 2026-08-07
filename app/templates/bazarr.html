@@ -14,11 +14,12 @@
     <p>Loading connection settings…</p>
   </div>
 
-  <div class="engine-card" v-else>
+  <div class="panel" v-else>
+    <div class="panel-body">
     <div class="panel-title">Connection</div>
     <div class="panel-title-sub">API key is found in Bazarr under Settings → General</div>
 
-    <div class="engine-config" style="margin-top:0; border-top:none;">
+
       <div class="field">
         <label>Bazarr URL</label>
         <input v-model="baseUrl" placeholder="http://192.168.1.10:6767" />

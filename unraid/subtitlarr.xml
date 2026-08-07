@@ -14,7 +14,7 @@
   <WebUI>http://[IP]:[PORT:7777]/</WebUI>
   <TemplateURL/>
   <Icon>https://raw.githubusercontent.com/GerardUmbert/Subtitlarr/master/unraid/icon.png</Icon>
-  <ExtraParams></ExtraParams>
+  <ExtraParams>--memory=2g --memory-swap=2g --restart=unless-stopped --log-opt max-size=10m --log-opt max-file=3</ExtraParams>
   <PostArgs/>
   <CPUset/>
   <DateInstalled/>

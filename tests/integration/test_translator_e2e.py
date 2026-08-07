@@ -90,14 +90,14 @@ class FakeProvider(TranslationProvider):
 
     def __init__(self):
         self.received_catalan_vegeta_insults: list[bool] = []
-        self.received_european_spanish: list[bool] = []
+        self.received_language_variants: list[dict] = []
 
     async def translate(
         self, dialogue_text: str, source_lang: str, target_lang: str,
-        catalan_vegeta_insults: bool = False, european_spanish: bool = True,
+        catalan_vegeta_insults: bool = False, language_variants: dict | None = None,
     ) -> str:
         self.received_catalan_vegeta_insults.append(catalan_vegeta_insults)
-        self.received_european_spanish.append(european_spanish)
+        self.received_language_variants.append(language_variants)
         # trivial "translation": prefix each line to prove content flowed through
         return "1\nHola.\n\n2\n¿Cómo estás?"
 
@@ -222,7 +222,7 @@ async def test_failed_translation_still_logs_engine_used(conn, monkeypatch):
         provider_type = "fake-failing"
         model = "test-model"
 
-        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
+        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, language_variants=None):
             # Garbage response the reconciler can't align to any cue —
             # triggers TranslationAlignmentError, one of the failure
             # paths that previously dropped engine_used.
@@ -291,12 +291,12 @@ async def test_catalan_vegeta_insults_setting_reaches_the_provider(conn, monkeyp
 
 
 @pytest.mark.asyncio
-async def test_european_spanish_setting_defaults_on_and_reaches_the_provider(conn, monkeypatch):
-    """Confirms european_spanish defaults to True (unlike
-    catalan_vegeta_insults, which defaults False) and flows from
-    translate_item() through to the provider's translate() call WITHOUT
-    the setting ever being explicitly written to the DB — a fresh install
-    must get this behavior automatically, not require opting in."""
+async def test_language_variants_default_to_empty_dict_and_reach_the_provider(conn, monkeypatch):
+    """Confirms translate_item() reads language_variants from config
+    (defaulting to {} when nothing was ever explicitly saved) and passes
+    it through to the provider's translate() call — a fresh install must
+    get build_system_prompt's own per-language defaults (e.g. Spain
+    Spanish) automatically via the empty dict, not require opting in."""
     repository.set_config(conn, "source_lang_priority", ["en"])
     repository.upsert_item_seen(
         conn, item_type="episode", bazarr_id=42, series_id=1,
@@ -324,13 +324,13 @@ async def test_european_spanish_setting_defaults_on_and_reaches_the_provider(con
 
     assert progress.processed == 1
     assert progress.failed == 0
-    assert fake_provider.received_european_spanish == [True]
+    assert fake_provider.received_language_variants == [{}]
 
 
 @pytest.mark.asyncio
-async def test_european_spanish_setting_can_be_disabled(conn, monkeypatch):
+async def test_language_variants_setting_reaches_the_provider(conn, monkeypatch):
     repository.set_config(conn, "source_lang_priority", ["en"])
-    repository.set_config(conn, "european_spanish", False)
+    repository.set_config(conn, "language_variants", {"es": "es-MX"})
     repository.upsert_item_seen(
         conn, item_type="episode", bazarr_id=42, series_id=1,
         title="Legacy", series_title="The Bear", season_episode="3x7",
@@ -357,7 +357,7 @@ async def test_european_spanish_setting_can_be_disabled(conn, monkeypatch):
 
     assert progress.processed == 1
     assert progress.failed == 0
-    assert fake_provider.received_european_spanish == [False]
+    assert fake_provider.received_language_variants == [{"es": "es-MX"}]
 
 
 @pytest.mark.asyncio
@@ -457,7 +457,7 @@ class EchoProvider(TranslationProvider):
 
     async def translate(
         self, dialogue_text: str, source_lang: str, target_lang: str,
-        catalan_vegeta_insults: bool = False, european_spanish: bool = True,
+        catalan_vegeta_insults: bool = False, language_variants: dict | None = None,
     ) -> str:
         blocks = dialogue_text.strip().split("\n\n")
         out = []

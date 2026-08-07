@@ -87,15 +87,18 @@ class TranslationProvider(ABC):
         source_lang: str,
         target_lang: str,
         catalan_vegeta_insults: bool = False,
-        european_spanish: bool = True,
+        language_variants: dict[str, str] | None = None,
     ) -> str:
         """Sends dialogue-only text (index + content, no timestamps) to the
         LLM and returns its raw text response. Reassembly onto original
         timing happens separately in app.subtitles.reconciler.
         catalan_vegeta_insults only has an effect when target_lang is
-        Catalan; european_spanish only has an effect when target_lang is
-        Spanish — see app.providers.prompts. european_spanish defaults to
-        True (opt-out, not opt-in), unlike catalan_vegeta_insults."""
+        Catalan. language_variants maps a language code to the chosen
+        regional-variant key (e.g. {"es": "es-MX"}) — see
+        app.providers.prompts.LANGUAGE_VARIANTS/DEFAULT_LANGUAGE_VARIANTS;
+        a language with no entry (or None) falls back to that language's
+        own default variant, same opt-out-not-opt-in posture the old
+        european_spanish bool had."""
         ...
 
     @abstractmethod

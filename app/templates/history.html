@@ -23,7 +23,7 @@
 
   <template v-if="activeTab === 'runs'">
     <div class="panel" style="margin-bottom:14px; padding:14px 18px;" v-if="runs.length">
-      <div class="queue-toolbar" style="padding:0;">
+      <div class="queue-toolbar" style="padding:0; border-bottom:none;">
         <span>Sort by:</span>
         <span class="chip sortable-chip" :class="{ active: runsSortBy === 'started' || !runsSortBy }" @click="setRunsSort('started')">Started {% raw %}{{ runsSortIndicator('started') || (!runsSortBy ? '▼' : '') }}{% endraw %}</span>
         <span class="chip sortable-chip" :class="{ active: runsSortBy === 'duration' }" @click="setRunsSort('duration')">Duration {% raw %}{{ runsSortIndicator('duration') }}{% endraw %}</span>
@@ -114,7 +114,7 @@
 
   <template v-if="activeTab === 'events'">
     <div class="panel" style="margin-bottom:14px; padding:14px 18px;">
-      <div class="queue-toolbar" style="padding:0;">
+      <div class="queue-toolbar" style="padding:0; border-bottom:none;">
         <span class="chip" v-if="eventsItemIdFilter" @click="clearEventsItemFilter">
           item #{% raw %}{{ eventsItemIdFilter }}{% endraw %} &times;
         </span>

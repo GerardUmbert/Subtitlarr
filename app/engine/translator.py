@@ -50,7 +50,7 @@ async def _call_provider(
     source_lang: str,
     target_lang: str,
     catalan_vegeta_insults: bool,
-    european_spanish: bool,
+    language_variants: dict[str, str] | None,
     item_id: int,
     batch_index: int,
     batch_total: int,
@@ -73,7 +73,7 @@ async def _call_provider(
     )
     try:
         llm_response = await provider.translate(
-            dialogue_text, source_lang, target_lang, catalan_vegeta_insults, european_spanish
+            dialogue_text, source_lang, target_lang, catalan_vegeta_insults, language_variants
         )
     except ProviderRateLimitedError:
         if on_call_result is not None:
@@ -116,7 +116,7 @@ async def _try_cascade(
     source_lang: str,
     target_lang: str,
     catalan_vegeta_insults: bool,
-    european_spanish: bool,
+    language_variants: dict[str, str] | None,
     item_id: int,
     batch_index: int,
     batch_total: int,
@@ -144,7 +144,7 @@ async def _try_cascade(
         try:
             llm_response = await _call_provider(
                 provider, dialogue_text, source_lang, target_lang,
-                catalan_vegeta_insults, european_spanish, item_id, batch_index, batch_total,
+                catalan_vegeta_insults, language_variants, item_id, batch_index, batch_total,
                 on_call_result,
             )
             return llm_response, index
@@ -161,7 +161,7 @@ async def _translate_batch(
     cascade: list[TranslationProvider],
     item_id: int,
     catalan_vegeta_insults: bool = False,
-    european_spanish: bool = True,
+    language_variants: dict[str, str] | None = None,
     retry_pause_seconds: float = 0,
     run_id: int | None = None,
     batch_index: int = 1,
@@ -199,7 +199,7 @@ async def _translate_batch(
     try:
         llm_response = await _call_provider(
             active_provider, dialogue_text, source_lang, target_lang,
-            catalan_vegeta_insults, european_spanish, item_id, batch_index, batch_total,
+            catalan_vegeta_insults, language_variants, item_id, batch_index, batch_total,
             on_call_result,
         )
     except ProviderRateLimitedError as exc:
@@ -222,7 +222,7 @@ async def _translate_batch(
         try:
             llm_response = await _call_provider(
                 active_provider, dialogue_text, source_lang, target_lang,
-                catalan_vegeta_insults, european_spanish, item_id, batch_index, batch_total,
+                catalan_vegeta_insults, language_variants, item_id, batch_index, batch_total,
                 on_call_result,
             )
             if run_id is not None:
@@ -235,7 +235,7 @@ async def _translate_batch(
                 raise
             llm_response, engine_index = await _try_cascade(
                 cascade, 1, dialogue_text, source_lang, target_lang,
-                catalan_vegeta_insults, european_spanish, item_id, batch_index, batch_total,
+                catalan_vegeta_insults, language_variants, item_id, batch_index, batch_total,
                 retry_pause_seconds, run_id, retry_exc, on_call_result,
             )
             engine_used = cascade[engine_index].name
@@ -253,7 +253,7 @@ async def _translate_batch(
             raise
         llm_response, engine_index = await _try_cascade(
             cascade, 1, dialogue_text, source_lang, target_lang,
-            catalan_vegeta_insults, european_spanish, item_id, batch_index, batch_total,
+            catalan_vegeta_insults, language_variants, item_id, batch_index, batch_total,
             retry_pause_seconds, run_id, blocked_exc, on_call_result,
         )
         engine_used = cascade[engine_index].name
@@ -278,7 +278,7 @@ async def _translate_batch(
             raise
         llm_response, engine_index = await _try_cascade(
             cascade, engine_index + 1, dialogue_text, source_lang, target_lang,
-            catalan_vegeta_insults, european_spanish, item_id, batch_index, batch_total,
+            catalan_vegeta_insults, language_variants, item_id, batch_index, batch_total,
             retry_pause_seconds, run_id, exc, on_call_result,
         )
         engine_used = cascade[engine_index].name
@@ -314,7 +314,7 @@ async def _translate_batches(
     cascade: list[TranslationProvider],
     item_id: int,
     catalan_vegeta_insults: bool = False,
-    european_spanish: bool = True,
+    language_variants: dict[str, str] | None = None,
     retry_pause_seconds: float = 0,
     run_id: int | None = None,
     concurrent_batch_window: int = NVIDIA_CONCURRENT_BATCH_WINDOW,
@@ -338,7 +338,7 @@ async def _translate_batches(
         for i, batch in enumerate(batches):
             batch_result, batch_engine, batch_model = await _translate_batch(
                 batch, source_lang, target_lang, cascade, item_id,
-                catalan_vegeta_insults, european_spanish, retry_pause_seconds, run_id, i + 1, batch_total,
+                catalan_vegeta_insults, language_variants, retry_pause_seconds, run_id, i + 1, batch_total,
                 on_call_result,
             )
             translated_subs.extend(batch_result)
@@ -353,7 +353,7 @@ async def _translate_batches(
             *(
                 _translate_batch(
                     batch, source_lang, target_lang, cascade, item_id,
-                    catalan_vegeta_insults, european_spanish, retry_pause_seconds, run_id,
+                    catalan_vegeta_insults, language_variants, retry_pause_seconds, run_id,
                     window_start + offset + 1, batch_total, on_call_result,
                 )
                 for offset, batch in enumerate(window)
@@ -467,11 +467,11 @@ async def translate_item(
         )
 
         catalan_vegeta_insults = repository.get_config(conn, "catalan_vegeta_insults", default=False)
-        european_spanish = repository.get_config(conn, "european_spanish", default=True)
+        language_variants = repository.get_config(conn, "language_variants", default={})
         translate_started = time.monotonic()
         translated_subs, engine_used, model_used = await _translate_batches(
             batches, source_lang, target_lang, cascade, item_id,
-            catalan_vegeta_insults, european_spanish, retry_pause_seconds, run_id,
+            catalan_vegeta_insults, language_variants, retry_pause_seconds, run_id,
             concurrent_batch_window, on_call_result,
         )
         logger.info(

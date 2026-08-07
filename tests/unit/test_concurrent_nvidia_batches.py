@@ -46,7 +46,7 @@ class TrackingProvider(TranslationProvider):
 
     async def translate(
         self, dialogue_text: str, source_lang: str, target_lang: str,
-        catalan_vegeta_insults: bool = False, european_spanish: bool = True,
+        catalan_vegeta_insults: bool = False, language_variants: dict | None = None,
     ) -> str:
         index = int(dialogue_text.split("\n", 1)[0])
         self.call_order.append(index)
@@ -151,7 +151,7 @@ async def test_nvidia_falls_back_per_batch_on_rate_limit_within_a_window():
         provider_type = "nvidia"
         model = "test-model"
 
-        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
+        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, language_variants=None):
             index = int(dialogue_text.split("\n", 1)[0])
             if index == 2:
                 raise ProviderRateLimitedError("simulated 429")
@@ -187,7 +187,7 @@ async def test_transient_failure_retries_same_provider_before_falling_back():
         def __init__(self):
             self.attempts: list[int] = []
 
-        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
+        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, language_variants=None):
             index = int(dialogue_text.split("\n", 1)[0])
             self.attempts.append(index)
             if index == 2 and self.attempts.count(2) == 1:
@@ -229,7 +229,7 @@ async def test_retry_and_fallback_emit_run_events():
         def __init__(self):
             self.attempts: list[int] = []
 
-        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
+        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, language_variants=None):
             index = int(dialogue_text.split("\n", 1)[0])
             self.attempts.append(index)
             if index == 1 and self.attempts.count(1) == 1:
@@ -244,7 +244,7 @@ async def test_retry_and_fallback_emit_run_events():
         provider_type = "nvidia"
         model = "test-model"
 
-        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
+        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, language_variants=None):
             raise ProviderRateLimitedError("simulated persistent 504")
 
         async def test_connection(self):
@@ -295,7 +295,7 @@ async def test_content_blocked_falls_back_immediately_without_same_provider_retr
         def __init__(self):
             self.attempts: list[int] = []
 
-        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
+        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, language_variants=None):
             index = int(dialogue_text.split("\n", 1)[0])
             self.attempts.append(index)
             raise ProviderContentBlockedError("blocked: PROHIBITED_CONTENT")
@@ -329,7 +329,7 @@ async def test_content_blocked_reraises_when_no_fallback_configured():
         provider_type = "gemini"
         model = "test-model"
 
-        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
+        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, language_variants=None):
             raise ProviderContentBlockedError("blocked: PROHIBITED_CONTENT")
 
         async def test_connection(self):
@@ -358,7 +358,7 @@ class RepetitionLoopProvider(TranslationProvider):
         self.model = "test-model"
         self.attempts = 0
 
-    async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
+    async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, language_variants=None):
         self.attempts += 1
         indices = [int(line) for line in dialogue_text.splitlines() if line.strip().isdigit()]
         return "\n".join(f"{i}\nRepeated identical translated line" for i in indices)
@@ -378,7 +378,7 @@ class GoodTranslationProvider(TranslationProvider):
         self.attempts = 0
         self.call_order: list[int] = []
 
-    async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, european_spanish=True):
+    async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, language_variants=None):
         self.attempts += 1
         indices = [int(line) for line in dialogue_text.splitlines() if line.strip().isdigit()]
         self.call_order.extend(indices)

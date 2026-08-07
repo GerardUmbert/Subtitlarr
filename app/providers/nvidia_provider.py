@@ -103,11 +103,11 @@ class NvidiaProvider(TranslationProvider):
         source_lang: str,
         target_lang: str,
         catalan_vegeta_insults: bool = False,
-        european_spanish: bool = True,
+        language_variants: dict[str, str] | None = None,
     ) -> str:
         await self._wait_for_rate_limit_clear()
         system_prompt = build_system_prompt(
-            source_lang, target_lang, catalan_vegeta_insults, european_spanish
+            source_lang, target_lang, catalan_vegeta_insults, language_variants
         )
         try:
             resp = await self._client.post(

@@ -15,11 +15,12 @@
   </div>
 
   <template v-else>
-  <div class="engine-card">
+  <div class="panel">
+    <div class="panel-body">
     <div class="panel-title">Translate next batch</div>
     <div class="panel-title-sub">Runs the same age-gated job as the cron, on demand — translates up to today's remaining daily limit, not the full backlog</div>
 
-    <div class="engine-config" style="margin-top:0; border-top:none;">
+
       <p class="field-hint">Cron: <span class="mono">{% raw %}{{ cronExpression }}{% endraw %}</span> · Age threshold: {% raw %}{{ ageThresholdDays }}{% endraw %} days · Daily limit: {% raw %}{{ dailyTranslationLimit > 0 ? dailyTranslationLimit + ' items' : 'unlimited' }}{% endraw %} (<a href="/settings">change</a>)</p>
       <p class="field-hint" v-if="nextRun">Next scheduled run: {% raw %}{{ nextRun }}{% endraw %}</p>
       <div class="field-row">
@@ -31,11 +32,12 @@
     </div>
   </div>
 
-  <div class="engine-card" style="margin-top:16px;">
+  <div class="panel" style="margin-top:16px;">
+    <div class="panel-body">
     <div class="panel-title">Sync wanted / missing from Bazarr</div>
     <div class="panel-title-sub">Refreshes the wanted-subtitle list — no subtitle content is fetched, no translation runs</div>
 
-    <div class="engine-config" style="margin-top:0; border-top:none;">
+
       <p class="field-hint">Cron: <span class="mono">{% raw %}{{ syncMediaCron || 'not scheduled' }}{% endraw %}</span> (<a href="/settings">change</a>)</p>
       <p class="field-hint" v-if="nextSyncMediaRun">Next scheduled run: {% raw %}{{ nextSyncMediaRun }}{% endraw %}</p>
       <div class="field-row">
@@ -47,11 +49,12 @@
     </div>
   </div>
 
-  <div class="engine-card" style="margin-top:16px;">
+  <div class="panel" style="margin-top:16px;">
+    <div class="panel-body">
     <div class="panel-title">Pull pending subtitles (sources) from Bazarr</div>
     <div class="panel-title-sub">Pre-fetches source subtitle content for every pending item into the local cache — no translation, no uploads</div>
 
-    <div class="engine-config" style="margin-top:0; border-top:none;">
+
       <p class="field-hint">Cron: <span class="mono">{% raw %}{{ syncSubsCron || 'not scheduled' }}{% endraw %}</span> (<a href="/settings">change</a>)</p>
       <p class="field-hint" v-if="nextSyncSubsRun">Next scheduled run: {% raw %}{{ nextSyncSubsRun }}{% endraw %}</p>
       <div class="field-row">
@@ -67,11 +70,10 @@
     </div>
   </div>
 
-  <div class="engine-card" style="margin-top:16px;" v-if="queueUploadsEnabled || pendingUploadCount > 0">
+  <div class="panel" style="margin-top:16px;" v-if="queueUploadsEnabled || pendingUploadCount > 0">
+    <div class="panel-body">
     <div class="panel-title">Push queued uploads</div>
     <div class="panel-title-sub">Sends every translated subtitle currently held as "pending upload" to Bazarr in one batch</div>
-
-    <div class="engine-config" style="margin-top:0; border-top:none;">
       <p class="field-hint">{% raw %}{{ pendingUploadCount }}{% endraw %} item{% raw %}{{ pendingUploadCount === 1 ? '' : 's' }}{% endraw %} waiting to be pushed.</p>
       <div class="field-row">
         <button class="btn" @click="pushUploads" :disabled="pushUploadsActive || pushingUploads || pendingUploadCount === 0">
@@ -86,11 +88,12 @@
     </div>
   </div>
 
-  <div class="engine-card" style="margin-top:16px;">
+  <div class="panel" style="margin-top:16px;">
+    <div class="panel-body">
     <div class="panel-title">Fix broken runs</div>
     <div class="panel-title-sub">Closes out run history entries left stuck "in progress" by a process that was killed mid-batch — does not delete anything</div>
 
-    <div class="engine-config" style="margin-top:0; border-top:none;">
+
       <p class="field-hint">
         Safe to run any time. Runs automatically on every server startup already; this lets you
         trigger it on demand instead of waiting for a restart. Items and their history stay
@@ -108,11 +111,12 @@
     </div>
   </div>
 
-  <div class="engine-card" style="margin-top:16px;">
+  <div class="panel" style="margin-top:16px;">
+    <div class="panel-body">
     <div class="panel-title">Clear engine rate limits</div>
     <div class="panel-title-sub">Immediately un-flags every engine currently in a 24h rate-limit cooldown</div>
 
-    <div class="engine-config" style="margin-top:0; border-top:none;">
+
       <p class="field-hint">
         An engine gets auto-flagged after 3 consecutive failures against it — usually genuine
         exhaustion, but a short burst-limit blip can occasionally look the same. Use this after
@@ -131,11 +135,12 @@
     </div>
   </div>
 
-  <div class="engine-card" style="margin-top:16px;">
+  <div class="panel" style="margin-top:16px;">
+    <div class="panel-body">
     <div class="panel-title">Reset local data</div>
     <div class="panel-title-sub">Clears queue and run history — does not touch any saved settings</div>
 
-    <div class="engine-config" style="margin-top:0; border-top:none;">
+
       <p class="field-hint">
         Wipes tracked items, run history, and per-item logs from this local database, then
         re-populates from Bazarr on the next poll or run. Use this to fix mismatched or

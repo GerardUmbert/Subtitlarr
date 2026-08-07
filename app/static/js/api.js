@@ -66,6 +66,7 @@ const Api = (() => {
 
     getLanguageConfig: () => request("GET", "/api/config/languages"),
     setLanguageConfig: (cfg) => request("POST", "/api/config/languages", cfg),
+    getAvailableLanguageVariants: () => request("GET", "/api/config/languages/variants"),
 
     getBazarrConfig: () => request("GET", "/api/config/bazarr"),
     setBazarrConfig: (cfg) => request("POST", "/api/config/bazarr", cfg),

@@ -325,6 +325,14 @@ a.stat:hover {
   overflow: hidden;
 }
 
+/* Plain padded content area for a standalone .panel card (Jobs, Settings,
+   Language Rules, Bazarr Connection) — unlike .engine-config, this has NO
+   background of its own, since it IS the card's body, not an inset
+   expansion nested within a longer cascade row (see .engine-config). */
+.panel-body { padding: 16px 20px 20px; }
+.panel-body .panel-title { margin-bottom: 2px; }
+.panel-body .panel-title-sub { margin-bottom: 14px; }
+
 a.panel,
 a.panel:hover,
 a.panel:visited,
@@ -529,7 +537,7 @@ a.panel:hover {
 .engine-config {
   margin-top: 10px;
   padding: 14px 16px 16px;
-  background: var(--surface-2);
+  border: 1px solid var(--surface-2);
   border-radius: 8px;
 }
 
@@ -595,7 +603,7 @@ a.panel:hover {
   font-family: "IBM Plex Mono", monospace;
   margin-bottom: 5px;
 }
-.field input, .field select {
+.field input, .field select, .inline-input {
   width: 100%;
   padding: 8px 10px;
   border-radius: 7px;
@@ -605,7 +613,7 @@ a.panel:hover {
   font-size: 13px;
   font-family: "IBM Plex Mono", monospace;
 }
-.field input:focus, .field select:focus {
+.field input:focus, .field select:focus, .inline-input:focus {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
@@ -818,7 +826,7 @@ th.sortable .sort-indicator {
   color: var(--accent);
 }
 .sortable-chip { cursor: pointer; }
-.row-action { text-align: right; }
+.row-action { text-align: right; white-space: nowrap; }
 .link-btn {
   background: none;
   border: none;
@@ -910,6 +918,14 @@ th.sortable .sort-indicator {
   text-decoration: underline;
   text-decoration-style: dotted;
   text-underline-offset: 2px;
+  /* Overrides the nowrap it inherits from .row-time — a long, space-free
+     error message (e.g. a URL-ish string) with nowrap and no room to
+     scroll had nowhere to go but wrap one character per line. Capping the
+     width and allowing normal wrapping keeps the row a sane height
+     instead of blowing out the column or the table's overall width. */
+  white-space: normal;
+  overflow-wrap: break-word;
+  max-width: 320px;
 }
 .error-cell:hover { color: var(--ink); }
 

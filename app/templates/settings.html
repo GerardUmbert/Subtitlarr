@@ -9,11 +9,12 @@
     </div>
   </div>
 
-  <div class="engine-card">
+  <div class="panel">
+    <div class="panel-body">
     <div class="panel-title">Translate next batch</div>
     <div class="panel-title-sub">Standard 5-field cron expression</div>
 
-    <div class="engine-config" style="margin-top:0; border-top:none;">
+
       <div class="field">
         <label>Cron expression</label>
         <input v-model="cronExpression" placeholder="0 3 * * *" />
@@ -37,11 +38,12 @@
     </div>
   </div>
 
-  <div class="engine-card" style="margin-top:16px;">
+  <div class="panel" style="margin-top:16px;">
+    <div class="panel-body">
     <div class="panel-title">Upload timing</div>
     <div class="panel-title-sub">Applies to every translation, regardless of how it was triggered — scheduled runs, "Run now", filtered batches, and single-item re-runs alike</div>
 
-    <div class="engine-config" style="margin-top:0; border-top:none;">
+
       <div class="field">
         <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
           <input type="checkbox" v-model="queueUploadsEnabled" style="width:auto;" />
@@ -52,11 +54,12 @@
     </div>
   </div>
 
-  <div class="engine-card" style="margin-top:16px;">
+  <div class="panel" style="margin-top:16px;">
+    <div class="panel-body">
     <div class="panel-title">Bazarr sync schedules</div>
     <div class="panel-title-sub">Optional, independent crons for the two on-demand Jobs page syncs — leave blank to keep them manual-only</div>
 
-    <div class="engine-config" style="margin-top:0; border-top:none;">
+
       <div class="field">
         <label>Sync wanted / missing cron</label>
         <input v-model="syncMediaCron" placeholder="e.g. 40 9 * * * (blank = manual only)" />

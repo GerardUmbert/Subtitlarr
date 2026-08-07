@@ -1,5 +1,15 @@
 const { createApp } = Vue;
 
+// Full names for the language codes LANGUAGE_VARIANTS covers — used to
+// label each dropdown row on the page (e.g. "Spanish (es)").
+const VARIANT_LANGUAGE_NAMES = {
+  es: "Spanish",
+  pt: "Portuguese",
+  en: "English",
+  fr: "French",
+  zh: "Chinese",
+};
+
 createApp({
   data() {
     return {
@@ -7,17 +17,39 @@ createApp({
       sourcePriority: [],
       newSourceLang: "",
       catalanVegetaInsults: false,
-      europeanSpanish: true,
+      languageVariants: {},
+      availableVariants: {},
+      variantDefaults: {},
       saving: false,
       saved: false,
     };
   },
+  computed: {
+    variantLanguageCodes() {
+      // Stable order regardless of object key insertion order from the API.
+      return Object.keys(this.availableVariants).sort();
+    },
+  },
   methods: {
+    languageName(code) {
+      return VARIANT_LANGUAGE_NAMES[code] || code.toUpperCase();
+    },
+    variantFor(code) {
+      return this.languageVariants[code] || this.variantDefaults[code];
+    },
+    setVariant(code, value) {
+      this.languageVariants = { ...this.languageVariants, [code]: value };
+    },
     async load() {
-      const cfg = await Api.getLanguageConfig();
+      const [cfg, variants] = await Promise.all([
+        Api.getLanguageConfig(),
+        Api.getAvailableLanguageVariants(),
+      ]);
       this.sourcePriority = cfg.source_priority;
       this.catalanVegetaInsults = cfg.catalan_vegeta_insults;
-      this.europeanSpanish = cfg.european_spanish;
+      this.languageVariants = cfg.language_variants || {};
+      this.availableVariants = variants.variants;
+      this.variantDefaults = variants.defaults;
     },
     addSource() {
       const lang = this.newSourceLang.trim().toLowerCase();
@@ -36,7 +68,7 @@ createApp({
         await Api.setLanguageConfig({
           source_priority: this.sourcePriority,
           catalan_vegeta_insults: this.catalanVegetaInsults,
-          european_spanish: this.europeanSpanish,
+          language_variants: this.languageVariants,
         });
         this.saved = true;
         setTimeout(() => (this.saved = false), 3000);
