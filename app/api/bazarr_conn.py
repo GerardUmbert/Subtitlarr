@@ -5,6 +5,7 @@ from app import state
 from app.bazarr.client import BazarrClient
 from app.config import settings
 from app.db import settings_store
+from app.providers.languages import refresh_bazarr_names
 
 router = APIRouter(prefix="/api/config/bazarr", tags=["bazarr"])
 
@@ -46,6 +47,7 @@ async def set_bazarr_config(config: BazarrConfig, conn=Depends(state.get_conn)):
     if state.bazarr_client is not None:
         await state.bazarr_client.aclose()
     state.bazarr_client = BazarrClient(base_url=settings.bazarr_base_url, api_key=settings.bazarr_api_key)
+    await refresh_bazarr_names(state.bazarr_client)
     return {"saved": True}
 
 

@@ -49,6 +49,15 @@ async def list_gemini_models(
     return {"count": len(names), "models": sorted(names)}
 
 
+@router.get("/languages")
+async def get_bazarr_languages(client: BazarrClient = Depends(state.get_client)):
+    """Raw language list from Bazarr's own GET /api/system/languages —
+    used to check what codes/names a real instance reports (e.g. Spanish
+    regional variants) without hardcoding guesses. Safe to delete once no
+    longer needed."""
+    return await client.get_languages()
+
+
 @router.get("/episode/{sonarr_episode_id}/detail")
 async def get_episode_raw_detail(
     sonarr_episode_id: int, client: BazarrClient = Depends(state.get_client)

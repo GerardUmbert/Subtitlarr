@@ -27,6 +27,7 @@ from app.config import settings
 from app.db import database, repository, settings_store
 from app.engine.runner import RunController
 from app.logging_conf import configure_logging
+from app.providers import languages as language_names
 from app.scheduler.cron import CronScheduler
 
 configure_logging()
@@ -64,6 +65,7 @@ async def lifespan(app: FastAPI):
     state.bazarr_client = BazarrClient(
         base_url=settings.bazarr_base_url, api_key=settings.bazarr_api_key
     )
+    await language_names.refresh_bazarr_names(state.bazarr_client)
     state.run_controller = RunController(state.db_conn, lambda: state.bazarr_client, settings)
 
     state.cron_scheduler = CronScheduler()

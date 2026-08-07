@@ -1,3 +1,6 @@
+import pytest
+
+from app.providers import languages
 from app.providers.languages import language_name
 from app.providers.prompts import build_system_prompt
 
@@ -16,6 +19,45 @@ def test_case_insensitive():
 
 def test_unknown_code_falls_back_to_uppercased_code_not_crash():
     assert language_name("xx") == "XX"
+
+
+def test_pb_falls_back_to_bare_code_without_bazarr_data():
+    """"pb" (Bazarr's non-standard code for Brazilian Portuguese) is not an
+    ISO 639-1 code and isn't hardcoded in the static table — it's only
+    resolved once refresh_bazarr_names() has pulled it from a live Bazarr
+    instance. Without that, it falls back like any other unknown code."""
+    assert language_name("pb") == "PB"
+
+
+class _FakeBazarrClient:
+    def __init__(self, rows):
+        self._rows = rows
+
+    async def get_languages(self):
+        return self._rows
+
+
+@pytest.fixture(autouse=True)
+def _reset_bazarr_name_cache():
+    yield
+    languages._bazarr_names.clear()
+
+
+@pytest.mark.asyncio
+async def test_refresh_bazarr_names_overrides_static_table():
+    client = _FakeBazarrClient([{"code2": "pb", "code3": "por", "name": "Brazilian Portuguese"}])
+    await languages.refresh_bazarr_names(client)
+    assert language_name("pb") == "Brazilian Portuguese"
+
+
+@pytest.mark.asyncio
+async def test_refresh_bazarr_names_is_best_effort_on_failure():
+    class _FailingClient:
+        async def get_languages(self):
+            raise RuntimeError("Bazarr unreachable")
+
+    await languages.refresh_bazarr_names(_FailingClient())
+    assert language_name("pb") == "PB"
 
 
 def test_system_prompt_spells_out_full_names_not_just_bare_codes():

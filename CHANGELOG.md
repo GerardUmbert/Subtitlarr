@@ -3,9 +3,21 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.8.8]
+
+### Added
+- Language names used in LLM translation prompts now prefer Bazarr's own
+  `GET /api/system/languages` list — fetched at startup and again whenever
+  the Bazarr connection is saved, best-effort. This correctly covers
+  Bazarr-specific non-standard codes (e.g. `pb` for Brazilian Portuguese,
+  `ea` for Latin American Spanish) that ISO 639-1 doesn't define, without
+  hardcoding guesses at those codes' meanings. Falls back to the bare
+  uppercased code, same as any unrecognized code, until a Bazarr
+  connection has been configured and reached at least once.
+
 ## [0.8.7]
 
-### Fixed
+### Added
 - **Mobile/narrow-viewport layout**, across most pages — confirmed live
   on a real phone via DevTools:
   - Dashboard's stat-card grid, page header, Current-run title/Stop-

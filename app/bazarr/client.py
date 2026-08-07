@@ -80,6 +80,18 @@ class BazarrClient:
             if start >= total or not items:
                 break
 
+    # ---- Languages ----
+
+    async def get_languages(self) -> list[dict]:
+        """Bazarr's own known-language list (GET /api/system/languages) —
+        includes non-standard codes it defines itself (e.g. "pb" for
+        Brazilian Portuguese) that aren't in ISO 639-1, so this is the
+        authoritative source for what a given code means rather than
+        guessing/hardcoding it locally."""
+        resp = await self._client.get("/api/system/languages")
+        resp.raise_for_status()
+        return resp.json()
+
     # ---- Item detail (existing + missing subtitle languages) ----
 
     async def get_episode_detail(self, sonarr_episode_id: int) -> EpisodeDetail | None:

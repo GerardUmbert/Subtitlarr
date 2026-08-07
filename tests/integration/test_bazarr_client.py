@@ -25,6 +25,25 @@ async def test_ping(client):
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_get_languages(client):
+    respx.get(f"{BASE_URL}/api/system/languages").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {"code2": "pt", "code3": "por", "name": "Portuguese", "enabled": True},
+                {"code2": "pb", "code3": "por", "name": "Brazilian Portuguese", "enabled": True},
+            ],
+        )
+    )
+    rows = await client.get_languages()
+    assert {row["code2"]: row["name"] for row in rows} == {
+        "pt": "Portuguese",
+        "pb": "Brazilian Portuguese",
+    }
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_get_wanted_episodes(client):
     respx.get(f"{BASE_URL}/api/episodes/wanted").mock(
         return_value=httpx.Response(

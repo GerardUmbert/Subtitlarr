@@ -2,7 +2,13 @@
 prompts unambiguous. Bare codes like "en"/"it" are a real failure mode with
 smaller models — a live run asking to translate "from en to it" came back
 in German instead, most plausibly because the model misread the bare codes.
-Spelling out full names in the prompt removes that ambiguity."""
+Spelling out full names in the prompt removes that ambiguity.
+
+This table is ISO 639-1 only. Bazarr also uses non-standard codes of its
+own (e.g. "pb" for Brazilian Portuguese) that aren't ISO codes and aren't
+listed here — those are resolved at runtime via refresh_bazarr_names()
+instead, since guessing/hardcoding Bazarr-specific codes here would drift
+from whatever a given Bazarr install actually calls them."""
 
 ISO_639_1_NAMES: dict[str, str] = {
     "aa": "Afar", "ab": "Abkhazian", "af": "Afrikaans", "ak": "Akan",
@@ -21,7 +27,7 @@ ISO_639_1_NAMES: dict[str, str] = {
     "el": "Greek", "gn": "Guarani", "gu": "Gujarati", "ht": "Haitian Creole",
     "ha": "Hausa", "he": "Hebrew", "hz": "Herero", "hi": "Hindi",
     "ho": "Hiri Motu", "hu": "Hungarian", "ia": "Interlingua", "id": "Indonesian",
-    "ie": "Interlingue", "ga": "Irish", "ig": "Igbo", "ik": "Inupiaq",
+    "ie": "Interlingue", "ga": "Irish", "ig": "Igbo", "ik": "Inupiaq",  
     "io": "Ido", "is": "Icelandic", "it": "Italian", "iu": "Inuktitut",
     "ja": "Japanese", "jv": "Javanese", "kl": "Kalaallisut", "kn": "Kannada",
     "kr": "Kanuri", "ks": "Kashmiri", "kk": "Kazakh", "km": "Khmer",
@@ -55,9 +61,35 @@ ISO_639_1_NAMES: dict[str, str] = {
 }
 
 
+# Populated once at startup from Bazarr's own GET /api/system/languages
+# (see refresh_bazarr_names below) — takes priority over ISO_639_1_NAMES
+# since it reflects exactly what this Bazarr instance calls each code,
+# including non-standard ones (like "pb") the static ISO table can't cover.
+_bazarr_names: dict[str, str] = {}
+
+
 def language_name(code: str) -> str:
-    """Returns the full English name for an ISO 639-1 code, or the code
+    """Returns the full English name for a language code, or the code
     itself uppercased if unknown — never raises, since an unrecognized
     code shouldn't block translation, it just loses the disambiguation
     benefit for that one language."""
-    return ISO_639_1_NAMES.get(code.lower(), code.upper())
+    code = code.lower()
+    return _bazarr_names.get(code) or ISO_639_1_NAMES.get(code, code.upper())
+
+
+async def refresh_bazarr_names(client) -> None:
+    """Fetches Bazarr's known-language list and caches it as the preferred
+    source for language_name(). Best-effort: if Bazarr isn't reachable or
+    configured yet, leaves the existing cache (or the ISO fallback) in
+    place rather than raising, since prompt-building must never break on
+    this."""
+    try:
+        rows = await client.get_languages()
+    except Exception:
+        return
+    _bazarr_names.clear()
+    for row in rows:
+        code = row.get("code2")
+        name = row.get("name")
+        if code and name:
+            _bazarr_names[code.lower()] = name
