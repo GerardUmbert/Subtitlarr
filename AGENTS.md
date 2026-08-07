@@ -26,9 +26,8 @@ BAZARR_API_KEY=<your-bazarr-api-key>
 `config.py`'s hardcoded default is `/data/subtitlarr.db` — an absolute Unix
 path. On Windows this silently resolves to `C:\data\subtitlarr.db`, a
 location completely disconnected from the repo, and a real database can end
-up living there without anyone noticing (this happened during development —
-see TODO.md's "Fixed wrong DB file" entry). Never assume the default is
-fine; always pin `DB_PATH` in `.env`.
+up living there without anyone noticing (this happened during development).
+Never assume the default is fine; always pin `DB_PATH` in `.env`.
 
 ## Running the dev server
 
@@ -81,8 +80,8 @@ indirectly.
   (`app/subtitles/reconciler.py::reassemble`). Do not change this to trust
   LLM-generated timestamps.
 - **The Ollama/gemma3:4b response parser has been hardened against several
-  real live formatting failures** (see reconciler.py's comments and
-  TODO.md): markdown code fences, stray `<index>` wrapper tags, missing
+  real live formatting failures** (see reconciler.py's comments): markdown
+  code fences, stray `<index>` wrapper tags, missing
   blank-line separation between cues, literal `\n` escape sequences instead
   of real newlines, and mixed header styles (`"N\ntext"` vs `"N. text"` in
   the same response). If you see a new "Only recovered N/M cues" failure,
@@ -97,11 +96,6 @@ indirectly.
   the context limit. If translations come back mostly untranslated or with
   low cue-recovery counts, try lowering the batch override (Engine settings
   page) before assuming it's a different bug.
-- **`TODO.md` in the repo root is a running log of bugs found and fixed
-  during development, plus designed-but-not-yet-built features.** Read it
-  before starting new work — it has real context (exact root causes, what
-  was tried and rejected, why) that isn't duplicated here.
-
 ## What NOT to do without being asked
 
 - Don't restart the dev server or kill Ollama while a translation is
