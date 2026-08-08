@@ -20,7 +20,10 @@ class FakeBazarrClient:
     existing-subtitle language and no Spanish subtitle, and records what
     gets uploaded."""
 
-    def __init__(self, wanted_episodes=None, existing_language="en", cues=None, extra_subtitles=None):
+    def __init__(
+        self, wanted_episodes=None, existing_language="en", cues=None,
+        extra_subtitles=None, extra_subtitle_contents=None,
+    ):
         self.uploaded = []
         self._wanted_episodes = wanted_episodes or []
         self._existing_language = existing_language
@@ -30,6 +33,12 @@ class FakeBazarrClient:
         # subtitle in the TARGET language too, which the wanted-list
         # nonetheless (wrongly) reported as missing.
         self._extra_subtitles = extra_subtitles or []
+        # {path: [SubtitleCue, ...]} content for any extra_subtitles path —
+        # lets a test control what get_subtitle_contents returns for the
+        # target-language track specifically (e.g. with/without the
+        # Subtitlarr disclaimer line, to test translate_item's own-prior-
+        # upload detection).
+        self._extra_subtitle_contents = extra_subtitle_contents or {}
 
     async def iter_all_wanted_episodes(self):
         for item in self._wanted_episodes:
@@ -66,6 +75,8 @@ class FakeBazarrClient:
         return None
 
     async def get_subtitle_contents(self, subtitle_path: str) -> list[SubtitleCue]:
+        if subtitle_path in self._extra_subtitle_contents:
+            return self._extra_subtitle_contents[subtitle_path]
         assert subtitle_path == f"/tv/The Bear/S03E07.{self._existing_language}.srt"
         return self._cues or [
             SubtitleCue(
@@ -219,10 +230,12 @@ async def test_skips_translation_when_bazarr_already_has_target_language(conn, m
     )
 
     # existing_language="en" is the real translation source; extra_subtitles
-    # adds a real, already-downloaded Spanish track — simulating Bazarr
-    # already having the target language even though the wanted-list
-    # (below) still (wrongly) lists it as missing, the exact live mismatch
-    # this guard exists for.
+    # adds a real, already-downloaded Spanish track WITHOUT the Subtitlarr
+    # disclaimer — a genuinely pre-existing, never-Subtitlarr-touched file
+    # — simulating Bazarr already having the target language even though
+    # the wanted-list (below) still (wrongly) lists it as missing, the
+    # exact live mismatch this guard exists for.
+    es_path = "/tv/The Bear/S03E07.es.srt"
     fake_client = FakeBazarrClient(
         wanted_episodes=[
             WantedEpisode(
@@ -235,9 +248,18 @@ async def test_skips_translation_when_bazarr_already_has_target_language(conn, m
         extra_subtitles=[
             SubtitleInfo(
                 name="Spanish", code2="es", code3="spa", forced=False, hi=False,
-                path="/tv/The Bear/S03E07.es.srt", file_size=100, embedded_track_id=None,
+                path=es_path, file_size=100, embedded_track_id=None,
             )
         ],
+        extra_subtitle_contents={
+            es_path: [
+                SubtitleCue(
+                    index=1, content="Una traducción genuina que ya existía.", proprietary="",
+                    start=SubtitleCueTime(hours=0, minutes=0, seconds=1, total_seconds=1, microseconds=0),
+                    end=SubtitleCueTime(hours=0, minutes=0, seconds=3, total_seconds=3, microseconds=0),
+                ),
+            ],
+        },
     )
 
     from app.config import Settings
@@ -256,6 +278,80 @@ async def test_skips_translation_when_bazarr_already_has_target_language(conn, m
     row = conn.execute("SELECT * FROM items WHERE bazarr_id = 42").fetchone()
     assert row["status"] == "done"
     assert row["engine_used"] is None
+
+
+@pytest.mark.asyncio
+async def test_retranslates_when_existing_target_file_is_own_prior_upload(conn, monkeypatch):
+    """Regression test: confirmed live (v0.9.8) that the same-language
+    guard above, in an earlier form, checked existence only — not content
+    — and broke every language-check mismatch reset outright. A mismatch
+    reset sets an item back to 'pending' specifically so it gets
+    RE-translated, but Bazarr's target-language slot still holds the
+    just-flagged-WRONG file at that point (nothing deletes it from
+    Bazarr). The existence-only guard saw that wrong file, concluded
+    "already there," and silently marked the item done again without
+    ever fixing it — items vanished from the Queue instead of reappearing
+    as pending. The existing file here DOES contain the Subtitlarr
+    disclaimer (i.e. it's Subtitlarr's own prior, presumably-wrong,
+    output) — translate_item must recognize that and translate normally,
+    NOT skip."""
+    repository.set_config(conn, "source_lang_priority", ["en"])
+    repository.upsert_item_seen(
+        conn, item_type="episode", bazarr_id=42, series_id=1,
+        title="Legacy", series_title="The Bear", season_episode="3x7",
+        target_language="es",
+    )
+
+    es_path = "/tv/The Bear/S03E07.es.srt"
+    fake_client = FakeBazarrClient(
+        wanted_episodes=[
+            WantedEpisode(
+                seriesTitle="The Bear", episode_number="3x7", episodeTitle="Legacy",
+                missing_subtitles=[LanguageInfo(name="Spanish", code2="es", code3="spa")],
+                sonarrSeriesId=1, sonarrEpisodeId=42,
+            )
+        ],
+        existing_language="en",
+        extra_subtitles=[
+            SubtitleInfo(
+                name="Spanish", code2="es", code3="spa", forced=False, hi=False,
+                path=es_path, file_size=100, embedded_track_id=None,
+            )
+        ],
+        extra_subtitle_contents={
+            es_path: [
+                SubtitleCue(
+                    index=1,
+                    content="Subtitlarr ha utilizado IA para traducir esto — puede contener errores.",
+                    proprietary="",
+                    start=SubtitleCueTime(hours=0, minutes=0, seconds=0, total_seconds=0, microseconds=0),
+                    end=SubtitleCueTime(hours=0, minutes=0, seconds=10, total_seconds=10, microseconds=0),
+                ),
+                SubtitleCue(
+                    index=2, content="Wrong-language dialogue that got flagged.", proprietary="",
+                    start=SubtitleCueTime(hours=0, minutes=0, seconds=11, total_seconds=11, microseconds=0),
+                    end=SubtitleCueTime(hours=0, minutes=0, seconds=13, total_seconds=13, microseconds=0),
+                ),
+            ],
+        },
+    )
+
+    from app.config import Settings
+    settings = Settings()
+    fake_provider = FakeProvider()
+    stub_single_provider_cascade(monkeypatch, fake_provider)
+
+    controller = RunController(conn, lambda: fake_client, settings)
+    progress = await controller.run_now()
+
+    assert progress.processed == 1
+    assert progress.failed == 0
+    assert len(fake_client.uploaded) == 1  # translated and uploaded normally
+    assert fake_provider.received_catalan_vegeta_insults == [False]  # provider WAS called
+
+    row = conn.execute("SELECT * FROM items WHERE bazarr_id = 42").fetchone()
+    assert row["status"] == "done"
+    assert row["engine_used"] == "fake"
 
 
 @pytest.mark.asyncio

@@ -469,47 +469,74 @@ async def translate_item(
         "resolved_batch_token_budget": resolved_batch_budget,
     }
 
-    # Guard against translating into a language Bazarr already has a real
-    # subtitle for — confirmed live: ~170 'done' items across 13 shows
-    # (Stargate SG-1, Marshals, Fullmetal Alchemist, etc.) had
+    # Guard against translating into a language Bazarr already has a real,
+    # LEGITIMATE subtitle for — confirmed live: ~170 'done' items across 13
+    # shows (Stargate SG-1, Marshals, Fullmetal Alchemist, etc.) had
     # target_language set to a language Bazarr's wanted-list reported as
-    # missing at SOME earlier poll (plausibly the "treat bundled
-    # subtitles as downloaded" toggle transiently misreporting — see
-    # app.engine.poller's own docstring), got dutifully translated into
-    # by the LLM, and marked 'done' — even though Bazarr had a real,
-    # already-downloaded subtitle in that language the whole time. Since
-    # 'done' items are treated as a permanent record and survive every
-    # future wanted-list purge by design, nothing ever caught this after
-    # the fact; the language check surfaced it only because it happens to
-    # re-verify against Bazarr's CURRENT state. Checking immediately
-    # before translating (not just at poll time) catches a stale/wrong
-    # wanted-list entry that slipped through, or a race where the file
-    # appeared on Bazarr between the poll and this run. Marks the item
-    # 'done' without spending an LLM call or touching Bazarr — nothing
-    # needs uploading, since the language IS already present.
+    # missing at SOME earlier poll (plausibly the "treat bundled subtitles
+    # as downloaded" toggle transiently misreporting — see app.engine.
+    # poller's own docstring), got dutifully translated into by the LLM,
+    # and marked 'done' — even though Bazarr had a real, already-downloaded
+    # subtitle in that language the whole time.
+    #
+    # CRITICAL: an earlier version of this guard checked existence only
+    # (any path'd, non-forced track) — that broke every language-check
+    # mismatch reset outright. A mismatch reset sets status back to
+    # 'pending' specifically so the item gets RE-translated, but Bazarr's
+    # target-language slot still holds the just-flagged-WRONG file at that
+    # point (nothing deletes it from Bazarr, only the local queue copy if
+    # any — see repository.reset_item_for_language_mismatch). The
+    # existence-only guard saw that wrong file, concluded "already there,"
+    # and marked the item 'done' again without ever fixing it — the item
+    # vanished from the Queue having never actually been retranslated
+    # (confirmed live: language-check-flagged items disappeared instead of
+    # reappearing as pending). Every Subtitlarr upload carries the AI
+    # disclaimer line naming the product (see srt_io.with_ai_disclaimer) —
+    # checking the existing file's actual CONTENT for that marker
+    # distinguishes "genuinely pre-existing, never touched by Subtitlarr"
+    # from "our own prior output sitting here, possibly wrong" — only the
+    # former should ever skip translation.
     if item["item_type"] == "episode":
         existing_detail = await client.get_episode_detail(item["bazarr_id"])
     else:
         existing_detail = await client.get_movie_detail(item["bazarr_id"])
     if existing_detail is not None:
-        already_has_target = any(
-            s.code2 == target_lang and s.path and not s.forced
-            for s in existing_detail.subtitles
+        existing_match = next(
+            (
+                s for s in existing_detail.subtitles
+                if s.code2 == target_lang and s.path and not s.forced
+            ),
+            None,
         )
-        if already_has_target:
-            logger.warning(
-                "Item %d: Bazarr already has a real '%s' subtitle — skipping "
-                "translation and marking done without uploading anything.",
-                item_id, target_lang,
-            )
-            repository.update_item_status(
-                conn, item_id, "done", source_language=source_lang, mark_completed=True,
-            )
-            repository.log_item_attempt(
-                conn, item_id, run_id, "done",
-                engine_used=None, model_used=None, settings_snapshot=settings_snapshot,
-            )
-            return
+        if existing_match is not None:
+            is_own_prior_upload = False
+            try:
+                existing_cues = await client.get_subtitle_contents(existing_match.path)
+                existing_text = srt_io.compose_srt(srt_io.cues_from_bazarr(existing_cues)).decode(
+                    "utf-8", errors="ignore"
+                )
+                is_own_prior_upload = "subtitlarr" in existing_text.lower()
+            except Exception:  # noqa: BLE001 - inconclusive read, fall through to a normal translation attempt
+                logger.warning(
+                    "Item %d: couldn't read existing '%s' subtitle to check "
+                    "for a prior Subtitlarr upload — translating normally.",
+                    item_id, target_lang,
+                )
+            if not is_own_prior_upload:
+                logger.warning(
+                    "Item %d: Bazarr already has a real, non-Subtitlarr '%s' "
+                    "subtitle — skipping translation and marking done "
+                    "without uploading anything.",
+                    item_id, target_lang,
+                )
+                repository.update_item_status(
+                    conn, item_id, "done", source_language=source_lang, mark_completed=True,
+                )
+                repository.log_item_attempt(
+                    conn, item_id, run_id, "done",
+                    engine_used=None, model_used=None, settings_snapshot=settings_snapshot,
+                )
+                return
 
     repository.update_item_status(conn, item_id, "translating", mark_attempt=True)
     item_started = time.monotonic()
