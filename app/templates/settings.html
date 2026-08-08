@@ -79,6 +79,28 @@
     </div>
   </div>
 
+  <div class="panel" style="margin-top:16px;">
+    <div class="panel-body">
+    <div class="panel-title">Database backups</div>
+    <div class="panel-title-sub">Daily snapshot of the whole database to /data/backups/ — the only recovery path if a mistake (e.g. clear-database) or a bad migration ever needs undoing</div>
+
+      <div class="field">
+        <label>Backup cron</label>
+        <input v-model="backupCron" placeholder="e.g. 30 2 * * * (blank = disabled)" />
+        <p class="field-hint">On by default. Keeps the last {% raw %}{{ backupKeepCount }}{% endraw %} snapshots, oldest pruned automatically. Safe to run anytime — reads the live database without pausing it.</p>
+        <p class="field-hint" v-if="nextBackupRun">Next run: {% raw %}{{ nextBackupRun }}{% endraw %}</p>
+      </div>
+      <div class="field-row">
+        <button class="btn" @click="runBackupNow" :disabled="backupActive || startingBackup">
+          {% raw %}{{ backupActive ? 'Backing up…' : (startingBackup ? 'Starting…' : 'Back up now') }}{% endraw %}
+        </button>
+        <span v-if="backupStarted" class="test-result">● started</span>
+      </div>
+      <p class="field-hint" v-if="backupResult">● snapshot written, {% raw %}{{ backupResult.pruned }}{% endraw %} old snapshot(s) pruned</p>
+      <p class="field-hint error" v-if="backupError">● {% raw %}{{ backupError }}{% endraw %}</p>
+    </div>
+  </div>
+
   <div class="field-row" style="margin-top:16px;">
     <button class="btn btn-primary" @click="save" :disabled="saving">
       {% raw %}{{ saving ? 'Saving…' : 'Save' }}{% endraw %}

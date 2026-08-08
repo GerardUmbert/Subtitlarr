@@ -11,13 +11,21 @@ createApp({
       syncMediaCron: "",
       syncSubsCron: "",
       languageCheckCron: "",
+      backupCron: "",
+      backupKeepCount: 20,
       nextRun: "",
       nextSyncMediaRun: "",
       nextSyncSubsRun: "",
       nextLanguageCheckRun: "",
+      nextBackupRun: "",
       saving: false,
       saved: false,
       error: "",
+      backupActive: false,
+      startingBackup: false,
+      backupStarted: false,
+      backupResult: null,
+      backupError: "",
     };
   },
   methods: {
@@ -31,7 +39,15 @@ createApp({
       this.syncMediaCron = cfg.sync_media_cron;
       this.syncSubsCron = cfg.sync_subs_cron;
       this.languageCheckCron = cfg.language_check_cron;
+      this.backupCron = cfg.backup_cron;
+      this.backupKeepCount = cfg.backup_keep_count;
       await this.loadNextRun();
+      try {
+        const status = await Api.getSyncStatus();
+        this.backupActive = !!(status.backup && status.backup.active);
+      } catch (_) {
+        // endpoint not reachable yet — ignore
+      }
     },
     async loadNextRun() {
       try {
@@ -40,11 +56,13 @@ createApp({
         this.nextSyncMediaRun = result.next_sync_media_run ? new Date(result.next_sync_media_run).toLocaleString() : "";
         this.nextSyncSubsRun = result.next_sync_subs_run ? new Date(result.next_sync_subs_run).toLocaleString() : "";
         this.nextLanguageCheckRun = result.next_language_check_run ? new Date(result.next_language_check_run).toLocaleString() : "";
+        this.nextBackupRun = result.next_backup_run ? new Date(result.next_backup_run).toLocaleString() : "";
       } catch (_) {
         this.nextRun = "";
         this.nextSyncMediaRun = "";
         this.nextSyncSubsRun = "";
         this.nextLanguageCheckRun = "";
+        this.nextBackupRun = "";
       }
     },
     async save() {
@@ -61,6 +79,7 @@ createApp({
           sync_media_cron: this.syncMediaCron,
           sync_subs_cron: this.syncSubsCron,
           language_check_cron: this.languageCheckCron,
+          backup_cron: this.backupCron,
         });
         await this.loadNextRun();
         this.saved = true;
@@ -70,6 +89,38 @@ createApp({
       } finally {
         this.saving = false;
       }
+    },
+    async runBackupNow() {
+      this.startingBackup = true;
+      this.backupError = "";
+      this.backupResult = null;
+      try {
+        const result = await Api.runBackup();
+        if (!result.started) {
+          this.backupError = result.reason || "Could not start backup";
+          return;
+        }
+        this.backupStarted = true;
+        setTimeout(() => (this.backupStarted = false), 3000);
+        this.pollBackupResult();
+      } catch (err) {
+        this.backupError = err.message;
+      } finally {
+        this.startingBackup = false;
+      }
+    },
+    pollBackupResult() {
+      const check = async () => {
+        const status = await Api.getSyncStatus();
+        this.backupActive = status.backup.active;
+        if (status.backup.active) {
+          setTimeout(check, 1000);
+        } else {
+          this.backupResult = status.backup.result;
+          if (status.backup.error) this.backupError = status.backup.error;
+        }
+      };
+      setTimeout(check, 1000);
     },
   },
   async mounted() {

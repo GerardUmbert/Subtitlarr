@@ -25,6 +25,7 @@ PERSISTED_KEYS = (
     "sync_media_cron",
     "sync_subs_cron",
     "language_check_cron",
+    "backup_cron",
 )
 
 

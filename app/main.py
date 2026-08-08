@@ -90,6 +90,12 @@ async def lifespan(app: FastAPI):
             lambda: jobs.cron_language_check(state.run_controller),
             job_id="language_check",
         )
+    if settings.backup_cron:
+        state.cron_scheduler.install(
+            settings.backup_cron,
+            jobs.cron_backup,
+            job_id="backup",
+        )
 
     yield
 

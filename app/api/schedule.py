@@ -18,6 +18,7 @@ class ScheduleConfig(BaseModel):
     sync_media_cron: str
     sync_subs_cron: str
     language_check_cron: str
+    backup_cron: str
 
 
 @router.get("/config/schedule")
@@ -31,6 +32,8 @@ async def get_schedule_config():
         "sync_media_cron": settings.sync_media_cron,
         "sync_subs_cron": settings.sync_subs_cron,
         "language_check_cron": settings.language_check_cron,
+        "backup_cron": settings.backup_cron,
+        "backup_keep_count": settings.backup_keep_count,
     }
 
 
@@ -79,6 +82,10 @@ async def set_schedule_config(
             scheduler, "language_check", config.language_check_cron,
             lambda: jobs_api.cron_language_check(runner),
         )
+        _apply_sync_cron(
+            scheduler, "backup", config.backup_cron,
+            jobs_api.cron_backup,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=f"Invalid cron expression: {exc}") from exc
 
@@ -98,6 +105,8 @@ async def set_schedule_config(
     settings_store.save_one(conn, "sync_subs_cron", config.sync_subs_cron)
     settings.language_check_cron = config.language_check_cron
     settings_store.save_one(conn, "language_check_cron", config.language_check_cron)
+    settings.backup_cron = config.backup_cron
+    settings_store.save_one(conn, "backup_cron", config.backup_cron)
     return {"saved": True}
 
 
@@ -108,6 +117,7 @@ async def next_runs(scheduler=Depends(state.get_scheduler)):
         "next_sync_media_run": _iso(scheduler.next_run_time("sync_media")),
         "next_sync_subs_run": _iso(scheduler.next_run_time("sync_subs")),
         "next_language_check_run": _iso(scheduler.next_run_time("language_check")),
+        "next_backup_run": _iso(scheduler.next_run_time("backup")),
     }
 
 

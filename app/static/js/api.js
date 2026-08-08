@@ -92,6 +92,7 @@ const Api = (() => {
     setLanguageCheckSettings: (instanceId) =>
       request("POST", "/api/jobs/language-check/settings", { instance_id: instanceId }),
     pushUploads: () => request("POST", "/api/jobs/push-uploads"),
+    runBackup: () => request("POST", "/api/jobs/backup"),
     getSyncStatus: () => request("GET", "/api/jobs/sync-status"),
 
     getHistory: (params = {}) => {

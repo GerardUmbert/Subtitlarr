@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from app import state
 from app.config import settings
 from app.db import engine_instances_repo, repository
-from app.engine import language_check, upload_queue
+from app.engine import backup, language_check, upload_queue
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -282,6 +282,50 @@ async def set_language_check_settings(req: LanguageCheckSettings, conn=Depends(s
     return {"saved": True}
 
 
+_backup_state = {"active": False, "error": None, "result": None}
+
+
+async def _run_backup(conn, triggered_by: str) -> None:
+    event_id = repository.start_job_event(conn, "backup", triggered_by=triggered_by)
+    _backup_state["active"] = True
+    _backup_state["error"] = None
+    _backup_state["result"] = None
+    try:
+        result = backup.run_backup(settings.db_path, keep_count=settings.backup_keep_count)
+        _backup_state["result"] = result
+        repository.finish_job_event(
+            conn, event_id, status="done",
+            result=f"snapshot written, {result['pruned']} old snapshot(s) pruned",
+        )
+    except Exception as exc:  # noqa: BLE001 - surface to the UI, don't crash the app
+        _backup_state["error"] = str(exc)
+        repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
+    finally:
+        _backup_state["active"] = False
+
+
+async def cron_backup() -> None:
+    """Cron entry point — no run/other-job guard needed: the backup reads
+    via sqlite3's own online backup API against a live connection, so it's
+    safe to run concurrently with a translation run or any other job."""
+    if _backup_state["active"]:
+        return
+    conn = state.get_conn()
+    await _run_backup(conn, triggered_by="cron")
+
+
+@router.post("/backup")
+async def run_backup_now(conn=Depends(state.get_conn)):
+    """Writes an immediate snapshot of the whole database to
+    /data/backups/, same as the daily cron — the only way to recover from
+    a destructive mistake (clear-database has no undo) or a bad
+    migration. Safe to run anytime, including mid-translation-run."""
+    if _backup_state["active"]:
+        return {"started": False, "reason": "A backup is already in progress"}
+    asyncio.create_task(_run_backup(conn, triggered_by="manual"))
+    return {"started": True}
+
+
 @router.get("/sync-status")
 async def get_sync_status():
     return {
@@ -289,6 +333,7 @@ async def get_sync_status():
         "sync_subs": dict(_sync_subs_state),
         "push_uploads": dict(_push_uploads_state),
         "language_check": dict(_language_check_state),
+        "backup": dict(_backup_state),
     }
 
 

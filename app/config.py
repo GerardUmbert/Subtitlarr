@@ -62,6 +62,17 @@ class Settings(BaseSettings):
     # the existing 5-minute stagger.
     language_check_cron: str = ""
 
+    # Daily snapshot of the whole SQLite database to /data/backups/ (same
+    # non-volatile volume as the DB itself, so it survives a container
+    # recreate) — the only recovery path for a destructive mistake like
+    # clear-database, which has no undo. On by default (unlike the two
+    # opt-in crons above) since it's read-only against the live DB and
+    # has no dependency on user configuration to be useful. Kept well
+    # away from the other crons' 3 AM cluster to avoid adding load to
+    # that window. Empty string disables it.
+    backup_cron: str = "30 2 * * *"
+    backup_keep_count: int = 20
+
     # Runtime
     db_path: str = "/data/subtitlarr.db"
     run_concurrency: int = 1
