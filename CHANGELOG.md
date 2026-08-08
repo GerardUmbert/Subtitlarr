@@ -3,6 +3,41 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.9.5]
+
+### Added
+- New **Compare Engines** tool (linked from the Engines page footer) —
+  translates the same source subtitle with two engine instances (or one
+  engine against an uploaded reference translation) and shows a git-style
+  side-by-side diff, per-side timing/query-count/avg-seconds-per-cue
+  stats, and a hover tooltip on each row showing what the original source
+  line said. Source can be picked from Bazarr's FULL episode/movie
+  library (not just Subtitlarr's own narrower "wanted" queue) or uploaded
+  directly as a raw `.srt`. Runs sequentially or in parallel (with a
+  warning if both engines share the same base URL), and never touches the
+  real queue, `items`/`item_run_log`, or Bazarr uploads — output is
+  cached under its own scratch subfolder, cleared on restart like the
+  existing prefetch cache. Per-side overrides for the Catalan
+  "Vegeta insults" toggle and temperature, independent of each instance's
+  saved config, so the tool can actually show what either setting
+  changes.
+- **Temperature is now a configurable per-engine-instance setting**
+  (0.0–2.0, default 0.2) across all six providers — previously unset
+  entirely, silently defaulting to whatever each API's own default is
+  (typically ~1.0, tuned for general chat/creative use, not literal
+  format-strict subtitle translation). Validated both client-side (hard
+  clamp on blur) and server-side (a request outside the range Gemini's
+  own API documents — confirmed live: it rejects >2.0 with "temperature
+  must be in the range [0.0, 2.0]" — is rejected with a clear 422 before
+  ever reaching a provider).
+
+### Changed
+- Strengthened the system prompt's anti-merge instruction: models were
+  observed occasionally combining two consecutive cues that read as one
+  continuous sentence into a single output block despite the existing
+  "do not merge" wording — the instruction now explicitly names this
+  exact temptation and requires one output block per input index, always.
+
 ## [0.9.4]
 
 ### Added

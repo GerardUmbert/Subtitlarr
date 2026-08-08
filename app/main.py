@@ -11,6 +11,7 @@ from fastapi.templating import Jinja2Templates
 from app import state
 from app.api import (
     bazarr_conn,
+    compare,
     dashboard,
     debug,
     engine_instances,
@@ -103,6 +104,7 @@ app.include_router(bazarr_conn.router)
 app.include_router(schedule.router)
 app.include_router(jobs.router)
 app.include_router(history.router)
+app.include_router(compare.router)
 app.include_router(debug.router)
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
@@ -136,3 +138,4 @@ app.get("/bazarr", response_class=HTMLResponse)(_page("bazarr", "bazarr"))
 app.get("/settings", response_class=HTMLResponse)(_page("settings", "settings"))
 app.get("/jobs", response_class=HTMLResponse)(_page("jobs", "jobs"))
 app.get("/history", response_class=HTMLResponse)(_page("history", "history"))
+app.get("/compare", response_class=HTMLResponse)(_page("compare", "engines"))

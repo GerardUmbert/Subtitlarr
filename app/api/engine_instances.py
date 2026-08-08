@@ -73,6 +73,10 @@ async def create_engine_instance(req: CreateInstanceRequest, conn=Depends(state.
         # engine Settings fields used to ship with) rather than needing
         # every field specified up front.
         config = {**registry.DEFAULT_CONFIG_BY_TYPE[req.provider_type], **req.config}
+        try:
+            registry.validate_temperature(config.get("temperature"))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     instance = engine_instances_repo.create_instance(
         conn, name=req.name, provider_type=req.provider_type, config=config, enabled=req.enabled
     )
@@ -105,6 +109,10 @@ async def update_engine_instance(
             if value is None or value == "":
                 continue
             merged_config[key] = value
+        try:
+            registry.validate_temperature(merged_config.get("temperature"))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     updated = engine_instances_repo.update_instance(
         conn, instance_id, name=req.name, config=merged_config, enabled=req.enabled

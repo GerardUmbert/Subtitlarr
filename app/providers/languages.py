@@ -77,6 +77,18 @@ def language_name(code: str) -> str:
     return _bazarr_names.get(code) or ISO_639_1_NAMES.get(code, code.upper())
 
 
+def get_bazarr_language_list() -> list[dict]:
+    """[{code2, name}, ...] for every language Bazarr itself reported, for
+    UI pickers (e.g. the compare tool's target-language autocomplete) that
+    need the full list rather than a single code->name lookup. Falls back
+    to the static ISO 639-1 table (same fallback language_name() itself
+    uses) if Bazarr hasn't been reachable yet, so the picker is never
+    completely empty even before the first successful refresh_bazarr_names()."""
+    if _bazarr_names:
+        return [{"code2": code, "name": name} for code, name in sorted(_bazarr_names.items())]
+    return [{"code2": code, "name": name} for code, name in sorted(ISO_639_1_NAMES.items())]
+
+
 async def refresh_bazarr_names(client) -> None:
     """Fetches Bazarr's known-language list and caches it as the preferred
     source for language_name(). Best-effort: if Bazarr isn't reachable or

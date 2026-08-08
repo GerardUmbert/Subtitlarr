@@ -1,5 +1,16 @@
 const { createApp } = Vue;
 
+// Shared across every provider type — subtitle translation wants literal,
+// consistent output that reliably follows the rigid index/format
+// instructions, not the creative variation a higher temperature invites.
+// Every provider defaults to ~1.0 (tuned for chat/creative use) when this
+// isn't set at all, which is why Subtitlarr ships its own lower default
+// (see registry.DEFAULT_TEMPERATURE) instead of leaving it unset.
+const TEMPERATURE_FIELD = {
+  key: "temperature", label: "Temperature", type: "number", min: 0, max: 2, step: 0.1,
+  hint: "Lower = more literal/consistent, higher = more varied/creative. Most providers default to ~1.0 (tuned for chat) if left unset, which invites more format drift and stylistic variation than a rigid subtitle-translation task wants — 0.2 (default here) trades away creative flexibility for reliability.",
+};
+
 // One entry per provider_type — drives both the "add new instance" menu
 // and each card's config form generically, instead of duplicating markup
 // per provider like the old single-active-engine page did. Field hints
@@ -19,6 +30,7 @@ const PROVIDER_TYPES = {
         "A real-quota model has 250K TPM — enormous headroom, so this can stay high. Lower it only if translations come back with a low \"recovered N/M cues\" count, not in response to 429s." },
       { key: "concurrent_batch_window", label: "Concurrent batches", type: "number", min: 1, step: 1, hint:
         "How many batches are sent at once before waiting for that group to finish. Confirmed live at 15 RPM for the recommended model — 3 keeps comfortable headroom." },
+      TEMPERATURE_FIELD,
     ],
   },
   ollama: {
@@ -31,6 +43,7 @@ const PROVIDER_TYPES = {
         "Ollama defaults to 4096 regardless of what the model supports — raise this if translations of longer or denser files come back incomplete. Higher values use more RAM." },
       { key: "batch_token_budget", label: "Batch size override (dialogue tokens)", type: "number", min: 0, step: 100, hint:
         "0 = auto (derives from context window above). 1 = one cue per request, most reliable but slowest. 400-900 is the sweet spot; 900 has been seen to drop into garbled output on some content, 400 has not." },
+      TEMPERATURE_FIELD,
     ],
   },
   llamacpp: {
@@ -44,6 +57,7 @@ const PROVIDER_TYPES = {
       { key: "api_key", label: "API key", type: "password", secret: true, optional: true, hint:
         "llama.cpp's own server has no built-in auth — only needed if the Base URL points at an instance behind a reverse proxy/gateway enforcing its own auth. Sent as Authorization: Bearer." },
       { key: "batch_token_budget", label: "Batch size override (dialogue tokens)", type: "number", min: 0, step: 100 },
+      TEMPERATURE_FIELD,
     ],
   },
   nvidia: {
@@ -57,6 +71,7 @@ const PROVIDER_TYPES = {
         "700 (default) is confirmed reliable — same per-cue speed as 400, at roughly half the request count — while 900 has reproducibly failed on real content." },
       { key: "concurrent_batch_window", label: "Concurrent batches", type: "number", min: 1, step: 1, hint:
         "NVIDIA's free tier allows up to 40 requests/minute; a small window naturally stays well under that." },
+      TEMPERATURE_FIELD,
     ],
   },
   openrouter: {
@@ -69,6 +84,7 @@ const PROVIDER_TYPES = {
       { key: "batch_token_budget", label: "Batch size (dialogue tokens)", type: "number", min: 1, step: 100, hint:
         "Free \":free\" models are capped at 50 requests/DAY on top of 20/minute — keep this high so one file doesn't burn a large chunk of the day's quota." },
       { key: "concurrent_batch_window", label: "Concurrent batches", type: "number", min: 1, step: 1 },
+      TEMPERATURE_FIELD,
     ],
   },
   groq: {
@@ -82,6 +98,7 @@ const PROVIDER_TYPES = {
         "Groq also enforces a 6000 TPM cap for this model on top of request-count limits — 1800 keeps the full round-trip safely under that ceiling." },
       { key: "concurrent_batch_window", label: "Concurrent batches", type: "number", min: 1, step: 1, hint:
         "Defaults to 1 (sequential) — the TPM cap is a single rolling budget shared across every concurrent request." },
+      TEMPERATURE_FIELD,
     ],
   },
 };
@@ -127,6 +144,22 @@ createApp({
   },
   methods: {
     formatNumCtx,
+    // The number input's min/max attrs are only a soft browser hint — a
+    // user can still type/scroll past them. Confirmed live: temperature=3
+    // was submittable and Gemini rejected it server-side with "must be in
+    // the range [0.0, 2.0]" — this clamps on blur so an out-of-range
+    // value never leaves the field in the first place, on top of the
+    // server-side check in app/api/engine_instances.py.
+    clampNumberField(instanceId, field) {
+      if (field.min === undefined && field.max === undefined) return;
+      const buffer = this.editBuffers[instanceId];
+      const value = buffer.config[field.key];
+      if (value === null || value === undefined || value === "" || Number.isNaN(value)) return;
+      let clamped = value;
+      if (field.min !== undefined) clamped = Math.max(field.min, clamped);
+      if (field.max !== undefined) clamped = Math.min(field.max, clamped);
+      if (clamped !== value) buffer.config[field.key] = clamped;
+    },
     typeInfo(providerType) {
       return this.providerTypes[providerType] || { label: providerType, badges: [], fields: [] };
     },

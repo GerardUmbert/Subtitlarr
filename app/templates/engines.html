@@ -5,7 +5,9 @@
   <div class="page-head">
     <div>
       <h1>Translation Engines</h1>
-      <p class="page-sub">Every engine tried, top to bottom, until one succeeds. Drag to reorder — add a separator to stop the cascade at any point.</p>
+      <p class="page-sub">Every engine tried, top to bottom, until one succeeds. Drag to reorder — add a separator to stop the cascade at any point.
+        <a href="/compare">Compare engines performance</a>
+      </p>
     </div>
   </div>
 
@@ -130,7 +132,8 @@
                      type="password" :placeholder="instance.config[field.key + '_masked'] ? 'leave blank to keep current key' : field.placeholder" />
 
               <input v-else-if="field.type === 'number'" v-model.number="editBuffers[instance.id].config[field.key]"
-                     type="number" :min="field.min" :step="field.step" />
+                     type="number" :min="field.min" :max="field.max" :step="field.step"
+                     @blur="clampNumberField(instance.id, field)" />
 
               <input v-else v-model="editBuffers[instance.id].config[field.key]" :placeholder="field.placeholder"
                      @blur="field.key === 'base_url' && instance.provider_type === 'ollama' ? refreshOllamaModels(instance) : (field.key === 'base_url' && instance.provider_type === 'llamacpp' ? refreshLlamaCppModels(instance) : null)" />

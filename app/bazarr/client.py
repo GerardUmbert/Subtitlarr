@@ -3,6 +3,7 @@ import httpx
 from app.bazarr.schemas import (
     EpisodeDetail,
     MovieDetail,
+    SeriesInfo,
     SubtitleCue,
     WantedEpisode,
     WantedMovie,
@@ -111,6 +112,46 @@ class BazarrClient:
         if not rows:
             return None
         return MovieDetail.model_validate(rows[0])
+
+    async def get_all_series(self) -> list[SeriesInfo]:
+        """Every series Sonarr/Bazarr knows about — /api/episodes has no
+        "give me everything" mode (see get_all_episodes), so this is the
+        starting point for listing every episode, and the only source for
+        each series' own title (episode rows themselves don't carry it)."""
+        resp = await self._client.get("/api/series")
+        resp.raise_for_status()
+        return [SeriesInfo.model_validate(row) for row in resp.json().get("data", [])]
+
+    async def get_all_episodes(self, series_ids: list[int]) -> list[EpisodeDetail]:
+        """Every episode across the given series ids — the FULL episode
+        library when passed every id from get_all_series(), not just
+        episodes currently missing a subtitle (that's
+        iter_all_wanted_episodes instead). Used by the compare tool's
+        full-library search, which needs to offer ANY item as a
+        translation source regardless of whether Subtitlarr's own poller
+        ever considered it "wanted."
+
+        Unlike /api/movies, Bazarr's /api/episodes 404s with no filter at
+        all (confirmed live) — it requires seriesid[]/episodeid[], there
+        is no "give me everything" mode. Fetched in batches of seriesid[]
+        (confirmed live: Bazarr accepts multiple repeated seriesid[]
+        params in one request) rather than one request per series, which
+        would be hundreds of round trips for a real library."""
+        episodes: list[EpisodeDetail] = []
+        batch_size = 25
+        for start in range(0, len(series_ids), batch_size):
+            batch_ids = series_ids[start : start + batch_size]
+            resp = await self._client.get("/api/episodes", params={"seriesid[]": batch_ids})
+            resp.raise_for_status()
+            episodes.extend(EpisodeDetail.model_validate(row) for row in resp.json().get("data", []))
+        return episodes
+
+    async def get_all_movies(self) -> list[MovieDetail]:
+        """The FULL movie library — see get_all_episodes for why this
+        differs from iter_all_wanted_movies."""
+        resp = await self._client.get("/api/movies")
+        resp.raise_for_status()
+        return [MovieDetail.model_validate(row) for row in resp.json().get("data", [])]
 
     # ---- Subtitle content (read) ----
 

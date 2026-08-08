@@ -101,6 +101,50 @@ const Api = (() => {
     },
     getHistoryStats: (range = "all") => request("GET", `/api/history/stats?range=${range}`),
     getHistoryJobs: (limit = 100) => request("GET", `/api/history/jobs?limit=${limit}`),
+
+    searchCompareLibrary: (q, sourceLanguage) => {
+      const params = new URLSearchParams();
+      if (q) params.set("q", q);
+      if (sourceLanguage) params.set("source_language", sourceLanguage);
+      return request("GET", `/api/compare/library?${params.toString()}`);
+    },
+    refreshCompareLibrary: () => request("POST", "/api/compare/library/refresh"),
+    runCompare: (libraryItem, sourceLanguage, targetLanguage, instanceIdA, instanceIdB, parallel, opts = {}) =>
+      request("POST", "/api/compare", {
+        item_type: libraryItem.item_type, bazarr_id: libraryItem.bazarr_id,
+        source_language: sourceLanguage, target_language: targetLanguage,
+        instance_id_a: instanceIdA, instance_id_b: instanceIdB, parallel,
+        catalan_vegeta_insults_a: opts.catalanVegetaInsultsA ?? null,
+        catalan_vegeta_insults_b: opts.catalanVegetaInsultsB ?? null,
+        temperature_a: opts.temperatureA ?? null,
+        temperature_b: opts.temperatureB ?? null,
+      }),
+    runCompareUploaded: async (file, sourceLang, targetLang, instanceIdA, instanceIdB, parallel, opts = {}) => {
+      const form = new FormData();
+      form.append("source_file", file);
+      form.append("source_lang", sourceLang);
+      form.append("target_lang", targetLang);
+      form.append("instance_id_a", instanceIdA);
+      if (instanceIdB != null) form.append("instance_id_b", instanceIdB);
+      form.append("parallel", parallel ? "true" : "false");
+      if (opts.catalanVegetaInsultsA != null) form.append("catalan_vegeta_insults_a", opts.catalanVegetaInsultsA ? "true" : "false");
+      if (opts.catalanVegetaInsultsB != null) form.append("catalan_vegeta_insults_b", opts.catalanVegetaInsultsB ? "true" : "false");
+      if (opts.temperatureA != null) form.append("temperature_a", String(opts.temperatureA));
+      if (opts.temperatureB != null) form.append("temperature_b", String(opts.temperatureB));
+      const resp = await fetch("/api/compare/uploaded", { method: "POST", body: form });
+      const data = await resp.json().catch(() => null);
+      if (!resp.ok) throw new Error((data && data.detail) || resp.statusText);
+      return data;
+    },
+    getCompareLanguages: () => request("GET", "/api/compare/languages"),
+    parseReferenceSubtitle: async (file) => {
+      const form = new FormData();
+      form.append("reference_file", file);
+      const resp = await fetch("/api/compare/reference", { method: "POST", body: form });
+      const data = await resp.json().catch(() => null);
+      if (!resp.ok) throw new Error((data && data.detail) || resp.statusText);
+      return data;
+    },
   };
 })();
 

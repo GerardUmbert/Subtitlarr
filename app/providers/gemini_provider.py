@@ -77,6 +77,7 @@ class GeminiProvider(TranslationProvider):
         api_key: str,
         model: str,
         timeout: float = DEFAULT_GEMINI_TIMEOUT_SECONDS,
+        temperature: float | None = None,
         instance_name: str | None = None,
     ):
         if instance_name:
@@ -84,6 +85,7 @@ class GeminiProvider(TranslationProvider):
         self._api_key = api_key
         self._model = model
         self.model = model
+        self._temperature = temperature
         # The key goes in the x-goog-api-key HEADER, not a ?key= query
         # param — Google's REST API accepts both, but a query param ends
         # up in every httpx/uvicorn access log line verbatim (confirmed
@@ -120,15 +122,18 @@ class GeminiProvider(TranslationProvider):
         system_prompt = build_system_prompt(
             source_lang, target_lang, catalan_vegeta_insults, language_variants
         )
+        body = {
+            "systemInstruction": {"parts": [{"text": system_prompt}]},
+            "contents": [
+                {"role": "user", "parts": [{"text": build_user_prompt(dialogue_text)}]}
+            ],
+        }
+        if self._temperature is not None:
+            body["generationConfig"] = {"temperature": self._temperature}
         try:
             resp = await self._client.post(
                 f"/models/{self._model}:generateContent",
-                json={
-                    "systemInstruction": {"parts": [{"text": system_prompt}]},
-                    "contents": [
-                        {"role": "user", "parts": [{"text": build_user_prompt(dialogue_text)}]}
-                    ],
-                },
+                json=body,
             )
         except httpx.TimeoutException as exc:
             raise ProviderRateLimitedError(f"Gemini request timed out: {exc}") from exc

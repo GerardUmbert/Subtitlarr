@@ -46,6 +46,15 @@ class WantedPage(BaseModel):
     total: int
 
 
+class SeriesInfo(BaseModel):
+    """Minimal fields from /api/series — used only to build a
+    {sonarrSeriesId: title} lookup for the compare tool's full-library
+    search, since /api/episodes itself never includes the series' own
+    title, only the individual episode's title."""
+    sonarrSeriesId: int
+    title: str
+
+
 class EpisodeDetail(BaseModel):
     audio_language: AudioLanguageInfo | list[AudioLanguageInfo] | None = None
     episode: int

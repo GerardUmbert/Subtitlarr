@@ -58,6 +58,7 @@ class OpenRouterProvider(TranslationProvider):
         api_key: str,
         model: str = "google/gemma-4-26b-a4b-it:free",
         timeout: float = DEFAULT_OPENROUTER_TIMEOUT_SECONDS,
+        temperature: float | None = None,
         instance_name: str | None = None,
     ):
         if instance_name:
@@ -65,6 +66,7 @@ class OpenRouterProvider(TranslationProvider):
         self._api_key = api_key
         self._model = model
         self.model = model
+        self._temperature = temperature
         self._client = httpx.AsyncClient(
             base_url=_API_BASE,
             headers={"Authorization": f"Bearer {api_key}"},
@@ -113,17 +115,17 @@ class OpenRouterProvider(TranslationProvider):
         system_prompt = build_system_prompt(
             source_lang, target_lang, catalan_vegeta_insults, language_variants
         )
+        body = {
+            "model": self._model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": build_user_prompt(dialogue_text)},
+            ],
+        }
+        if self._temperature is not None:
+            body["temperature"] = self._temperature
         try:
-            resp = await self._client.post(
-                "/chat/completions",
-                json={
-                    "model": self._model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": build_user_prompt(dialogue_text)},
-                    ],
-                },
-            )
+            resp = await self._client.post("/chat/completions", json=body)
         except httpx.TimeoutException as exc:
             raise ProviderRateLimitedError(f"OpenRouter request timed out: {exc}") from exc
         except httpx.ConnectError as exc:

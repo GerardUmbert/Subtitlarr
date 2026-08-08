@@ -47,6 +47,7 @@ class OllamaProvider(TranslationProvider):
         model: str,
         timeout: float | None = None,
         num_ctx: int = 8192,
+        temperature: float | None = None,
         instance_name: str | None = None,
     ):
         if instance_name:
@@ -54,6 +55,7 @@ class OllamaProvider(TranslationProvider):
         self._base_url = base_url.rstrip("/")
         self._model = model
         self.model = model
+        self._temperature = temperature
         # Ollama defaults to a conservative 4096-token context regardless of
         # what the model actually supports (Gemma 3 supports up to 128K) —
         # without this, a batch of subtitle cues larger than 4096 tokens
@@ -92,12 +94,15 @@ class OllamaProvider(TranslationProvider):
                 yield event
 
     async def _chat_request(self, system_prompt: str, dialogue_text: str) -> httpx.Response:
+        options = {"num_ctx": self._num_ctx}
+        if self._temperature is not None:
+            options["temperature"] = self._temperature
         return await self._client.post(
             "/api/chat",
             json={
                 "model": self._model,
                 "stream": False,
-                "options": {"num_ctx": self._num_ctx},
+                "options": options,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": build_user_prompt(dialogue_text)},

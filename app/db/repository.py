@@ -337,6 +337,7 @@ def _build_queue_filter(
     search: str | None,
     exclude_no_source: bool = False,
     model: str | None = None,
+    source_language: str | None = None,
 ) -> tuple[list[str], list]:
     conditions: list[str] = []
     params: list = []
@@ -359,6 +360,14 @@ def _build_queue_filter(
     if model:
         conditions.append("model_used = ?")
         params.append(model)
+    if source_language:
+        # source_language is only populated once a poll has resolved/
+        # previewed a source for the item (see poller._resolve_and_preview_
+        # source) — an item still 'pending' with no resolved source yet
+        # simply won't match any source_language filter, which is correct
+        # (there's nothing to filter TO yet).
+        conditions.append("source_language = ?")
+        params.append(source_language)
     return conditions, params
 
 
@@ -370,6 +379,7 @@ def list_queue(
     search: str | None = None,
     exclude_no_source: bool = False,
     model: str | None = None,
+    source_language: str | None = None,
     page: int = 1,
     page_size: int = 50,
     sort: str = "title",
@@ -378,7 +388,9 @@ def list_queue(
 ) -> tuple[list[sqlite3.Row], int]:
     default_order = _QUEUE_SORTS.get(sort, _QUEUE_SORTS["title"])
     order_by = _order_by_clause(_QUEUE_SORT_COLUMNS, sort_by, sort_dir, default_order)
-    conditions, params = _build_queue_filter(status, item_type, search, exclude_no_source, model)
+    conditions, params = _build_queue_filter(
+        status, item_type, search, exclude_no_source, model, source_language
+    )
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
     total = conn.execute(

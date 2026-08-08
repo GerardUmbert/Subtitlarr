@@ -72,6 +72,7 @@ class LlamaCppProvider(TranslationProvider):
         timeout: float = DEFAULT_LLAMACPP_TIMEOUT_SECONDS,
         api_key: str | None = None,
         model: str | None = None,
+        temperature: float | None = None,
         instance_name: str | None = None,
     ):
         if instance_name:
@@ -79,6 +80,7 @@ class LlamaCppProvider(TranslationProvider):
         self._base_url = base_url.rstrip("/")
         self._model = model
         self.model = model or "(server default)"
+        self._temperature = temperature
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else None
         self._client = httpx.AsyncClient(base_url=self._base_url, timeout=timeout, headers=headers)
 
@@ -94,6 +96,8 @@ class LlamaCppProvider(TranslationProvider):
         }
         if self._model:
             body["model"] = self._model
+        if self._temperature is not None:
+            body["temperature"] = self._temperature
         return await self._client.post("/v1/chat/completions", json=body)
 
     async def translate(

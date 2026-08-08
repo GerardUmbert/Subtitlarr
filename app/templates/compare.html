@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block title %}Compare Engines{% endblock %}
+{% block content %}
+<div id="compare-app">
+  <div class="page-head">
+    <div>
+      <h1>Compare Engines</h1>
+      <p class="page-sub">Translate the same source with two engines and compare speed, reliability, and output. Never touches your real queue or Bazarr — output is cached separately and cleared on restart.</p>
+    </div>
+  </div>
+
+  <div class="panel-loading" v-if="pageLoading">
+    <div class="loading-spinner"></div>
+    <p>Loading…</p>
+  </div>
+
+  <template v-else>
+  <div class="panel" style="margin-bottom:14px; padding:18px; overflow:visible;">
+    <div class="panel-title" style="margin-bottom:10px;">1. Source subtitle</div>
+    <div class="field-row" style="margin-bottom:12px;">
+      <button class="chip sortable-chip" :class="{ active: sourceMode === 'library' }" @click="sourceMode = 'library'">Search Bazarr library</button>
+      <button class="chip sortable-chip" :class="{ active: sourceMode === 'upload' }" @click="sourceMode = 'upload'">Upload a file</button>
+    </div>
+
+    <template v-if="sourceMode === 'library'">
+      <p class="field-hint" style="margin-bottom:10px;">Searches Bazarr's entire episode/movie library, not just Subtitlarr's own wanted queue.</p>
+      <div class="field-row">
+        <div class="field" style="position:relative; flex:2;">
+          <label>Title</label>
+          <input v-model="itemSearch" @input="onSearchInput" placeholder="Search title…" />
+          <div v-if="itemResults.length" style="position:absolute; top:100%; left:0; right:0; z-index:5; max-height:260px; overflow-y:auto; margin-top:4px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--mono-shadow);">
+            <div v-for="item in itemResults" :key="item.item_type + '-' + item.bazarr_id" class="link-btn" style="display:block; width:100%; text-align:left; padding:10px 14px; border-bottom:1px solid var(--border);" @click="pickItem(item)">
+              {% raw %}{{ item.display_title }}{% endraw %}
+              <span class="lang-tag" style="margin-left:8px;" v-for="lang in item.subtitle_langs" :key="lang">{% raw %}{{ lang.toUpperCase() }}{% endraw %}</span>
+              <span class="field-hint" v-if="!item.subtitle_langs.length">no existing subtitles</span>
+            </div>
+          </div>
+        </div>
+        <div class="field" style="flex:1;">
+          <label>Has subtitle in</label>
+          <select v-model="itemSourceLangFilter" @change="searchItems">
+            <option value="">Any</option>
+            <option v-for="lang in languages" :key="lang.code2" :value="lang.code2">{% raw %}{{ lang.name }}{% endraw %} ({% raw %}{{ lang.code2 }}{% endraw %})</option>
+          </select>
+        </div>
+      </div>
+
+      <template v-if="selectedItem">
+        <p class="field-hint" style="margin-top:8px;">Selected: {% raw %}{{ selectedItem.display_title }}{% endraw %}</p>
+        <div class="field-row" style="margin-top:6px;">
+          <div class="field">
+            <label>Translate FROM (existing subtitle)</label>
+            <select v-model="selectedSourceLang">
+              <option value="" disabled>Pick…</option>
+              <option v-for="lang in selectedItem.subtitle_langs" :key="lang" :value="lang">{% raw %}{{ lang.toUpperCase() }}{% endraw %}</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Translate TO</label>
+            <input v-model="selectedTargetLang" placeholder="type to search…" list="compare-lang-list" style="max-width:220px;" />
+          </div>
+        </div>
+      </template>
+    </template>
+
+    <template v-else>
+      <div class="field">
+        <label>Source .srt file</label>
+        <input type="file" accept=".srt" @change="onUploadFileChange" />
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Source language</label>
+          <input v-model="uploadSourceLang" placeholder="type to search…" list="compare-lang-list" style="max-width:220px;" />
+        </div>
+        <div class="field">
+          <label>Target language</label>
+          <input v-model="uploadTargetLang" placeholder="type to search…" list="compare-lang-list" style="max-width:220px;" />
+        </div>
+      </div>
+    </template>
+
+    <datalist id="compare-lang-list">
+      <option v-for="lang in languages" :key="lang.code2" :value="lang.code2">{% raw %}{{ lang.name }}{% endraw %}</option>
+    </datalist>
+  </div>
+
+  <div class="panel" style="margin-bottom:14px; padding:18px;">
+    <div class="panel-title" style="margin-bottom:10px;">2. Engines to compare</div>
+    <div class="field-row">
+      <div class="field">
+        <label>Engine A</label>
+        <select v-model.number="instanceIdA" @change="onInstanceAChange">
+          <option :value="null" disabled>Pick an engine…</option>
+          <option v-for="inst in instances" :key="inst.id" :value="inst.id">{% raw %}{{ inst.name }}{% endraw %}</option>
+        </select>
+      </div>
+      <div class="field" v-if="!useReference">
+        <label>Engine B</label>
+        <select v-model.number="instanceIdB" @change="onInstanceBChange">
+          <option :value="null" disabled>Pick an engine…</option>
+          <option v-for="inst in instances" :key="inst.id" :value="inst.id">{% raw %}{{ inst.name }}{% endraw %}</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field-row" v-if="instanceIdA || instanceIdB" style="margin-top:6px;">
+      <div class="field" v-if="instanceIdA">
+        <label>Engine A temperature</label>
+        <input type="number" v-model.number="temperatureA" min="0" max="2" step="0.1" style="max-width:100px;" @blur="temperatureA = clampTemperature(temperatureA)" />
+      </div>
+      <div class="field" v-if="instanceIdB && !useReference">
+        <label>Engine B temperature</label>
+        <input type="number" v-model.number="temperatureB" min="0" max="2" step="0.1" style="max-width:100px;" @blur="temperatureB = clampTemperature(temperatureB)" />
+      </div>
+    </div>
+    <p class="field-hint">Lower = more literal/consistent, higher = more varied/creative. Pre-filled from each engine's saved config — edit here to test a different value without changing the real instance.</p>
+
+    <div class="field-row" v-if="!useReference" style="margin-top:6px;">
+      <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+        <input type="checkbox" v-model="parallel" />
+        Run both in parallel
+      </label>
+    </div>
+    <p class="field-hint" v-if="sameEndpointWarning" style="color:var(--warn);">{% raw %}{{ sameEndpointWarning }}{% endraw %}</p>
+
+    <div class="field-row" v-if="isCatalanTarget" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
+      <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+        <input type="checkbox" v-model="catalanVegetaInsultsA" />
+        Engine A: Vegeta-style Catalan insults
+      </label>
+      <label v-if="!useReference" style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+        <input type="checkbox" v-model="catalanVegetaInsultsB" />
+        Engine B: Vegeta-style Catalan insults
+      </label>
+    </div>
+
+    <div class="field-row" style="margin-top:10px;">
+      <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+        <input type="checkbox" v-model="useReference" />
+        Compare against an uploaded reference translation instead of a second engine
+      </label>
+    </div>
+    <template v-if="useReference">
+      <div class="field" style="margin-top:8px;">
+        <label>Reference (already-translated) .srt file</label>
+        <input type="file" accept=".srt" @change="onReferenceFileChange" />
+        <p class="field-hint" v-if="loadingReference">Reading file…</p>
+        <p class="field-hint" v-else-if="referenceError" style="color:var(--bad);">{% raw %}{{ referenceError }}{% endraw %}</p>
+        <p class="field-hint" v-else-if="referenceText">Loaded — ready to compare.</p>
+      </div>
+    </template>
+  </div>
+
+  <div class="field-row" style="margin-bottom:18px;">
+    <button class="btn btn-primary" :disabled="!canRun" @click="runComparison">
+      {% raw %}{{ running ? 'Running…' : 'Run comparison' }}{% endraw %}
+    </button>
+    <span v-if="runError" class="test-result error">● {% raw %}{{ runError }}{% endraw %}</span>
+  </div>
+
+  <template v-if="result">
+    <div class="stats" style="margin-bottom:14px;">
+      <div class="stat" v-for="(side, i) in [sideA, sideB]" :key="i">
+        <div class="stat-label">{% raw %}{{ side ? side.instance_name : '—' }}{% endraw %}</div>
+        <div class="stat-value" :class="side && !side.ok ? 'bad' : ''">
+          {% raw %}{{ side && side.ok ? side.total_seconds + 's' : (side ? 'failed' : '—') }}{% endraw %}
+        </div>
+        <div class="stat-hint" v-if="side && side.ok && side.batch_count">
+          {% raw %}{{ side.batch_count }}{% endraw %} quer{% raw %}{{ side.batch_count === 1 ? 'y' : 'ies' }}{% endraw %} ·
+          {% raw %}{{ side.avg_seconds_per_cue }}{% endraw %}s/cue avg ·
+          temp {% raw %}{{ side.temperature }}{% endraw %}
+        </div>
+        <div class="stat-hint" v-else-if="side && !side.ok">{% raw %}{{ side.error }}{% endraw %}</div>
+        <div class="stat-hint" v-else-if="side">reference upload — not timed</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title">Side-by-side diff</div>
+        <div class="panel-title-sub" v-if="diffRows.length">
+          {% raw %}{{ identicalCount }}{% endraw %} / {% raw %}{{ diffRows.length }}{% endraw %} cues identical
+        </div>
+      </div>
+      <div v-if="!sideA || !sideA.ok || !sideB || !sideB.ok" class="empty-state" style="padding:30px 20px;">
+        Both sides need a successful translation to compare.
+      </div>
+      <div v-else>
+        <table class="events-table diff-table">
+          <colgroup>
+            <col style="width:50px;" />
+            <col style="width:calc(50% - 25px);" />
+            <col style="width:calc(50% - 25px);" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>{% raw %}{{ sideA.instance_name }}{% endraw %}</th>
+              <th>{% raw %}{{ sideB.instance_name }}{% endraw %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in diffRows" :key="row.index" :class="row.identical ? '' : 'diff-row-changed'"
+                :title="row.sourceText ? 'Source: ' + row.sourceText : ''">
+              <td class="row-time">{% raw %}{{ row.index }}{% endraw %}</td>
+              <td>
+                <span v-if="row.identical">{% raw %}{{ row.contentA }}{% endraw %}</span>
+                <template v-else>
+                  <span v-for="(op, i) in row.diff.opsA" :key="i" :class="'diff-' + op.type">{% raw %}{{ op.text }}{% endraw %}</span>
+                </template>
+              </td>
+              <td>
+                <span v-if="row.identical">{% raw %}{{ row.contentB }}{% endraw %}</span>
+                <template v-else>
+                  <span v-for="(op, i) in row.diff.opsB" :key="i" :class="'diff-' + op.type">{% raw %}{{ op.text }}{% endraw %}</span>
+                </template>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </template>
+  </template>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/compare.js?v={{ asset_version }}"></script>
+{% endblock %}

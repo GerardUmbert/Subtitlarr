@@ -784,6 +784,22 @@ tbody tr:last-child td { border-bottom: none; }
 .status-skipped_no_source { background: var(--surface-2); color: var(--ink-faint); }
 .status-translated_pending_upload { background: var(--warn-soft); color: var(--warn); }
 
+/* ---------- Compare tool diff highlighting ---------- */
+/* Both sides are independent translations, not a before/after edit of one
+   document — a word that doesn't line up between them isn't "added" or
+   "removed," it's just where the two engines chose different wording, so
+   both sides use the SAME neutral highlight rather than a red/green
+   subtract-vs-add pair. */
+.diff-row-changed td { background: var(--surface-2); }
+.diff-diff { background: var(--warn-soft); color: var(--warn); border-radius: 3px; }
+.diff-same { color: inherit; }
+/* Overrides the shared `table { width: max-content }` rule (right for
+   short-cell tables like Queue/History, wrong here) — the two subtitle-
+   text columns must split the available width evenly and WRAP long
+   lines, not keep stretching the table wider to stay unwrapped. */
+.diff-table { table-layout: fixed; width: 100%; }
+.diff-table td { white-space: normal; overflow-wrap: break-word; vertical-align: top; }
+
 /* ---------- Page tabs ---------- */
 .page-tabs {
   display: flex;
