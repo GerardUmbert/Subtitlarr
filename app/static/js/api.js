@@ -87,6 +87,10 @@ const Api = (() => {
     clearEngineRateLimits: () => request("POST", "/api/jobs/clear-engine-rate-limits"),
     syncMedia: () => request("POST", "/api/jobs/sync-media"),
     syncSubs: () => request("POST", "/api/jobs/sync-subs"),
+    runLanguageCheck: () => request("POST", "/api/jobs/language-check"),
+    getLanguageCheckSettings: () => request("GET", "/api/jobs/language-check/settings"),
+    setLanguageCheckSettings: (instanceId) =>
+      request("POST", "/api/jobs/language-check/settings", { instance_id: instanceId }),
     pushUploads: () => request("POST", "/api/jobs/push-uploads"),
     getSyncStatus: () => request("GET", "/api/jobs/sync-status"),
 
@@ -101,6 +105,7 @@ const Api = (() => {
     },
     getHistoryStats: (range = "all") => request("GET", `/api/history/stats?range=${range}`),
     getHistoryJobs: (limit = 100) => request("GET", `/api/history/jobs?limit=${limit}`),
+    getLanguageMismatches: (limit = 100) => request("GET", `/api/history/language-mismatches?limit=${limit}`),
 
     searchCompareLibrary: (q, sourceLanguage) => {
       const params = new URLSearchParams();

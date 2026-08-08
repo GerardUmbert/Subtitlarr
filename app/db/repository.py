@@ -490,6 +490,111 @@ def count_completed_today(conn: sqlite3.Connection) -> int:
     return row["n"]
 
 
+def get_items_for_language_check(conn: sqlite3.Connection, limit: int) -> list[sqlite3.Row]:
+    """Completed items (done or translated_pending_upload — both have real
+    translated content sitting somewhere, uploaded or queued) not yet
+    verified to actually be in their target_language. Oldest-completed
+    first, so a backlog is worked through in order across repeated sweeps
+    rather than always re-picking the same recent items."""
+    return conn.execute(
+        """
+        SELECT * FROM items
+        WHERE status IN ('done', 'translated_pending_upload')
+          AND language_check_status = 'unchecked'
+        ORDER BY completed_at ASC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+
+
+def set_language_check_ok(conn: sqlite3.Connection, item_id: int) -> None:
+    now = _now()
+    with conn:
+        conn.execute(
+            "UPDATE items SET language_check_status = 'ok', language_check_detail = NULL, last_updated = ? WHERE id = ?",
+            (now, item_id),
+        )
+
+
+def reset_item_for_language_mismatch(conn: sqlite3.Connection, item_id: int, detail: str) -> None:
+    """A confirmed language mismatch is treated like a real translation
+    failure, not a passive flag: the already-translated (wrong-language)
+    output is discarded and the item goes back to 'pending' for a fresh
+    attempt — never silently pushed to Bazarr just because nobody noticed
+    a flag before the next push. language_check_status resets to
+    'unchecked' (not left as 'mismatch') since that verdict was about the
+    DISCARDED translation, not whatever comes out of the next attempt;
+    the item naturally re-enters the check backlog once retranslated.
+    error_message records why, visible on the Queue page like any other
+    reset. Caller (app.engine.language_check) is responsible for deleting
+    the actual queued .srt file, if any — this only updates the DB row."""
+    now = _now()
+    with conn:
+        conn.execute(
+            """
+            UPDATE items
+            SET status = 'pending', language_check_status = 'unchecked', language_check_detail = NULL,
+                error_message = ?, last_updated = ?
+            WHERE id = ?
+            """,
+            (f"Language check failed: {detail}", now, item_id),
+        )
+
+
+def log_language_mismatch(
+    conn: sqlite3.Connection,
+    *,
+    item_id: int,
+    item_title: str,
+    item_type: str,
+    bazarr_id: int,
+    target_language: str,
+    detected_language: str,
+    was_uploaded: bool,
+    series_title: str | None = None,
+    season_episode: str | None = None,
+) -> None:
+    """A permanent record of a confirmed mismatch — survives independently
+    of the flagged item's own lifecycle (reset_item_for_language_mismatch
+    clears the item's own trace the moment it's requeued for retranslation,
+    so without this there'd be no durable answer to "which items did we
+    already send to Bazarr with the wrong language"). was_uploaded=True
+    means the wrong-language file was actually sent to Bazarr before being
+    caught (status was 'done'), not just sitting in the local queue."""
+    now = _now()
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO language_mismatches
+                (item_id, item_title, item_type, bazarr_id, target_language,
+                 detected_language, was_uploaded, detected_at,
+                 series_title, season_episode)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (item_id, item_title, item_type, bazarr_id, target_language,
+             detected_language, 1 if was_uploaded else 0, now,
+             series_title, season_episode),
+        )
+
+
+def list_language_mismatches(conn: sqlite3.Connection, *, limit: int = 100) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM language_mismatches ORDER BY detected_at DESC LIMIT ?", (limit,)
+    ).fetchall()
+
+
+def count_language_check_pending(conn: sqlite3.Connection) -> int:
+    row = conn.execute(
+        """
+        SELECT COUNT(*) AS n FROM items
+        WHERE status IN ('done', 'translated_pending_upload')
+          AND language_check_status = 'unchecked'
+        """
+    ).fetchone()
+    return row["n"]
+
+
 def get_stats(conn: sqlite3.Connection) -> dict:
     rows = conn.execute(
         "SELECT status, COUNT(*) AS n FROM items GROUP BY status"

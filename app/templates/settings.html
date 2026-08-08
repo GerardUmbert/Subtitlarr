@@ -70,6 +70,12 @@
         <input v-model="syncSubsCron" placeholder="e.g. 40 9 * * * (blank = manual only)" />
         <p class="field-hint" v-if="nextSyncSubsRun">Next run: {% raw %}{{ nextSyncSubsRun }}{% endraw %}</p>
       </div>
+      <div class="field">
+        <label>Language check cron</label>
+        <input v-model="languageCheckCron" placeholder="e.g. 8 3 * * * (blank = manual only)" />
+        <p class="field-hint">Sweeps the entire not-yet-checked backlog each fire (same as the Jobs page button). Requires a check engine to be picked on the Jobs page first — a fire with none configured just logs a failed job event. Schedule this BEFORE the translate cron above, not after — a confirmed mismatch resets the item to pending, and only a check that's already finished in time will catch that reset item in the SAME translation run instead of leaving it a full day.</p>
+        <p class="field-hint" v-if="nextLanguageCheckRun">Next run: {% raw %}{{ nextLanguageCheckRun }}{% endraw %}</p>
+      </div>
     </div>
   </div>
 

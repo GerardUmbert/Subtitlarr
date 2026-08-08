@@ -104,3 +104,15 @@ class TranslationProvider(ABC):
     @abstractmethod
     async def test_connection(self) -> ProviderStatus:
         ...
+
+    @abstractmethod
+    async def ask(self, prompt: str) -> str:
+        """A generic single-prompt call, for non-translation LLM tasks
+        (e.g. app.engine.language_check's batched "what language is each
+        of these files" audit) that don't fit translate()'s
+        source_lang/target_lang-shaped system prompt. No system prompt of
+        its own — the caller's `prompt` is the entire message. Same
+        retry/rate-limit/error semantics as translate() where the
+        provider has any (a raw ProviderError/ProviderRateLimitedError on
+        failure, not a bespoke exception type)."""
+        ...

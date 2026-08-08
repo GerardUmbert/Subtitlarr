@@ -93,7 +93,7 @@ class OllamaProvider(TranslationProvider):
                     raise ProviderError(f"Ollama pull error: {event['error']}")
                 yield event
 
-    async def _chat_request(self, system_prompt: str, dialogue_text: str) -> httpx.Response:
+    async def _chat_request(self, messages: list[dict]) -> httpx.Response:
         options = {"num_ctx": self._num_ctx}
         if self._temperature is not None:
             options["temperature"] = self._temperature
@@ -103,10 +103,7 @@ class OllamaProvider(TranslationProvider):
                 "model": self._model,
                 "stream": False,
                 "options": options,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": build_user_prompt(dialogue_text)},
-                ],
+                "messages": messages,
             },
         )
 
@@ -134,7 +131,18 @@ class OllamaProvider(TranslationProvider):
         system_prompt = build_system_prompt(
             source_lang, target_lang, catalan_vegeta_insults, language_variants
         )
+        return await self._chat_with_retry([
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": build_user_prompt(dialogue_text)},
+        ])
 
+    async def ask(self, prompt: str) -> str:
+        """No system prompt — the caller's text is the entire message.
+        Used by app.engine.language_check's batched language audit, not
+        translate()'s subtitle-specific prompt scheme."""
+        return await self._chat_with_retry([{"role": "user", "content": prompt}])
+
+    async def _chat_with_retry(self, messages: list[dict]) -> str:
         # Reload-then-retry (force-unload the model, exactly once) applies
         # to failures that indicate the server RESPONDED but got stuck or
         # errored — a watchdog timeout, an httpx-level timeout, or a 5xx —
@@ -146,7 +154,7 @@ class OllamaProvider(TranslationProvider):
         for attempt in (1, 2):
             try:
                 resp = await asyncio.wait_for(
-                    self._chat_request(system_prompt, dialogue_text),
+                    self._chat_request(messages),
                     timeout=WATCHDOG_TIMEOUT_SECONDS,
                 )
             except asyncio.TimeoutError:

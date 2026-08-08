@@ -84,6 +84,12 @@ async def lifespan(app: FastAPI):
             lambda: jobs.cron_sync_subs(state.run_controller),
             job_id="sync_subs",
         )
+    if settings.language_check_cron:
+        state.cron_scheduler.install(
+            settings.language_check_cron,
+            lambda: jobs.cron_language_check(state.run_controller),
+            job_id="language_check",
+        )
 
     yield
 

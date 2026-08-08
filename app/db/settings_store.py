@@ -24,6 +24,7 @@ PERSISTED_KEYS = (
     "queue_uploads_enabled",
     "sync_media_cron",
     "sync_subs_cron",
+    "language_check_cron",
 )
 
 

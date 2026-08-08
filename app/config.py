@@ -48,6 +48,19 @@ class Settings(BaseSettings):
     # translation run starts, instead of racing or colliding.
     sync_media_cron: str = "0 3 * * *"
     sync_subs_cron: str = "5 3 * * *"
+    # Same opt-in pattern as the two syncs above — empty = manual-only via
+    # the Jobs page. Left unset by default since it depends on a dedicated
+    # check engine instance being configured first (see
+    # language_check_instance_id in settings_store); a periodic sweep with
+    # no engine picked would just fail every fire. IMPORTANT if you do
+    # enable it: schedule it BEFORE schedule_cron (currently 3:10), not
+    # after — a confirmed mismatch resets the item straight back to
+    # 'pending', and only a check that's already finished by the time the
+    # translation run starts will catch that reset item in the SAME run,
+    # instead of leaving it to wait a full day for the next one. A slot
+    # like "8 3 * * *" (3:08, two minutes ahead of schedule_cron) fits
+    # the existing 5-minute stagger.
+    language_check_cron: str = ""
 
     # Runtime
     db_path: str = "/data/subtitlarr.db"

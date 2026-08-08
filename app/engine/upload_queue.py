@@ -37,7 +37,13 @@ async def push_pending_uploads(
     the persistent volume, or the file was otherwise lost) is unrecoverable
     by retrying the push — the translated content is simply gone. Those
     items are reset to 'pending' instead of left permanently stuck, so the
-    next translation run regenerates them."""
+    next translation run regenerates them.
+
+    A language-check mismatch (see app.engine.language_check) never
+    reaches this function at all — a confirmed mismatch immediately
+    discards the queued file and resets the item to 'pending' right when
+    the check runs, rather than leaving a flagged item sitting here for a
+    later push to skip."""
     items = repository.get_items_by_status(conn, "translated_pending_upload")
 
     pushed = 0

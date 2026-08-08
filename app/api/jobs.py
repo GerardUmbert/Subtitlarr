@@ -1,11 +1,12 @@
 import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from app import state
 from app.config import settings
 from app.db import engine_instances_repo, repository
-from app.engine import upload_queue
+from app.engine import language_check, upload_queue
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -165,12 +166,114 @@ async def push_uploads(conn=Depends(state.get_conn), client=Depends(state.get_cl
     return {"started": True}
 
 
+_language_check_state = {"active": False, "error": None, "result": None}
+_LANGUAGE_CHECK_BATCH_SIZE = 25
+
+
+async def _run_language_check(conn, client, triggered_by: str) -> None:
+    """Sweeps every batch of the unchecked backlog (not just one) in a
+    single call — shared by both the manual endpoint and the cron entry
+    point below, same as the sync_media/sync_subs pattern."""
+    event_id = repository.start_job_event(conn, "language_check", triggered_by=triggered_by)
+    _language_check_state["active"] = True
+    _language_check_state["error"] = None
+    _language_check_state["result"] = None
+    totals = {"checked": 0, "matched": 0, "mismatched": 0, "skipped": 0}
+    try:
+        # Keep sweeping batches until the backlog of unchecked items is
+        # actually exhausted, rather than stopping after one batch — a
+        # single run should clear the whole backlog, not require
+        # re-triggering once per _LANGUAGE_CHECK_BATCH_SIZE items.
+        while True:
+            result = await language_check.run_language_check(
+                conn, client, batch_size=_LANGUAGE_CHECK_BATCH_SIZE
+            )
+            for key in totals:
+                totals[key] += result[key]
+            _language_check_state["result"] = dict(totals)
+            if result["checked"] + result["skipped"] < _LANGUAGE_CHECK_BATCH_SIZE:
+                break  # fewer items came back than asked for — backlog is empty
+        repository.finish_job_event(
+            conn, event_id, status="done",
+            result=(
+                f"{totals['checked']} checked, {totals['matched']} ok, "
+                f"{totals['mismatched']} mismatch, {totals['skipped']} skipped"
+            ),
+        )
+    except language_check.LanguageCheckError as exc:
+        _language_check_state["error"] = str(exc)
+        repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
+    except Exception as exc:  # noqa: BLE001 - surface to the UI, don't crash the app
+        _language_check_state["error"] = str(exc)
+        repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
+    finally:
+        _language_check_state["active"] = False
+
+
+async def cron_language_check(runner) -> None:
+    """Cron entry point — same guards as the on-demand endpoint, so a fire
+    that lands mid-run or mid-check is silently skipped rather than queued
+    or double-started."""
+    if _language_check_state["active"] or (runner.current is not None and runner.current.active):
+        return
+    conn = state.get_conn()
+    client = state.get_client()
+    await _run_language_check(conn, client, triggered_by="cron")
+
+
+@router.post("/language-check")
+async def run_language_check_now(
+    conn=Depends(state.get_conn), client=Depends(state.get_client), runner=Depends(state.get_runner)
+):
+    """Audits up to _LANGUAGE_CHECK_BATCH_SIZE not-yet-checked completed
+    items' ACTUAL output language in one batched LLM call — catches a
+    well-formed, correctly-indexed response that's simply still in the
+    source language (confirmed live: gemini-3.5-flash-lite echoing
+    English back for a Catalan target), which reassemble()'s structural
+    checks can't detect. Never touches the item itself, only its
+    language_check_status/detail — a real mismatch needs a human decision
+    (re-run with a different engine, accept as-is, etc.), not an automatic
+    one, since the item may already be uploaded to Bazarr.
+
+    Blocked while a translation run is active — unlike push_uploads (which
+    touches no LLM at all), this DOES call whichever engine instance is
+    configured for the check, and if that's the SAME instance a live run
+    is actively translating with, the two would compete for that
+    instance's rate-limit window/concurrency."""
+    if _language_check_state["active"]:
+        return {"started": False, "reason": "A language check is already in progress"}
+    if runner.current is not None and runner.current.active:
+        return {"started": False, "reason": "A translation run is already in progress"}
+
+    asyncio.create_task(_run_language_check(conn, client, triggered_by="manual"))
+    return {"started": True}
+
+
+class LanguageCheckSettings(BaseModel):
+    instance_id: int | None = None
+
+
+@router.get("/language-check/settings")
+async def get_language_check_settings(conn=Depends(state.get_conn)):
+    return {
+        "instance_id": repository.get_config(conn, "language_check_instance_id", default=None),
+        "pending_count": repository.count_language_check_pending(conn),
+    }
+
+
+@router.post("/language-check/settings")
+async def set_language_check_settings(req: LanguageCheckSettings, conn=Depends(state.get_conn)):
+    repository.set_config(conn, "language_check_instance_id", req.instance_id)
+    return {"saved": True}
+
+
 @router.get("/sync-status")
 async def get_sync_status():
     return {
         "sync_media": dict(_sync_media_state),
         "sync_subs": dict(_sync_subs_state),
         "push_uploads": dict(_push_uploads_state),
+        "language_check": dict(_language_check_state),
     }
 
 

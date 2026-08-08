@@ -88,11 +88,15 @@ createApp({
   data() {
     return {
       pageLoading: true,
-      activeTab: "runs", // 'runs' | 'jobs' | 'events' | 'stats'
+      activeTab: "runs", // 'runs' | 'jobs' | 'mismatches' | 'events' | 'stats'
 
       // Jobs tab
       jobEvents: [],
       jobsLoading: false,
+
+      // Language Mismatches tab
+      languageMismatches: [],
+      mismatchesLoading: false,
       runs: [],
       total: 0,
       page: 1,
@@ -148,6 +152,17 @@ createApp({
         // keep last known state on transient failure
       } finally {
         this.jobsLoading = false;
+      }
+    },
+    async loadLanguageMismatches() {
+      this.mismatchesLoading = true;
+      try {
+        const result = await Api.getLanguageMismatches();
+        this.languageMismatches = result.data;
+      } catch (_) {
+        // keep last known state on transient failure
+      } finally {
+        this.mismatchesLoading = false;
       }
     },
     itemDuration,
@@ -230,6 +245,8 @@ createApp({
       this.activeTab = tab;
       if (tab === "jobs" && this.jobEvents.length === 0) {
         await this.loadJobEvents();
+      } else if (tab === "mismatches" && this.languageMismatches.length === 0) {
+        await this.loadLanguageMismatches();
       } else if (tab === "events" && this.events.length === 0) {
         await this.loadEvents();
       } else if (tab === "stats" && this.stats === null) {

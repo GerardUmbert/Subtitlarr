@@ -107,17 +107,23 @@ class NvidiaProvider(TranslationProvider):
         catalan_vegeta_insults: bool = False,
         language_variants: dict[str, str] | None = None,
     ) -> str:
-        await self._wait_for_rate_limit_clear()
         system_prompt = build_system_prompt(
             source_lang, target_lang, catalan_vegeta_insults, language_variants
         )
-        body = {
-            "model": self._model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": build_user_prompt(dialogue_text)},
-            ],
-        }
+        return await self._chat_completion([
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": build_user_prompt(dialogue_text)},
+        ])
+
+    async def ask(self, prompt: str) -> str:
+        """No system prompt — the caller's text is the entire message.
+        Used by app.engine.language_check's batched language audit, not
+        translate()'s subtitle-specific prompt scheme."""
+        return await self._chat_completion([{"role": "user", "content": prompt}])
+
+    async def _chat_completion(self, messages: list[dict]) -> str:
+        await self._wait_for_rate_limit_clear()
+        body = {"model": self._model, "messages": messages}
         if self._temperature is not None:
             body["temperature"] = self._temperature
         try:

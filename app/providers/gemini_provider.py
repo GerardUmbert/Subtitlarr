@@ -118,7 +118,6 @@ class GeminiProvider(TranslationProvider):
         catalan_vegeta_insults: bool = False,
         language_variants: dict[str, str] | None = None,
     ) -> str:
-        await self._wait_for_rate_limit_clear()
         system_prompt = build_system_prompt(
             source_lang, target_lang, catalan_vegeta_insults, language_variants
         )
@@ -130,6 +129,19 @@ class GeminiProvider(TranslationProvider):
         }
         if self._temperature is not None:
             body["generationConfig"] = {"temperature": self._temperature}
+        return await self._generate_content(body)
+
+    async def ask(self, prompt: str) -> str:
+        """No system prompt — the caller's text is the entire message.
+        Used by app.engine.language_check's batched language audit, not
+        translate()'s subtitle-specific prompt scheme."""
+        body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
+        if self._temperature is not None:
+            body["generationConfig"] = {"temperature": self._temperature}
+        return await self._generate_content(body)
+
+    async def _generate_content(self, body: dict) -> str:
+        await self._wait_for_rate_limit_clear()
         try:
             resp = await self._client.post(
                 f"/models/{self._model}:generateContent",

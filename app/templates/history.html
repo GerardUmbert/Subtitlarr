@@ -18,6 +18,7 @@
   <div class="page-tabs">
     <button class="page-tab" :class="{ active: activeTab === 'runs' }" @click="switchTab('runs')">Runs</button>
     <button class="page-tab" :class="{ active: activeTab === 'jobs' }" @click="switchTab('jobs')">Jobs</button>
+    <button class="page-tab" :class="{ active: activeTab === 'mismatches' }" @click="switchTab('mismatches')">Language Mismatches</button>
     <button class="page-tab" :class="{ active: activeTab === 'events' }" @click="switchTab('events')">Events</button>
     <button class="page-tab" :class="{ active: activeTab === 'stats' }" @click="switchTab('stats')">Stats</button>
   </div>
@@ -147,6 +148,54 @@
                 :class="ev.error ? 'row-time error-cell' : 'row-time'"
                 :title="ev.error || ''"
               >{% raw %}{{ ev.error || ev.result || '—' }}{% endraw %}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </template>
+
+  <template v-if="activeTab === 'mismatches'">
+    <div class="panel" style="margin-bottom:14px; padding:14px 18px;">
+      <div class="queue-toolbar" style="padding:0; border-bottom:none;">
+        <span class="panel-title-sub">Permanent record of every confirmed language-check mismatch — survives even after the affected item is reset and retranslated, so this is the only place to see what was already sent to Bazarr wrong.</span>
+        <button class="btn" @click="loadLanguageMismatches" :disabled="mismatchesLoading" style="margin-left:auto;">{% raw %}{{ mismatchesLoading ? 'Loading…' : 'Refresh' }}{% endraw %}</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div v-if="mismatchesLoading" class="empty-state" style="padding:40px 20px;">Loading…</div>
+      <div v-else-if="!languageMismatches.length" class="empty-state" style="padding:40px 20px;">No mismatches found yet.</div>
+      <div class="table-scroll" v-else>
+        <table>
+          <thead>
+            <tr>
+              <th>Show / Movie</th>
+              <th>Episode</th>
+              <th>Expected</th>
+              <th>Detected</th>
+              <th>Sent to Bazarr?</th>
+              <th>Found</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="m in languageMismatches" :key="m.id">
+              <td>
+                <div class="title-cell">{% raw %}{{ m.series_title || m.item_title }}{% endraw %}</div>
+                <div class="title-type">{% raw %}{{ m.item_type }}{% endraw %}</div>
+              </td>
+              <td>
+                <div class="title-cell">{% raw %}{{ m.item_title }}{% endraw %}</div>
+                <div class="title-type" v-if="m.season_episode">{% raw %}{{ m.season_episode }}{% endraw %}</div>
+              </td>
+              <td><span class="lang-tag">{% raw %}{{ m.target_language.toUpperCase() }}{% endraw %}</span></td>
+              <td>{% raw %}{{ m.detected_language }}{% endraw %}</td>
+              <td>
+                <span :class="'status-pill ' + (m.was_uploaded ? 'status-failed' : 'status-pending')">
+                  <span class="dot"></span>{% raw %}{{ m.was_uploaded ? 'Yes — was on Bazarr' : 'No — caught first' }}{% endraw %}
+                </span>
+              </td>
+              <td class="row-time">{% raw %}{{ formatDateTime(m.detected_at) }}{% endraw %}</td>
             </tr>
           </tbody>
         </table>

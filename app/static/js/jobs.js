@@ -35,6 +35,14 @@ createApp({
       fixStaleRunsResult: null,
       clearingRateLimits: false,
       clearRateLimitsResult: null,
+      engineInstances: [],
+      languageCheckInstanceId: null,
+      languageCheckPendingCount: 0,
+      languageCheckActive: false,
+      startingLanguageCheck: false,
+      languageCheckStarted: false,
+      languageCheckResult: null,
+      languageCheckError: "",
       error: "",
       _pollHandle: null,
     };
@@ -64,6 +72,22 @@ createApp({
           ? new Date(nextRuns.next_sync_media_run).toLocaleString() : "";
         this.nextSyncSubsRun = nextRuns.next_sync_subs_run
           ? new Date(nextRuns.next_sync_subs_run).toLocaleString() : "";
+      } catch (_) {
+        // keep last known state on transient failure
+      }
+      try {
+        const status = await Api.getSyncStatus();
+        this.languageCheckActive = status.language_check.active;
+      } catch (_) {
+        // keep last known state on transient failure
+      }
+      try {
+        const [instances, lcSettings] = await Promise.all([
+          Api.listEngineInstances(), Api.getLanguageCheckSettings(),
+        ]);
+        this.engineInstances = (instances.data || []).filter((i) => i.provider_type !== "separator");
+        this.languageCheckInstanceId = lcSettings.instance_id;
+        this.languageCheckPendingCount = lcSettings.pending_count;
       } catch (_) {
         // keep last known state on transient failure
       }
@@ -208,6 +232,49 @@ createApp({
       } finally {
         this.clearingRateLimits = false;
       }
+    },
+    async saveLanguageCheckInstance() {
+      try {
+        await Api.setLanguageCheckSettings(this.languageCheckInstanceId);
+      } catch (err) {
+        this.languageCheckError = err.message;
+      }
+    },
+    async runLanguageCheck() {
+      this.startingLanguageCheck = true;
+      this.languageCheckError = "";
+      this.languageCheckResult = null;
+      try {
+        const result = await Api.runLanguageCheck();
+        if (!result.started) {
+          this.languageCheckError = result.reason || "Could not start language check";
+          return;
+        }
+        this.languageCheckStarted = true;
+        setTimeout(() => (this.languageCheckStarted = false), 3000);
+        await this.load();
+        this.pollLanguageCheckResult();
+      } catch (err) {
+        this.languageCheckError = err.message;
+      } finally {
+        this.startingLanguageCheck = false;
+      }
+    },
+    pollLanguageCheckResult() {
+      // The backend now sweeps every batch of the backlog in one run (not
+      // just one batch per click), so this keeps polling — and showing the
+      // cumulative running total — until the whole sweep finishes.
+      const check = async () => {
+        const status = await Api.getSyncStatus();
+        this.languageCheckResult = status.language_check.result;
+        if (status.language_check.active) {
+          setTimeout(check, 1000);
+        } else {
+          if (status.language_check.error) this.languageCheckError = status.language_check.error;
+          await this.load();
+        }
+      };
+      setTimeout(check, 1000);
     },
     schedulePoll() {
       if (this._pollHandle) clearTimeout(this._pollHandle);

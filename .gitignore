@@ -12,3 +12,5 @@ node_modules/
 plans/
 TODO.md
 unraid/my-subtitlarr.xml
+/*.srt
+/*.log

@@ -3,6 +3,48 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.9.6]
+
+### Added
+- **Language check**: a batched audit of already-completed translations'
+  ACTUAL output language against their target language — catches a
+  well-formed, correctly-indexed translation that's simply still in the
+  wrong language (confirmed live: gemini-3.5-flash-lite echoing English
+  back for a Catalan target), which the existing structural checks can't
+  detect. One LLM call covers many items per sweep (a short dialogue
+  sample per item, not the whole file) against a dedicated, independently
+  configurable check engine, to avoid burning a separate request per item
+  against a large backlog. Triggered manually from the Jobs page (now
+  sweeps the ENTIRE unchecked backlog per click instead of stopping after
+  one batch of 25) or on its own optional cron (Settings page, blank by
+  default). Blocked while a translation run is active, since the check's
+  own engine call could otherwise compete with a live run for the same
+  instance's rate-limit window.
+- A confirmed mismatch resets the item to `pending` for retranslation
+  (discarding any locally-queued file first) and logs a permanent record
+  to a new **Language Mismatches** tab on the History page — showing
+  show/movie, episode, expected vs. detected language, and whether the
+  wrong-language file had already been pushed to Bazarr — so that trail
+  isn't lost once the item is retranslated and its own status resets.
+
+### Fixed
+- The language check's sampling could false-positive on two unrelated,
+  structural parts of a file that were never real dialogue in the first
+  place: fansub-style staff-credits rolls (multiple cues sharing the
+  exact same timestamp, e.g. "Translation Consultant" / "Visual
+  Typesettings") and opening-song lyrics left in romanized Japanese by
+  design (a karaoke convention, not a translation failure). Both cluster
+  at the very start/end of an episode, so the sample is now taken from
+  the middle third of the file's cues instead of scanning from the top —
+  verified against real flagged episodes ("One Outs", "Big Windup!")
+  that no longer false-positive after the fix.
+- A weak local model was found to occasionally echo the literal
+  `<translated text>` placeholder from the system prompt's own format
+  description back as part of its output, prefixing otherwise-correct
+  translated lines with that literal string instead of substituting real
+  content — the same class of bug as the earlier `<index>` tag leak, now
+  stripped the same way during reassembly.
+
 ## [0.9.5]
 
 ### Added

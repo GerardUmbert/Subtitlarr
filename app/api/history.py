@@ -57,6 +57,18 @@ async def get_job_events(limit: int = 100, conn=Depends(state.get_conn)):
     return {"data": [dict(row) for row in repository.list_job_events(conn, limit=limit)]}
 
 
+@router.get("/language-mismatches")
+async def get_language_mismatches(limit: int = 100, conn=Depends(state.get_conn)):
+    """Permanent record of every confirmed language-check mismatch ever
+    found — survives independently of the flagged item, which gets reset
+    to 'pending' and its own trace cleared the moment it's requeued for
+    retranslation (see repository.reset_item_for_language_mismatch).
+    was_uploaded distinguishes "already sent to Bazarr wrong" from
+    "caught before it ever reached Bazarr" (still translated_pending_upload
+    at detection time)."""
+    return {"data": [dict(row) for row in repository.list_language_mismatches(conn, limit=limit)]}
+
+
 @router.get("/stats")
 async def get_stats(range: str = "all", conn=Depends(state.get_conn)):
     if range not in ("7d", "30d", "all"):

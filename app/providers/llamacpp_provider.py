@@ -87,13 +87,8 @@ class LlamaCppProvider(TranslationProvider):
     async def aclose(self) -> None:
         await self._client.aclose()
 
-    async def _chat_request(self, system_prompt: str, dialogue_text: str) -> httpx.Response:
-        body = {
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": build_user_prompt(dialogue_text)},
-            ],
-        }
+    async def _chat_request(self, messages: list[dict]) -> httpx.Response:
+        body = {"messages": messages}
         if self._model:
             body["model"] = self._model
         if self._temperature is not None:
@@ -111,11 +106,22 @@ class LlamaCppProvider(TranslationProvider):
         system_prompt = build_system_prompt(
             source_lang, target_lang, catalan_vegeta_insults, language_variants
         )
+        return await self._chat_with_retry([
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": build_user_prompt(dialogue_text)},
+        ])
 
+    async def ask(self, prompt: str) -> str:
+        """No system prompt — the caller's text is the entire message.
+        Used by app.engine.language_check's batched language audit, not
+        translate()'s subtitle-specific prompt scheme."""
+        return await self._chat_with_retry([{"role": "user", "content": prompt}])
+
+    async def _chat_with_retry(self, messages: list[dict]) -> str:
         for attempt in (1, 2):
             try:
                 resp = await asyncio.wait_for(
-                    self._chat_request(system_prompt, dialogue_text),
+                    self._chat_request(messages),
                     timeout=WATCHDOG_TIMEOUT_SECONDS,
                 )
                 break

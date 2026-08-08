@@ -10,9 +10,11 @@ createApp({
       queueUploadsEnabled: false,
       syncMediaCron: "",
       syncSubsCron: "",
+      languageCheckCron: "",
       nextRun: "",
       nextSyncMediaRun: "",
       nextSyncSubsRun: "",
+      nextLanguageCheckRun: "",
       saving: false,
       saved: false,
       error: "",
@@ -28,6 +30,7 @@ createApp({
       this.queueUploadsEnabled = cfg.queue_uploads_enabled;
       this.syncMediaCron = cfg.sync_media_cron;
       this.syncSubsCron = cfg.sync_subs_cron;
+      this.languageCheckCron = cfg.language_check_cron;
       await this.loadNextRun();
     },
     async loadNextRun() {
@@ -36,10 +39,12 @@ createApp({
         this.nextRun = result.next_run ? new Date(result.next_run).toLocaleString() : "";
         this.nextSyncMediaRun = result.next_sync_media_run ? new Date(result.next_sync_media_run).toLocaleString() : "";
         this.nextSyncSubsRun = result.next_sync_subs_run ? new Date(result.next_sync_subs_run).toLocaleString() : "";
+        this.nextLanguageCheckRun = result.next_language_check_run ? new Date(result.next_language_check_run).toLocaleString() : "";
       } catch (_) {
         this.nextRun = "";
         this.nextSyncMediaRun = "";
         this.nextSyncSubsRun = "";
+        this.nextLanguageCheckRun = "";
       }
     },
     async save() {
@@ -55,6 +60,7 @@ createApp({
           queue_uploads_enabled: this.queueUploadsEnabled,
           sync_media_cron: this.syncMediaCron,
           sync_subs_cron: this.syncSubsCron,
+          language_check_cron: this.languageCheckCron,
         });
         await this.loadNextRun();
         this.saved = true;

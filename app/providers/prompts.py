@@ -26,7 +26,11 @@ SYSTEM_PROMPT = (
     "matching the source's intensity. Do not soften, censor, or replace it "
     "with a milder or more polite alternative, UNLESS a more specific "
     "instruction below asks for a different style of adaptation instead — "
-    "in that case, follow that instruction."
+    "in that case, follow that instruction. "
+    "Before sending your response, check every translated block and confirm "
+    "it is actually written in {target_lang} — not {source_lang}, and not "
+    "any other language. If you find any block still in {source_lang} or "
+    "another language, translate it into {target_lang} before responding."
 )
 
 

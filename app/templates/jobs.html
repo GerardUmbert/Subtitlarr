@@ -91,6 +91,42 @@
 
   <div class="panel" style="margin-top:16px;">
     <div class="panel-body">
+    <div class="panel-title">Language check</div>
+    <div class="panel-title-sub">Audits completed translations' ACTUAL output language against their target — catches a well-formed response that's silently still in the source language, which the normal alignment/integrity checks can't detect</div>
+
+      <p class="field-hint">
+        Sends one batched request per run ("here are N files' sample text, what language is each") to a
+        SINGLE chosen engine, checking up to 25 not-yet-checked completed items at once — cheap on
+        request quota even for a large backlog, since it's one call regardless of how many items it covers.
+      </p>
+      <div class="field-row">
+        <div class="field" style="max-width:320px;">
+          <label>Engine to check with</label>
+          <select v-model.number="languageCheckInstanceId" @change="saveLanguageCheckInstance">
+            <option :value="null" disabled>Pick an engine…</option>
+            <option v-for="inst in engineInstances" :key="inst.id" :value="inst.id">{% raw %}{{ inst.name }}{% endraw %}</option>
+          </select>
+        </div>
+      </div>
+      <p class="field-hint">{% raw %}{{ languageCheckPendingCount }}{% endraw %} item{% raw %}{{ languageCheckPendingCount === 1 ? '' : 's' }}{% endraw %} not yet checked.</p>
+      <div class="field-row">
+        <button class="btn" @click="runLanguageCheck" :disabled="languageCheckActive || startingLanguageCheck || !languageCheckInstanceId || languageCheckPendingCount === 0">
+          {% raw %}{{ languageCheckActive ? 'Checking…' : (startingLanguageCheck ? 'Starting…' : 'Run language check') }}{% endraw %}
+        </button>
+        <span v-if="languageCheckStarted" class="test-result">● started</span>
+      </div>
+      <p class="field-hint" v-if="languageCheckResult">
+        ● {% raw %}{{ languageCheckActive ? 'so far: ' : '' }}{% endraw %}checked {% raw %}{{ languageCheckResult.checked }}{% endraw %},
+        {% raw %}{{ languageCheckResult.matched }}{% endraw %} ok,
+        {% raw %}{{ languageCheckResult.mismatched }}{% endraw %} mismatch<template v-if="languageCheckResult.skipped">,
+        {% raw %}{{ languageCheckResult.skipped }}{% endraw %} skipped</template>
+      </p>
+      <p class="field-hint error" v-if="languageCheckError">● {% raw %}{{ languageCheckError }}{% endraw %}</p>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px;">
+    <div class="panel-body">
     <div class="panel-title">Fix broken runs</div>
     <div class="panel-title-sub">Closes out run history entries left stuck "in progress" by a process that was killed mid-batch — does not delete anything</div>
 

@@ -88,6 +88,14 @@ _HEADER_DECORATION_RE = re.compile(r"^[\s\-*>#]*\**\s*(\d+)\s*\**[.:)]?\s*$")
 # tags despite explicit instructions not to add extra markup — strip any
 # XML/HTML-ish wrapper tags from translated content before use.
 _WRAPPER_TAG_RE = re.compile(r"</?index\s*/?>", re.IGNORECASE)
+# A live run (ollama, weak local model, confirmed via the language check
+# flagging item 11100/"Big Windup!" Ep.0 as "Japanese" when the real
+# problem was this) echoed the LITERAL placeholder text from the system
+# prompt's own format description ("'<index>\n<translated text>' format")
+# back as if it were part of the output, prefixing 40 consecutive real,
+# correctly-translated Catalan cues with the literal string
+# "<translated text>". Strip it the same way as the <index> tag leak above.
+_TRANSLATED_TEXT_PLACEHOLDER_RE = re.compile(r"<translated text>", re.IGNORECASE)
 # A live run also returned cues separated by single newlines only, not the
 # blank-line separation requested — splitting solely on blank lines
 # collapsed the entire 61-cue response into one block, recovering 1/61.
@@ -123,7 +131,9 @@ def _strip_markdown_fences(text: str) -> str:
 
 
 def _strip_wrapper_tags(text: str) -> str:
-    return _WRAPPER_TAG_RE.sub("", text).strip()
+    text = _WRAPPER_TAG_RE.sub("", text)
+    text = _TRANSLATED_TEXT_PLACEHOLDER_RE.sub("", text)
+    return text.strip()
 
 
 def _find_header_matches(text: str) -> list[re.Match]:
