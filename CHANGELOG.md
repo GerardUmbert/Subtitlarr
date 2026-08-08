@@ -3,6 +3,30 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+- **Daily automatic database backups** — snapshots the whole SQLite
+  database to `/data/backups/` on a daily cron (on by default), keeping
+  the last 20 and pruning older ones automatically. Uses sqlite3's own
+  online backup API rather than a raw file copy, so it's safe to run
+  concurrently with a live translation run or any other job. The only
+  recovery path for a destructive mistake (clear-database has no undo)
+  or a bad migration. Also runnable on demand from Settings.
+
+### Fixed
+- The language check could hang forever if an entire batch skipped (no
+  usable sample text, or the model's response omitted that line) — since
+  a skipped item's status never changes, the same batch got re-selected
+  and re-fetched every iteration with zero progress. Confirmed live: a
+  NAS run repeatedly re-fetched the same 25 Bazarr subtitles thousands of
+  times (2600+ skipped, 0 checked) with no exit. The sweep now stops as
+  soon as one batch makes no progress at all, not only when a batch comes
+  back smaller than requested.
+- The sidebar's version label was hardcoded and had gone stale across
+  several releases (still read v0.9.2) — corrected, and will be kept in
+  sync with every future release going forward.
+
 ## [0.9.6]
 
 ### Added
