@@ -184,6 +184,19 @@ async def _run_language_check(conn, client, triggered_by: str) -> None:
         # actually exhausted, rather than stopping after one batch — a
         # single run should clear the whole backlog, not require
         # re-triggering once per _LANGUAGE_CHECK_BATCH_SIZE items.
+        #
+        # Confirmed live on the NAS: a batch where EVERY item skips (no
+        # usable sample text, or the response didn't include that line)
+        # never changes any item's language_check_status — it's still
+        # 'unchecked' afterwards — so get_items_for_language_check()
+        # re-selects the SAME batch next iteration. The old exit
+        # condition ("fewer items came back than requested") never
+        # triggers for a full, all-skipped batch, so the loop ran
+        # forever, repeatedly re-fetching identical Bazarr subtitle
+        # content with zero progress (2600+ skipped, 0 checked). Track
+        # whether a batch made any real progress (checked = matched +
+        # mismatched, i.e. items that actually left 'unchecked') and stop
+        # as soon as one doesn't, regardless of how full it was.
         while True:
             result = await language_check.run_language_check(
                 conn, client, batch_size=_LANGUAGE_CHECK_BATCH_SIZE
@@ -191,6 +204,8 @@ async def _run_language_check(conn, client, triggered_by: str) -> None:
             for key in totals:
                 totals[key] += result[key]
             _language_check_state["result"] = dict(totals)
+            if result["checked"] == 0:
+                break  # this batch made no progress — stop instead of looping forever
             if result["checked"] + result["skipped"] < _LANGUAGE_CHECK_BATCH_SIZE:
                 break  # fewer items came back than asked for — backlog is empty
         repository.finish_job_event(
