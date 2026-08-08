@@ -3,6 +3,14 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.9.12]
+
+### Changed
+- Un-hid the "Pull model" button on the Engines page (hidden in 0.9.11)
+  — it already had a "type a custom model name instead" toggle next to
+  the dropdown for pulling a model not yet installed; it just wasn't
+  obvious enough at a glance.
+
 ## [0.9.11]
 
 ### Fixed
