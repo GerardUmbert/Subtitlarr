@@ -3,6 +3,17 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.9.2]
+
+### Fixed
+- **Bulk-running the Queue page's "Pending upload" filter did nothing** —
+  `translated_pending_upload` (an item that finished translating but
+  hasn't been pushed to Bazarr yet) was missing from the set of re-
+  runnable statuses, even though the Queue page's own "Pending upload"
+  status filter is a real, selectable option and treats that status the
+  same as "Done" everywhere else. Filtering to it and clicking "Run all N
+  matching" silently returned zero items instead of re-running them.
+
 ## [0.9.1]
 
 ### Added

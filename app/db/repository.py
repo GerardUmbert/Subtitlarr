@@ -451,7 +451,9 @@ def get_translatable_queue_filtered(
     excluded from this default (not from an explicit 'Done' filter),
     since indiscriminately re-translating everything already finished
     would be surprising/wasteful for an unfiltered bulk action."""
-    RERUNNABLE_STATUSES = {"pending", "queued", "failed", "done", "skipped_no_source"}
+    RERUNNABLE_STATUSES = {
+        "pending", "queued", "failed", "done", "skipped_no_source", "translated_pending_upload",
+    }
     conditions, params = _build_queue_filter(status, item_type, search, model=model)
     if status:
         if status not in RERUNNABLE_STATUSES:

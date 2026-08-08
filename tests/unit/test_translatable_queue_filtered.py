@@ -93,6 +93,19 @@ def test_filtered_queue_with_explicit_done_filter_returns_done_items(conn):
     assert [r["bazarr_id"] for r in result] == [1]
 
 
+def test_filtered_queue_with_pending_upload_filter_returns_those_items(conn):
+    """Regression test: filtering to 'Pending upload' (translated_pending_
+    upload — finished translating, not yet pushed to Bazarr) and hitting
+    'Run all N matching' must actually re-run those items, same as 'Done'.
+    This status was missing from RERUNNABLE_STATUSES, so the filter existed
+    in the Queue page's dropdown but bulk-running it silently returned
+    nothing."""
+    _seed(conn, 1, "movie", "A", status="translated_pending_upload")
+
+    result = repository.get_translatable_queue_filtered(conn, status="translated_pending_upload")
+    assert [r["bazarr_id"] for r in result] == [1]
+
+
 def test_filtered_queue_with_translating_status_filter_yields_nothing(conn):
     """The one genuinely non-rerunnable status — an item already mid-
     translation must never be picked up by a bulk run."""
