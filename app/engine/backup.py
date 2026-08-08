@@ -31,7 +31,15 @@ def run_backup(db_path: str, *, keep_count: int = DEFAULT_KEEP_COUNT) -> dict:
     backup_dir = _backup_dir(db_path)
     backup_dir.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    # Confirmed live: second-resolution timestamps collide whenever two
+    # backups happen within the same second — restore_backup's own
+    # safety-snapshot-before-restoring step guarantees exactly that any
+    # time a restore follows shortly after a backup, silently overwriting
+    # the very backup file about to be restored FROM before it's ever
+    # read. Millisecond resolution makes a same-second collision
+    # astronomically unlikely without changing the filename format users
+    # might already be relying on to sort/read.
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")[:-3]
     dest_path = backup_dir / f"{BACKUP_FILENAME_PREFIX}{timestamp}.db"
 
     source = sqlite3.connect(db_path)

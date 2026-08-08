@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from app import state
 from app.config import settings
-from app.db import engine_instances_repo, repository
+from app.db import database, engine_instances_repo, repository
 from app.engine import backup, language_check, stale_audit, upload_queue
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -352,6 +352,16 @@ async def restore_backup_now(
     backup. A safety snapshot of the pre-restore state is taken
     automatically first, so this itself is always undoable.
 
+    Confirmed live: a backup taken on an OLDER release lacks whatever
+    schema columns/tables later migrations added (e.g. purge_exempt,
+    added in 0017) — restoring it without immediately re-applying
+    migrations would leave every later query against a now-missing
+    column crashing (e.g. the very next Bazarr poll's
+    purge_unsynced_items) until the next restart happened to fix it.
+    Migrations are re-applied right here, synchronously, so there's no
+    dangerous window at all — restoring an old backup is always safe
+    regardless of how much schema has changed since it was taken.
+
     NOTE: settings.py's in-memory Settings object (Bazarr connection,
     schedule, etc.) is only re-read from app_config at startup — a
     restore fixes the DB immediately, but those in-memory values can
@@ -371,6 +381,7 @@ async def restore_backup_now(
         result = backup.restore_backup(conn, settings.db_path, req.filename)
     except backup.RestoreError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    database.apply_migrations(conn)
     return {"restored": True, **result}
 
 
