@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [0.9.7]
 
 ### Added
 - **Daily automatic database backups** — snapshots the whole SQLite
