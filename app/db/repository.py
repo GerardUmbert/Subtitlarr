@@ -97,10 +97,23 @@ def purge_unsynced_items(conn: sqlite3.Connection) -> int:
     subtitles as downloaded") permanently inflates local counts, since nothing
     else in the sync path ever deletes rows. item_run_log entries for purged
     items are deleted too, so History's item join never sees orphans.
+
+    purge_exempt items are skipped even though they're 'pending' —
+    confirmed live: a language-check mismatch reset or a stale-audit
+    reset sets an item back to 'pending' specifically so the NEXT
+    translation run retries it, but Bazarr will never re-report either
+    kind of item as "missing" in its wanted list (the flagged-wrong or
+    pre-existing file is still sitting in that slot as far as Bazarr's
+    concerned) — so without this exemption, the very next poll silently
+    deleted the item with no way to ever be rediscovered (confirmed
+    live: three language-check-flagged items vanished entirely, gone
+    from the Queue AND from a fresh Bazarr pull, right after the next
+    poll ran).
+
     Returns the number of items purged."""
     with conn:
         rows = conn.execute(
-            "SELECT id FROM items WHERE status NOT IN ('done', 'translated_pending_upload')"
+            "SELECT id FROM items WHERE status NOT IN ('done', 'translated_pending_upload') AND purge_exempt = 0"
         ).fetchall()
         ids = [row["id"] for row in rows]
         if ids:
@@ -281,6 +294,13 @@ def update_item_status(
         # live-counting duration because completed_at was still set from
         # the earlier run).
         fields.append("completed_at = NULL")
+    if status in ("done", "translated_pending_upload"):
+        # purge_exempt only protects a reset item from being wiped by the
+        # NEXT poll before it gets a chance to be retranslated — once it
+        # actually completes again, it's a normal item again and should
+        # re-enter regular purge eligibility if it ever goes back to
+        # 'pending' some other way in the future.
+        fields.append("purge_exempt = 0")
     if mark_completed:
         fields.append("completed_at = ?")
         values.append(now)
@@ -535,7 +555,7 @@ def reset_item_for_language_mismatch(conn: sqlite3.Connection, item_id: int, det
             """
             UPDATE items
             SET status = 'pending', language_check_status = 'unchecked', language_check_detail = NULL,
-                error_message = ?, last_updated = ?
+                error_message = ?, last_updated = ?, purge_exempt = 1
             WHERE id = ?
             """,
             (f"Language check failed: {detail}", now, item_id),
@@ -562,7 +582,7 @@ def reset_item_for_stale_audit(conn: sqlite3.Connection, item_id: int) -> None:
         conn.execute(
             """
             UPDATE items
-            SET status = 'pending', error_message = ?, last_updated = ?
+            SET status = 'pending', error_message = ?, last_updated = ?, purge_exempt = 1
             WHERE id = ?
             """,
             (

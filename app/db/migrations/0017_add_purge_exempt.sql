@@ -1,0 +1,13 @@
+-- Confirmed live (v0.9.9): purge_unsynced_items deletes every 'pending'
+-- item on each Bazarr poll to keep stats fresh from Bazarr's current
+-- wanted list. Both the language-check mismatch reset and the stale
+-- audit reset an item back to 'pending' specifically so the NEXT
+-- translation run retries it — but Bazarr will never re-report either
+-- kind of item as "missing" (it still shows the flagged-wrong file, or
+-- the pre-existing file, as present in that slot), so the very next
+-- poll silently deleted them with no way to ever be rediscovered. This
+-- flag exempts an item from that purge — set by both reset paths,
+-- cleared once the item is actually retranslated (reaches done/
+-- translated_pending_upload again) so it re-enters normal purge
+-- eligibility like any other item from then on.
+ALTER TABLE items ADD COLUMN purge_exempt INTEGER NOT NULL DEFAULT 0;

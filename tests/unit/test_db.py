@@ -95,6 +95,44 @@ def test_purge_unsynced_items_removes_everything_but_translated(conn):
     assert [dict(r) for r in remaining] == [{"bazarr_id": 100, "status": "done"}]
 
 
+def test_purge_unsynced_items_spares_language_check_reset(conn):
+    """Regression test: confirmed live (v0.9.9) that a language-check
+    mismatch reset set an item back to 'pending' specifically so the NEXT
+    translation run would retry it — but the very next Bazarr poll
+    deleted it outright (purge_unsynced_items treats any 'pending' item
+    as safe to wipe and rebuild from Bazarr's current wanted list). Bazarr
+    never re-reports a mismatch-flagged item as "missing" (the
+    wrong-language file is still sitting in that slot as far as Bazarr's
+    concerned), so once purged it could never be rediscovered — three
+    real flagged items vanished entirely, gone from the Queue AND from a
+    fresh Bazarr pull. reset_item_for_language_mismatch must mark the
+    item purge_exempt so it survives until it's actually retranslated."""
+    repository.upsert_item_seen(
+        conn, item_type="episode", bazarr_id=99, series_id=2,
+        title="Ep", series_title="Show", season_episode="1x1",
+        target_language="es",
+    )
+    item = conn.execute("SELECT id FROM items WHERE bazarr_id = 99").fetchone()
+    repository.update_item_status(conn, item["id"], "done", mark_completed=True)
+
+    repository.reset_item_for_language_mismatch(conn, item["id"], "detected as English")
+    row = conn.execute("SELECT status, purge_exempt FROM items WHERE id = ?", (item["id"],)).fetchone()
+    assert row["status"] == "pending"
+    assert row["purge_exempt"] == 1
+
+    purged = repository.purge_unsynced_items(conn)
+
+    assert purged == 0
+    survivor = conn.execute("SELECT bazarr_id FROM items WHERE id = ?", (item["id"],)).fetchone()
+    assert survivor is not None  # still here — this is the exact bug that made it vanish
+
+    # Once genuinely retranslated, the exemption lifts — a LATER reset to
+    # pending (e.g. a stuck-translating cleanup) would purge normally again.
+    repository.update_item_status(conn, item["id"], "done", mark_completed=True)
+    row = conn.execute("SELECT purge_exempt FROM items WHERE id = ?", (item["id"],)).fetchone()
+    assert row["purge_exempt"] == 0
+
+
 def test_purge_unsynced_items_deletes_orphaned_run_log(conn):
     repository.upsert_item_seen(
         conn, item_type="episode", bazarr_id=99, series_id=2,
