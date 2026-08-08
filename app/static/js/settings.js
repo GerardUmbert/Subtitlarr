@@ -26,6 +26,11 @@ createApp({
       backupStarted: false,
       backupResult: null,
       backupError: "",
+      backups: [],
+      backupsLoading: false,
+      restoringFilename: null,
+      restoreResult: null,
+      restoreError: "",
     };
   },
   methods: {
@@ -118,12 +123,51 @@ createApp({
         } else {
           this.backupResult = status.backup.result;
           if (status.backup.error) this.backupError = status.backup.error;
+          await this.loadBackups();
         }
       };
       setTimeout(check, 1000);
     },
+    async loadBackups() {
+      this.backupsLoading = true;
+      try {
+        const result = await Api.listBackups();
+        this.backups = result.data;
+      } catch (_) {
+        // keep last known state on transient failure
+      } finally {
+        this.backupsLoading = false;
+      }
+    },
+    formatBackupTime(iso) {
+      return new Date(iso).toLocaleString();
+    },
+    formatBackupSize(bytes) {
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    },
+    confirmRestore(b) {
+      const label = this.formatBackupTime(b.created_at);
+      if (!confirm(`Restore the database from the ${label} snapshot? This overwrites all current data (a safety snapshot of the current state is taken first).`)) return;
+      this.restoreBackup(b.filename);
+    },
+    async restoreBackup(filename) {
+      this.restoringFilename = filename;
+      this.restoreError = "";
+      this.restoreResult = null;
+      try {
+        const result = await Api.restoreBackup(filename);
+        this.restoreResult = result;
+        await this.loadBackups();
+      } catch (err) {
+        this.restoreError = err.message;
+      } finally {
+        this.restoringFilename = null;
+      }
+    },
   },
   async mounted() {
     await this.load();
+    await this.loadBackups();
   },
 }).mount("#settings-app");

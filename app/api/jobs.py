@@ -326,6 +326,54 @@ async def run_backup_now(conn=Depends(state.get_conn)):
     return {"started": True}
 
 
+@router.get("/backups")
+async def list_backups():
+    """Every snapshot currently on disk (daily-cron and manual alike),
+    newest first — the restore dropdown's data source and, since only a
+    filename from this exact list is accepted back by /backups/restore,
+    also its allowlist."""
+    return {"data": backup.list_backups(settings.db_path)}
+
+
+class RestoreRequest(BaseModel):
+    filename: str
+
+
+@router.post("/backups/restore")
+async def restore_backup_now(
+    req: RestoreRequest, conn=Depends(state.get_conn), runner=Depends(state.get_runner)
+):
+    """Overwrites the LIVE database's content with a chosen snapshot, in
+    place, via sqlite3's backup API — the app keeps running against the
+    same open connection throughout, no restart needed for the DB file
+    itself. Blocked whenever ANY job is active (not just translation
+    runs): restoring mid-write from any of them would race against the
+    connection instead of just running concurrently, unlike a plain
+    backup. A safety snapshot of the pre-restore state is taken
+    automatically first, so this itself is always undoable.
+
+    NOTE: settings.py's in-memory Settings object (Bazarr connection,
+    schedule, etc.) is only re-read from app_config at startup — a
+    restore fixes the DB immediately, but those in-memory values can
+    keep showing stale (pre-restore) state until the process restarts.
+    The UI surfaces this; callers hitting this endpoint directly should
+    restart the app afterward too."""
+    if runner.current is not None and runner.current.active:
+        raise HTTPException(status_code=409, detail="Cannot restore while a translation run is in progress")
+    for name, state_dict in (
+        ("media sync", _sync_media_state), ("subtitle sync", _sync_subs_state),
+        ("upload push", _push_uploads_state), ("language check", _language_check_state),
+        ("backup", _backup_state),
+    ):
+        if state_dict["active"]:
+            raise HTTPException(status_code=409, detail=f"Cannot restore while a {name} is in progress")
+    try:
+        result = backup.restore_backup(conn, settings.db_path, req.filename)
+    except backup.RestoreError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"restored": True, **result}
+
+
 @router.get("/sync-status")
 async def get_sync_status():
     return {

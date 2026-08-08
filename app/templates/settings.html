@@ -98,6 +98,35 @@
       </div>
       <p class="field-hint" v-if="backupResult">● snapshot written, {% raw %}{{ backupResult.pruned }}{% endraw %} old snapshot(s) pruned</p>
       <p class="field-hint error" v-if="backupError">● {% raw %}{{ backupError }}{% endraw %}</p>
+
+      <div style="margin-top:20px; border-top:1px solid var(--border); padding-top:16px;">
+        <div class="field-row" style="margin-bottom:10px;">
+          <strong style="font-size:14px;">Restore from a snapshot</strong>
+          <button class="btn" @click="loadBackups" :disabled="backupsLoading" style="margin-left:auto;">
+            {% raw %}{{ backupsLoading ? 'Loading…' : 'Refresh list' }}{% endraw %}
+          </button>
+        </div>
+        <p class="field-hint" style="margin-top:0;">Overwrites the live database in place with the chosen snapshot. A safety snapshot of the current state is taken automatically first, so this is itself always undoable. Blocked while any job is running. <strong>Restart the app after restoring</strong> — the database is corrected immediately, but a few in-memory settings (Bazarr connection, schedule) only get re-read from it on startup, so they can keep showing stale values until then.</p>
+        <div v-if="!backups.length && !backupsLoading" class="field-hint">No snapshots yet.</div>
+        <table v-else style="margin-top:8px;">
+          <thead>
+            <tr><th>Snapshot</th><th>Size</th><th></th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="b in backups" :key="b.filename">
+              <td>{% raw %}{{ formatBackupTime(b.created_at) }}{% endraw %}</td>
+              <td class="mono">{% raw %}{{ formatBackupSize(b.size_bytes) }}{% endraw %}</td>
+              <td>
+                <button class="btn" @click="confirmRestore(b)" :disabled="restoringFilename !== null">
+                  {% raw %}{{ restoringFilename === b.filename ? 'Restoring…' : 'Restore' }}{% endraw %}
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="field-hint" v-if="restoreResult">● restored from {% raw %}{{ restoreResult.restored_from }}{% endraw %} — pre-restore state saved as {% raw %}{{ restoreResult.safety_snapshot }}{% endraw %}</p>
+      <p class="field-hint error" v-if="restoreError">● {% raw %}{{ restoreError }}{% endraw %}</p>
     </div>
   </div>
 
