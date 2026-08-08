@@ -58,6 +58,9 @@ class TrackingProvider(TranslationProvider):
         finally:
             self.in_flight -= 1
 
+    async def ask(self, prompt: str) -> str:
+        return ""
+
     async def test_connection(self) -> ProviderStatus:
         return ProviderStatus(ok=True)
 
@@ -157,6 +160,9 @@ async def test_nvidia_falls_back_per_batch_on_rate_limit_within_a_window():
                 raise ProviderRateLimitedError("simulated 429")
             return f"{index}\nOK {index}"
 
+        async def ask(self, prompt: str) -> str:
+            return ""
+
         async def test_connection(self):
             return ProviderStatus(ok=True)
 
@@ -193,6 +199,9 @@ async def test_transient_failure_retries_same_provider_before_falling_back():
             if index == 2 and self.attempts.count(2) == 1:
                 raise ProviderRateLimitedError("simulated transient 504")
             return f"{index}\nOK {index}"
+
+        async def ask(self, prompt: str) -> str:
+            return ""
 
         async def test_connection(self):
             return ProviderStatus(ok=True)
@@ -236,6 +245,9 @@ async def test_retry_and_fallback_emit_run_events():
                 raise ProviderRateLimitedError("simulated 504")
             return f"{index}\nOK {index}"
 
+        async def ask(self, prompt: str) -> str:
+            return ""
+
         async def test_connection(self):
             return ProviderStatus(ok=True)
 
@@ -246,6 +258,9 @@ async def test_retry_and_fallback_emit_run_events():
 
         async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, language_variants=None):
             raise ProviderRateLimitedError("simulated persistent 504")
+
+        async def ask(self, prompt: str) -> str:
+            return ""
 
         async def test_connection(self):
             return ProviderStatus(ok=True)
@@ -300,6 +315,9 @@ async def test_content_blocked_falls_back_immediately_without_same_provider_retr
             self.attempts.append(index)
             raise ProviderContentBlockedError("blocked: PROHIBITED_CONTENT")
 
+        async def ask(self, prompt: str) -> str:
+            return ""
+
         async def test_connection(self):
             return ProviderStatus(ok=True)
 
@@ -332,6 +350,9 @@ async def test_content_blocked_reraises_when_no_fallback_configured():
         async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, language_variants=None):
             raise ProviderContentBlockedError("blocked: PROHIBITED_CONTENT")
 
+        async def ask(self, prompt: str) -> str:
+            return ""
+
         async def test_connection(self):
             return ProviderStatus(ok=True)
 
@@ -363,6 +384,9 @@ class RepetitionLoopProvider(TranslationProvider):
         indices = [int(line) for line in dialogue_text.splitlines() if line.strip().isdigit()]
         return "\n".join(f"{i}\nRepeated identical translated line" for i in indices)
 
+    async def ask(self, prompt: str) -> str:
+        return ""
+
     async def test_connection(self):
         return ProviderStatus(ok=True)
 
@@ -383,6 +407,9 @@ class GoodTranslationProvider(TranslationProvider):
         indices = [int(line) for line in dialogue_text.splitlines() if line.strip().isdigit()]
         self.call_order.extend(indices)
         return "\n".join(f"{i}\nTranslated {i}" for i in indices)
+
+    async def ask(self, prompt: str) -> str:
+        return ""
 
     async def test_connection(self):
         return ProviderStatus(ok=True)

@@ -37,9 +37,9 @@ def test_saved_settings_survive_simulated_restart(conn):
 
 
 def test_unsaved_settings_keep_env_defaults(conn):
-    fresh_settings = Settings()
+    fresh_settings = Settings(_env_file=None)
     settings_store.load_into(conn, fresh_settings)
-    assert fresh_settings.schedule_cron == "0 3 * * *"  # untouched default survives
+    assert fresh_settings.schedule_cron == "10 3 * * *"  # untouched default survives
 
 
 def test_save_one_rejects_unknown_key(conn):

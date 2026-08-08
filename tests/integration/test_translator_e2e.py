@@ -101,6 +101,9 @@ class FakeProvider(TranslationProvider):
         # trivial "translation": prefix each line to prove content flowed through
         return "1\nHola.\n\n2\n¿Cómo estás?"
 
+    async def ask(self, prompt: str) -> str:
+        return ""
+
     async def test_connection(self) -> ProviderStatus:
         return ProviderStatus(ok=True)
 
@@ -227,6 +230,9 @@ async def test_failed_translation_still_logs_engine_used(conn, monkeypatch):
             # triggers TranslationAlignmentError, one of the failure
             # paths that previously dropped engine_used.
             return "not a valid numbered response"
+
+        async def ask(self, prompt: str) -> str:
+            return ""
 
         async def test_connection(self) -> ProviderStatus:
             return ProviderStatus(ok=True)
@@ -465,6 +471,9 @@ class EchoProvider(TranslationProvider):
             idx, content = block.split("\n", 1)
             out.append(f"{idx}\nTR:{content}")
         return "\n\n".join(out)
+
+    async def ask(self, prompt: str) -> str:
+        return ""
 
     async def test_connection(self) -> ProviderStatus:
         return ProviderStatus(ok=True)
