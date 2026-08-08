@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.9.10]
+
+### Fixed
+- Language-check and stale-audit resets could get silently deleted by
+  the very next Bazarr poll — confirmed live: three flagged items
+  vanished entirely, gone from the Queue AND from a fresh Bazarr pull.
+  Both resets set an item back to pending so the next run retries it,
+  but the routine "purge unsynced items" cleanup treats any pending item
+  as safe to wipe, and Bazarr never re-reports a reset item as missing
+  (the flagged-wrong or pre-existing file is still sitting in that slot).
+  Reset items are now exempted from that purge until they actually
+  complete again.
+
 ## [0.9.9]
 
 ### Fixed
