@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.9.9]
+
+### Fixed
+- The 0.9.8 same-language guard checked existence only, not content, so
+  it broke every language-check mismatch reset outright — a reset item
+  went back to pending to get retranslated, but Bazarr still had the
+  just-flagged-WRONG file in that slot, and the guard saw that file,
+  concluded "already there," and silently marked the item done again
+  without ever fixing it. Confirmed live: flagged items vanished from
+  the Queue instead of reappearing as pending. Now checks the existing
+  file's content for the Subtitlarr disclaimer before skipping — only a
+  genuinely untouched file skips translation.
+
 ## [0.9.8]
 
 ### Added
