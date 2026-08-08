@@ -3,6 +3,31 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.9.8]
+
+### Added
+- **Stale translation audit** (Jobs page) — checks every "done" item
+  against Bazarr's CURRENT subtitle list (one cheap call per item, no
+  LLM involved) and resets any with no real subtitle actually present
+  for their target language back to pending. Confirmed live: 156 of 869
+  done items on a real backup were stale — marked translated with no
+  real subtitle on Bazarr for that language — while genuine gaps were
+  correctly left untouched.
+
+### Fixed
+- Translation now checks immediately before starting whether Bazarr
+  already has a real subtitle in the target language, and skips
+  straight to done without spending an LLM call or uploading anything
+  if so. Root-caused via the language check and a real NAS backup:
+  confirmed items were ending up marked "done" with target_language set
+  to a language Bazarr's wanted-list had misreported as missing at some
+  earlier poll, even though Bazarr already had the real file the whole
+  time (Stargate SG-1, Marshals, Fullmetal Alchemist, and others).
+- Fixed CI failing on every push since the last release — the test
+  suite's fake translation-provider stand-ins were missing the `ask()`
+  method added alongside the Compare Engines tool, so every test that
+  instantiated one failed outright.
+
 ## [0.9.7]
 
 ### Added
