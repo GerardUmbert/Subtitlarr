@@ -88,6 +88,28 @@ def reset_stuck_translating_items(conn: sqlite3.Connection) -> int:
         return cur.rowcount
 
 
+def purge_unsynced_items(conn: sqlite3.Connection) -> int:
+    """Wipes every item not yet translated (anything but 'done' and
+    'translated_pending_upload') ahead of a fresh poll_once() sync, so
+    wanted/translatable/no_source stats are rebuilt entirely from what
+    Bazarr reports THIS poll instead of accumulating forever. Without this,
+    a transient spike in Bazarr's wanted list (e.g. toggling "treat bundled
+    subtitles as downloaded") permanently inflates local counts, since nothing
+    else in the sync path ever deletes rows. item_run_log entries for purged
+    items are deleted too, so History's item join never sees orphans.
+    Returns the number of items purged."""
+    with conn:
+        rows = conn.execute(
+            "SELECT id FROM items WHERE status NOT IN ('done', 'translated_pending_upload')"
+        ).fetchall()
+        ids = [row["id"] for row in rows]
+        if ids:
+            placeholders = ",".join("?" for _ in ids)
+            conn.execute(f"DELETE FROM item_run_log WHERE item_id IN ({placeholders})", ids)
+            conn.execute(f"DELETE FROM items WHERE id IN ({placeholders})", ids)
+        return len(ids)
+
+
 def upsert_item_seen(
     conn: sqlite3.Connection,
     *,
@@ -127,30 +149,6 @@ def upsert_item_seen(
                 now,
             ),
         )
-
-
-def mark_resolved_if_missing(
-    conn: sqlite3.Connection, item_type: str, bazarr_id: int, still_missing_languages: set[str]
-) -> None:
-    """Items no longer in Bazarr's missing_subtitles list (Bazarr found a real
-    subtitle, or the target was unmonitored) are pulled out of active
-    consideration rather than left to linger as pending/queued forever."""
-    now = _now()
-    rows = conn.execute(
-        """
-        SELECT id, target_language FROM items
-        WHERE item_type = ? AND bazarr_id = ?
-          AND status IN ('pending', 'queued', 'failed')
-        """,
-        (item_type, bazarr_id),
-    ).fetchall()
-    with conn:
-        for row in rows:
-            if row["target_language"] not in still_missing_languages:
-                conn.execute(
-                    "UPDATE items SET status = 'done', last_updated = ? WHERE id = ?",
-                    (now, row["id"]),
-                )
 
 
 def mark_skipped_no_source(conn: sqlite3.Connection, item_id: int) -> None:

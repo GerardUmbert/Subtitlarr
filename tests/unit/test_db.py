@@ -74,15 +74,40 @@ def test_age_gated_queue_respects_threshold(conn):
     assert len(repository.get_age_gated_queue(conn, age_threshold_days=14)) == 1
 
 
-def test_mark_resolved_if_missing_clears_item_no_longer_wanted(conn):
+def test_purge_unsynced_items_removes_everything_but_translated(conn):
     repository.upsert_item_seen(
         conn, item_type="episode", bazarr_id=99, series_id=2,
         title="Ep", series_title="Show", season_episode="1x1",
         target_language="es",
     )
-    repository.mark_resolved_if_missing(conn, "episode", 99, still_missing_languages=set())
-    row = conn.execute("SELECT * FROM items WHERE bazarr_id = 99").fetchone()
-    assert row["status"] == "done"
+    repository.upsert_item_seen(
+        conn, item_type="episode", bazarr_id=100, series_id=2,
+        title="Ep2", series_title="Show", season_episode="1x2",
+        target_language="es",
+    )
+    done_item = conn.execute("SELECT id FROM items WHERE bazarr_id = 100").fetchone()
+    repository.update_item_status(conn, done_item["id"], "done", mark_completed=True)
+
+    purged = repository.purge_unsynced_items(conn)
+
+    assert purged == 1
+    remaining = conn.execute("SELECT bazarr_id, status FROM items").fetchall()
+    assert [dict(r) for r in remaining] == [{"bazarr_id": 100, "status": "done"}]
+
+
+def test_purge_unsynced_items_deletes_orphaned_run_log(conn):
+    repository.upsert_item_seen(
+        conn, item_type="episode", bazarr_id=99, series_id=2,
+        title="Ep", series_title="Show", season_episode="1x1",
+        target_language="es",
+    )
+    failed_item = conn.execute("SELECT id FROM items WHERE bazarr_id = 99").fetchone()
+    repository.update_item_status(conn, failed_item["id"], "failed")
+    repository.log_item_attempt(conn, failed_item["id"], None, "failed")
+
+    repository.purge_unsynced_items(conn)
+
+    assert conn.execute("SELECT COUNT(*) FROM item_run_log").fetchone()[0] == 0
 
 
 def test_stats_counts_by_status(conn):

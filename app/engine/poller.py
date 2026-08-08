@@ -36,16 +36,27 @@ async def _resolve_and_preview_source(
 
 
 async def poll_once(conn: sqlite3.Connection, client: BazarrClient) -> dict:
-    """Refreshes items from Bazarr's wanted lists: upserts newly-seen
-    (item, missing target language) pairs, stamping first_seen_wanted only on
-    first sight, resolves items Bazarr no longer lists as missing, and
-    eagerly previews each new item's source language for display."""
+    """Refreshes items from Bazarr's wanted lists. Purges every item not yet
+    translated (repository.purge_unsynced_items) before re-syncing, so
+    wanted/translatable/no_source stats are always rebuilt fresh from
+    Bazarr's current wanted list rather than accumulating stale rows across
+    polls (e.g. a transient spike from toggling Bazarr's "treat bundled
+    subtitles as downloaded" setting would otherwise inflate counts
+    permanently). Only 'done'/'translated_pending_upload' items survive the
+    purge — those are Subtitlarr's own durable "translated" record and
+    don't depend on Bazarr still listing the item as wanted.
+    Upserts newly-seen (item, missing target language) pairs, stamping
+    first_seen_wanted only on first sight, and eagerly previews each new
+    item's source language for display."""
+    purged = repository.purge_unsynced_items(conn)
+    if purged:
+        logger.info("Purged %d unsynced item(s) ahead of fresh poll", purged)
+
     episodes_seen = 0
     movies_seen = 0
     source_priority = repository.get_config(conn, "source_lang_priority", default=[])
 
     async for wanted in client.iter_all_wanted_episodes():
-        still_missing = {lang.code2 for lang in wanted.missing_subtitles}
         for lang in wanted.missing_subtitles:
             repository.upsert_item_seen(
                 conn,
@@ -60,13 +71,9 @@ async def poll_once(conn: sqlite3.Connection, client: BazarrClient) -> dict:
             await _resolve_and_preview_source(
                 conn, client, "episode", wanted.sonarrEpisodeId, lang.code2, source_priority
             )
-        repository.mark_resolved_if_missing(
-            conn, "episode", wanted.sonarrEpisodeId, still_missing
-        )
         episodes_seen += 1
 
     async for wanted in client.iter_all_wanted_movies():
-        still_missing = {lang.code2 for lang in wanted.missing_subtitles}
         for lang in wanted.missing_subtitles:
             repository.upsert_item_seen(
                 conn,
@@ -81,9 +88,6 @@ async def poll_once(conn: sqlite3.Connection, client: BazarrClient) -> dict:
             await _resolve_and_preview_source(
                 conn, client, "movie", wanted.radarrId, lang.code2, source_priority
             )
-        repository.mark_resolved_if_missing(
-            conn, "movie", wanted.radarrId, still_missing
-        )
         movies_seen += 1
 
     logger.info("Poll complete: %d episodes, %d movies seen as wanted", episodes_seen, movies_seen)

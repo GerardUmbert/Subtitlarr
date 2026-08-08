@@ -4,6 +4,14 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Subtitlarr — {% block title %}Dashboard{% endblock %}</title>
+  <link rel="icon" href="/static/icon.svg?v={{ asset_version }}" />
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png?v={{ asset_version }}" />
+  <link rel="manifest" href="/static/manifest.json?v={{ asset_version }}" />
+  <meta name="theme-color" content="#3f6690" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Subtitlarr" />
   <link rel="stylesheet" href="/static/css/tokens.css?v={{ asset_version }}" />
   <link rel="stylesheet" href="/static/css/base.css?v={{ asset_version }}" />
   <link rel="stylesheet" href="/static/css/components.css?v={{ asset_version }}" />
@@ -37,6 +45,11 @@
   <script src="/static/js/toast.js?v={{ asset_version }}"></script>
   <script src="/static/js/run-events.js?v={{ asset_version }}"></script>
   <script>RunEvents.start();</script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/static/js/sw.js");
+    }
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

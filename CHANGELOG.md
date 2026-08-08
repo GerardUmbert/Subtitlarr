@@ -3,6 +3,42 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.9.3]
+
+### Added
+- Subtitlarr is now installable as a PWA — `manifest.json`, `theme-color`/
+  `apple-touch-icon` tags, and a service worker (`app/static/js/sw.js`)
+  wired into `base.html`. The service worker is intentionally a bare
+  passthrough (installability only, no caching): every page already busts
+  its own JS/CSS on each server restart via `asset_version`, and the
+  dashboard's actual data (queue, stats) is meaningless without a live
+  connection anyway, so caching would only risk serving stale assets or a
+  frozen queue view. Also added the `apple-mobile-web-app-capable`/
+  `-title`/`-status-bar-style` and `mobile-web-app-capable` meta tags
+  (missing these is why "Add to Home Screen" opens inside Safari's
+  browser chrome instead of standalone), and rasterized `icon.svg` into
+  real 192×192/512×512 PNGs (`app/static/icons/`) with both `any` and
+  `maskable` purpose entries in the manifest — an SVG-only icon is a
+  known flaky spot for some Chrome/Android install-criteria checks.
+
+### Fixed
+- **Wanted/translatable/no-source stats could drift permanently out of
+  sync with Bazarr and never recover.** Every poll only ever upserted
+  items and flipped resolved ones to `done` — nothing ever deleted a
+  stale row, so `wanted` was really "every item ever seen," not "every
+  item Bazarr currently wants." A transient spike (e.g. toggling
+  Bazarr's "treat bundled subtitles as downloaded" setting) permanently
+  inflated the count with no way back short of a full "Clear database."
+  Each poll now purges every item that isn't `done`/
+  `translated_pending_upload` before re-syncing, so wanted/translatable/
+  no-source are rebuilt fresh from Bazarr's current wanted list on every
+  sync; only the translated total persists across polls.
+
+- The running web app itself had no favicon — `docs/assets/icon.svg` (the
+  public site's icon) was never wired into `app/templates/base.html`.
+  Copied to `app/static/icon.svg` and linked so the app's own browser tab
+  now shows it too.
+
 ## [0.9.2]
 
 ### Fixed
