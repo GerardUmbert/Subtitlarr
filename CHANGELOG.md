@@ -3,6 +3,26 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.9.11]
+
+### Fixed
+- Restoring a backup taken on an older release left the live database on
+  that old schema until the next restart, since nothing re-applied
+  migrations — the very next call to a function touching a column added
+  since would crash. Migrations are now re-applied immediately after
+  every restore.
+- Backup filenames could collide at second resolution — restore's own
+  safety-snapshot-before-restoring step guaranteed a same-second
+  collision on every restore that followed shortly after a backup,
+  silently overwriting the very file about to be restored from before
+  it was ever read. Bumped to millisecond resolution.
+
+### Changed
+- Hid the "Pull model" button on the Engines page for now — the
+  model-name field's "type a custom model name instead" toggle wasn't
+  discoverable. Pull a model directly on the Ollama host in the
+  meantime.
+
 ## [0.9.10]
 
 ### Fixed
