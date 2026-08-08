@@ -58,6 +58,7 @@ async def get_bazarr_languages(client: BazarrClient = Depends(state.get_client))
     return await client.get_languages()
 
 
+
 @router.get("/episode/{sonarr_episode_id}/detail")
 async def get_episode_raw_detail(
     sonarr_episode_id: int, client: BazarrClient = Depends(state.get_client)

@@ -3,6 +3,20 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.9.1]
+
+### Added
+- The AI-translation disclaimer cue prepended to every subtitle is now
+  itself translated into the target language instead of always being in
+  English — e.g. a Spanish subtitle gets a Spanish disclaimer, not an
+  English one at the top of a Spanish file. Covers all ~187 languages
+  Bazarr recognizes (`app/subtitles/disclaimer_translations.json`,
+  generated once via Gemini, committed as a static file — no extra AI
+  call at translation time). The template fills in the actual source/
+  target language names (e.g. "Subtitlarr used AI to translate this from
+  English into Spanish..."); falls back to the English template for any
+  language code not in the file.
+
 ## [0.9.0]
 
 ### Fixed

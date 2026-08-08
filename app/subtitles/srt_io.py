@@ -1,4 +1,6 @@
+import json
 from datetime import timedelta
+from pathlib import Path
 
 import srt
 
@@ -84,18 +86,39 @@ def chunk_cues(subs: list[srt.Subtitle], max_tokens_per_batch: int = 900) -> lis
     return batches
 
 
-DISCLAIMER_TEXT = "Generated via Subtitlarr using AI — may contain translation errors."
+DISCLAIMER_TEXT = "Subtitlarr used AI to translate this from {source} into {target}. Expect occasional errors."
 DISCLAIMER_DURATION = timedelta(seconds=10)
 DISCLAIMER_MIN_DURATION = timedelta(milliseconds=500)
 
+_DISCLAIMER_TRANSLATIONS_PATH = Path(__file__).parent / "disclaimer_translations.json"
+with _DISCLAIMER_TRANSLATIONS_PATH.open(encoding="utf-8") as _f:
+    DISCLAIMER_TRANSLATIONS: dict[str, str] = json.load(_f)
 
-def with_ai_disclaimer(subs: list[srt.Subtitle]) -> list[srt.Subtitle]:
+
+def disclaimer_text(target_lang: str, source_name: str, target_name: str) -> str:
+    """Picks the target language's own translation of the AI-disclaimer
+    template (see DISCLAIMER_TRANSLATIONS, generated once via Gemini and
+    committed as a static file — see app/api/debug.py's
+    generate-disclaimer-translations for how it was built), falling back
+    to the English template for any code not in that file. source_name/
+    target_name are the already-resolved full language names (see
+    app.providers.languages.language_name) substituted into the template's
+    {source}/{target} placeholders — always in English, since per-language
+    translated language names aren't available, but that's a minor,
+    expected wrinkle in an otherwise fully translated sentence."""
+    template = DISCLAIMER_TRANSLATIONS.get(target_lang.lower(), DISCLAIMER_TEXT)
+    return template.format(source=source_name, target=target_name)
+
+
+def with_ai_disclaimer(subs: list[srt.Subtitle], text: str) -> list[srt.Subtitle]:
     """Prepends a 10-second disclaimer cue at the very start of the file, so
     viewers know this subtitle was machine-translated rather than sourced
-    from a human/official release. Deliberately does NOT shift any of the
-    original cues' timing — a disclaimer briefly overlapping the first line
-    of real dialogue is harmless, whereas shifting every timestamp would
-    desync the whole file from the video's actual audio.
+    from a human/official release. `text` is the disclaimer sentence to use
+    — see disclaimer_text() to build one translated into the target
+    language. Deliberately does NOT shift any of the original cues' timing
+    — a disclaimer briefly overlapping the first line of real dialogue is
+    harmless, whereas shifting every timestamp would desync the whole file
+    from the video's actual audio.
 
     srt.compose() re-sorts all cues by (start, end, index) regardless of
     input list order (see srt.Subtitle.__lt__) — a disclaimer ending at 10s
@@ -116,7 +139,7 @@ def with_ai_disclaimer(subs: list[srt.Subtitle]) -> list[srt.Subtitle]:
         index=1,
         start=timedelta(seconds=0),
         end=disclaimer_end,
-        content=DISCLAIMER_TEXT,
+        content=text,
     )
     renumbered = [disclaimer] + [
         srt.Subtitle(index=i + 2, start=sub.start, end=sub.end, content=sub.content, proprietary=sub.proprietary)

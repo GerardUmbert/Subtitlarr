@@ -13,6 +13,7 @@ from app.providers.base import (
     ProviderRateLimitedError,
     TranslationProvider,
 )
+from app.providers.languages import language_name
 from app.subtitles import srt_io
 from app.subtitles.reconciler import (
     TranslationAlignmentError,
@@ -513,7 +514,10 @@ async def translate_item(
         verify_full_file_integrity(original_subs, translated_subs)
 
         if add_ai_disclaimer:
-            translated_subs = srt_io.with_ai_disclaimer(translated_subs)
+            disclaimer = srt_io.disclaimer_text(
+                target_lang, language_name(source_lang), language_name(target_lang)
+            )
+            translated_subs = srt_io.with_ai_disclaimer(translated_subs, disclaimer)
         srt_bytes = srt_io.compose_srt(translated_subs)
 
         if queue_uploads:
