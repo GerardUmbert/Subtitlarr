@@ -7,6 +7,8 @@ venv/
 data/
 ollama-data/
 *.db
+*.db-shm
+*.db-wal
 .pytest_cache/
 node_modules/
 plans/

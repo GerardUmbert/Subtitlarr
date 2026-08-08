@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from app import state
 from app.config import settings
 from app.db import engine_instances_repo, repository
-from app.engine import backup, language_check, upload_queue
+from app.engine import backup, language_check, stale_audit, upload_queue
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -374,6 +374,52 @@ async def restore_backup_now(
     return {"restored": True, **result}
 
 
+_stale_audit_state = {"active": False, "error": None, "result": None}
+
+
+@router.post("/stale-audit")
+async def run_stale_audit_now(
+    conn=Depends(state.get_conn), client=Depends(state.get_client), runner=Depends(state.get_runner)
+):
+    """One-pass audit of every 'done' item against Bazarr's CURRENT
+    subtitle state — confirmed live: items can end up marked 'done' with
+    no real subtitle actually present on Bazarr for their target
+    language (a stale wanted-list report, Bazarr removing the uploaded
+    file since, etc. — see app.engine.stale_audit and translator.
+    translate_item's own forward-looking guard against the same mistake).
+    Resets any found item back to 'pending'. Cheap (one Bazarr call per
+    done item, no LLM involved) but still blocked during a translation
+    run to avoid resetting an item the run is actively re-checking."""
+    if _stale_audit_state["active"]:
+        return {"started": False, "reason": "A stale audit is already in progress"}
+    if runner.current is not None and runner.current.active:
+        return {"started": False, "reason": "A translation run is already in progress"}
+
+    async def _run():
+        event_id = repository.start_job_event(conn, "stale_audit", triggered_by="manual")
+        _stale_audit_state["active"] = True
+        _stale_audit_state["error"] = None
+        _stale_audit_state["result"] = None
+        try:
+            result = await stale_audit.run_stale_audit(conn, client)
+            _stale_audit_state["result"] = result
+            repository.finish_job_event(
+                conn, event_id, status="done",
+                result=(
+                    f"{result['checked']} checked, {result['ok']} ok, "
+                    f"{result['stale']} stale (reset), {result['inconclusive']} inconclusive"
+                ),
+            )
+        except Exception as exc:  # noqa: BLE001 - surface to the UI, don't crash the app
+            _stale_audit_state["error"] = str(exc)
+            repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
+        finally:
+            _stale_audit_state["active"] = False
+
+    asyncio.create_task(_run())
+    return {"started": True}
+
+
 @router.get("/sync-status")
 async def get_sync_status():
     return {
@@ -382,6 +428,7 @@ async def get_sync_status():
         "push_uploads": dict(_push_uploads_state),
         "language_check": dict(_language_check_state),
         "backup": dict(_backup_state),
+        "stale_audit": dict(_stale_audit_state),
     }
 
 

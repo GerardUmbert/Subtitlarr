@@ -88,6 +88,7 @@ const Api = (() => {
     syncMedia: () => request("POST", "/api/jobs/sync-media"),
     syncSubs: () => request("POST", "/api/jobs/sync-subs"),
     runLanguageCheck: () => request("POST", "/api/jobs/language-check"),
+    runStaleAudit: () => request("POST", "/api/jobs/stale-audit"),
     getLanguageCheckSettings: () => request("GET", "/api/jobs/language-check/settings"),
     setLanguageCheckSettings: (instanceId) =>
       request("POST", "/api/jobs/language-check/settings", { instance_id: instanceId }),

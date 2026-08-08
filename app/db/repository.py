@@ -542,6 +542,37 @@ def reset_item_for_language_mismatch(conn: sqlite3.Connection, item_id: int, det
         )
 
 
+def get_done_items_for_stale_audit(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Every 'done' item — no batch limit, unlike get_items_for_language_check:
+    this only costs one Bazarr detail call per item (no LLM involved), so
+    there's no quota to conserve, and the whole point is a full sweep in
+    one pass."""
+    return conn.execute("SELECT * FROM items WHERE status = 'done'").fetchall()
+
+
+def reset_item_for_stale_audit(conn: sqlite3.Connection, item_id: int) -> None:
+    """Confirmed live (v0.9.7): a 'done' item whose target_language has no
+    real subtitle on Bazarr right now is simply a wrong record, regardless
+    of how it got that way (stale wanted-list report, Bazarr deleting the
+    uploaded file since, etc.) — reset to 'pending' so it flows through
+    the normal pipeline again, this time behind translator.translate_item's
+    own before-translation guard against the same mistake recurring."""
+    now = _now()
+    with conn:
+        conn.execute(
+            """
+            UPDATE items
+            SET status = 'pending', error_message = ?, last_updated = ?
+            WHERE id = ?
+            """,
+            (
+                "Stale audit: Bazarr has no real subtitle for this item's "
+                "target language despite status='done' — reset for a fresh attempt.",
+                now, item_id,
+            ),
+        )
+
+
 def log_language_mismatch(
     conn: sqlite3.Connection,
     *,

@@ -43,6 +43,11 @@ createApp({
       languageCheckStarted: false,
       languageCheckResult: null,
       languageCheckError: "",
+      staleAuditActive: false,
+      startingStaleAudit: false,
+      staleAuditStarted: false,
+      staleAuditResult: null,
+      staleAuditError: "",
       error: "",
       _pollHandle: null,
     };
@@ -78,6 +83,7 @@ createApp({
       try {
         const status = await Api.getSyncStatus();
         this.languageCheckActive = status.language_check.active;
+        this.staleAuditActive = status.stale_audit.active;
       } catch (_) {
         // keep last known state on transient failure
       }
@@ -271,6 +277,40 @@ createApp({
           setTimeout(check, 1000);
         } else {
           if (status.language_check.error) this.languageCheckError = status.language_check.error;
+          await this.load();
+        }
+      };
+      setTimeout(check, 1000);
+    },
+    async runStaleAudit() {
+      this.startingStaleAudit = true;
+      this.staleAuditError = "";
+      this.staleAuditResult = null;
+      try {
+        const result = await Api.runStaleAudit();
+        if (!result.started) {
+          this.staleAuditError = result.reason || "Could not start stale audit";
+          return;
+        }
+        this.staleAuditStarted = true;
+        setTimeout(() => (this.staleAuditStarted = false), 3000);
+        await this.load();
+        this.pollStaleAuditResult();
+      } catch (err) {
+        this.staleAuditError = err.message;
+      } finally {
+        this.startingStaleAudit = false;
+      }
+    },
+    pollStaleAuditResult() {
+      const check = async () => {
+        const status = await Api.getSyncStatus();
+        this.staleAuditActive = status.stale_audit.active;
+        if (status.stale_audit.active) {
+          setTimeout(check, 1000);
+        } else {
+          this.staleAuditResult = status.stale_audit.result;
+          if (status.stale_audit.error) this.staleAuditError = status.stale_audit.error;
           await this.load();
         }
       };

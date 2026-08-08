@@ -127,6 +127,32 @@
 
   <div class="panel" style="margin-top:16px;">
     <div class="panel-body">
+    <div class="panel-title">Stale translation audit</div>
+    <div class="panel-title-sub">Checks every "done" item against Bazarr's CURRENT subtitle list — an item can end up marked done with no real subtitle actually present (a stale wanted-list report, Bazarr removing the uploaded file since, etc.)</div>
+
+      <p class="field-hint">
+        One Bazarr call per done item, no LLM involved — cheap to run any time. Any item found with
+        no real subtitle for its target language on Bazarr right now is reset to pending for a fresh
+        attempt. Never uploads or touches Bazarr itself.
+      </p>
+      <div class="field-row">
+        <button class="btn" @click="runStaleAudit" :disabled="staleAuditActive || startingStaleAudit">
+          {% raw %}{{ staleAuditActive ? 'Auditing…' : (startingStaleAudit ? 'Starting…' : 'Run stale audit') }}{% endraw %}
+        </button>
+        <span v-if="staleAuditStarted" class="test-result">● started</span>
+      </div>
+      <p class="field-hint" v-if="staleAuditResult">
+        ● checked {% raw %}{{ staleAuditResult.checked }}{% endraw %},
+        {% raw %}{{ staleAuditResult.ok }}{% endraw %} ok,
+        {% raw %}{{ staleAuditResult.stale }}{% endraw %} stale (reset)<template v-if="staleAuditResult.inconclusive">,
+        {% raw %}{{ staleAuditResult.inconclusive }}{% endraw %} inconclusive</template>
+      </p>
+      <p class="field-hint error" v-if="staleAuditError">● {% raw %}{{ staleAuditError }}{% endraw %}</p>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px;">
+    <div class="panel-body">
     <div class="panel-title">Fix broken runs</div>
     <div class="panel-title-sub">Closes out run history entries left stuck "in progress" by a process that was killed mid-batch — does not delete anything</div>
 
