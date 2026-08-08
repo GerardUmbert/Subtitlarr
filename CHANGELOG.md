@@ -13,6 +13,12 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   concurrently with a live translation run or any other job. The only
   recovery path for a destructive mistake (clear-database has no undo)
   or a bad migration. Also runnable on demand from Settings.
+- **Restore from a backup snapshot** — the Settings page now lists every
+  available snapshot and can restore any of them into the live database
+  in place (same backup API, run in reverse), with no app restart needed
+  for the data itself. A safety snapshot of the pre-restore state is
+  taken automatically first, so a restore is always itself undoable.
+  Blocked while any job is active.
 
 ### Fixed
 - The language check could hang forever if an entire batch skipped (no
