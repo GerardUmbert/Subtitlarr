@@ -25,9 +25,9 @@
   <template v-else>
   <div class="stats">
     <a class="stat" href="/queue?status=&item_type=&exclude_no_source=0">
-      <div class="stat-label">Wanted (Bazarr)</div>
+      <div class="stat-label">Wanted (language-pairs)</div>
       <div class="stat-value">{% raw %}{{ stats.wanted ?? '—' }}{% endraw %}</div>
-      <div class="stat-hint">tracked missing-subtitle items</div>
+      <div class="stat-hint">missing item/language pairs</div>
     </a>
     <a class="stat" href="/queue?status=&item_type=&exclude_no_source=1">
       <div class="stat-label">Translatable</div>

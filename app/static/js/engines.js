@@ -39,7 +39,7 @@ const PROVIDER_TYPES = {
     fields: [
       { key: "base_url", label: "Base URL", placeholder: "http://localhost:8080", hint:
         "llama.cpp's own built-in local HTTP server — a separate local runtime from Ollama, not another name for it. Start/stop and model selection happen on the llama.cpp server itself." },
-      { key: "model", label: "Model name (optional)", placeholder: "gemma3:4b", hint:
+      { key: "model", label: "Model name (optional)", placeholder: "gemma3:4b", llamacppModelPicker: true, hint:
         "Most llama.cpp servers ignore this — only one model is ever loaded. Some builds/reverse proxies reject a request with no model field at all — set this to whatever /v1/models reports if you hit a \"model name is missing\" error." },
       { key: "api_key", label: "API key", type: "password", secret: true, optional: true, hint:
         "llama.cpp's own server has no built-in auth — only needed if the Base URL points at an instance behind a reverse proxy/gateway enforcing its own auth. Sent as Authorization: Bearer." },
@@ -111,6 +111,10 @@ createApp({
       ollamaModels: {}, // instance_id -> models[]
       ollamaModelsError: {},
       loadingOllamaModels: {},
+      llamacppModels: {}, // instance_id -> models[]
+      llamacppModelsError: {},
+      loadingLlamacppModels: {},
+      customModelEntry: {}, // instance_id -> bool, toggles select vs free-text input
       draggingId: null,
       // Cards are only draggable while the mouse is actually down on the
       // ⠿ handle — the native draggable="true" attribute has no built-in
@@ -146,6 +150,9 @@ createApp({
       if (instance.provider_type === "ollama" && !this.ollamaModels[instance.id]) {
         this.refreshOllamaModels(instance);
       }
+      if (instance.provider_type === "llamacpp" && !this.llamacppModels[instance.id]) {
+        this.refreshLlamaCppModels(instance);
+      }
     },
     async refreshOllamaModels(instance) {
       const baseUrl = this.editBuffers[instance.id].config.base_url;
@@ -160,6 +167,21 @@ createApp({
         this.ollamaModelsError = { ...this.ollamaModelsError, [instance.id]: err.message };
       } finally {
         this.loadingOllamaModels = { ...this.loadingOllamaModels, [instance.id]: false };
+      }
+    },
+    async refreshLlamaCppModels(instance) {
+      const baseUrl = this.editBuffers[instance.id].config.base_url;
+      if (!baseUrl) return;
+      this.loadingLlamacppModels = { ...this.loadingLlamacppModels, [instance.id]: true };
+      this.llamacppModelsError = { ...this.llamacppModelsError, [instance.id]: null };
+      try {
+        const result = await Api.listLlamaCppModels(baseUrl);
+        this.llamacppModels = { ...this.llamacppModels, [instance.id]: result.models };
+      } catch (err) {
+        this.llamacppModels = { ...this.llamacppModels, [instance.id]: [] };
+        this.llamacppModelsError = { ...this.llamacppModelsError, [instance.id]: err.message };
+      } finally {
+        this.loadingLlamacppModels = { ...this.loadingLlamacppModels, [instance.id]: false };
       }
     },
     async testInstance(instance) {

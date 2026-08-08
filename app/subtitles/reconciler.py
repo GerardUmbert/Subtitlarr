@@ -24,7 +24,19 @@ MAX_CONSECUTIVE_REPEATS = 10
 
 
 class TranslationAlignmentError(Exception):
-    pass
+    """raw_detail carries the LLM's actual raw response text that failed to
+    align — previously only logged to the server log file
+    (logger.error("...Raw LLM response follows...")), invisible anywhere in
+    the UI. translator.py's failure handlers already read
+    getattr(exc, "raw_detail", None) into item_run_log.error_detail/
+    items.error_detail (the same field the Queue/History "click for full
+    error" modal displays for provider errors) — this exception just never
+    populated it, so alignment failures showed no detail on screen even
+    though the raw text was captured all along."""
+
+    def __init__(self, message: str, raw_detail: str | None = None):
+        super().__init__(message)
+        self.raw_detail = raw_detail
 
 
 class TranslationIntegrityError(Exception):
@@ -232,7 +244,8 @@ def reassemble(original_subs: list[srt.Subtitle], llm_response: str) -> list[srt
         raise TranslationAlignmentError(
             "LLM response contains a repetition loop "
             f"({MAX_CONSECUTIVE_REPEATS}+ consecutive cues with identical content); "
-            "translation is too unreliable to trust."
+            "translation is too unreliable to trust.",
+            raw_detail=llm_response,
         )
 
     # Positional fallback: if the response contains exactly as many
@@ -273,7 +286,8 @@ def reassemble(original_subs: list[srt.Subtitle], llm_response: str) -> list[srt
         )
         raise TranslationAlignmentError(
             f"Only recovered {recovered}/{len(original_subs)} cues from LLM response; "
-            "translation is too misaligned to trust."
+            "translation is too misaligned to trust.",
+            raw_detail=llm_response,
         )
 
     reassembled = []

@@ -48,6 +48,15 @@ async def get_events(
     return {"data": [asdict(e) for e in events], "latest_id": log_events.latest_line_id()}
 
 
+@router.get("/jobs")
+async def get_job_events(limit: int = 100, conn=Depends(state.get_conn)):
+    """Start/finish log of the non-translation jobs (Bazarr wanted-list
+    sync, source prefetch, upload push) — cron-fired and manual alike.
+    Translation runs are NOT included here; see the main list_history
+    endpoint (run_history) for those."""
+    return {"data": [dict(row) for row in repository.list_job_events(conn, limit=limit)]}
+
+
 @router.get("/stats")
 async def get_stats(range: str = "all", conn=Depends(state.get_conn)):
     if range not in ("7d", "30d", "all"):

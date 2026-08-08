@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.providers import pull_state
+from app.providers.llamacpp_provider import LlamaCppProvider
 from app.providers.ollama_provider import OllamaProvider
 
 router = APIRouter(prefix="/api/config/engines", tags=["engines"])
@@ -31,6 +32,23 @@ async def list_ollama_models(base_url: str):
         models = await provider.list_models()
     except Exception as exc:  # noqa: BLE001 - surface to the UI, don't crash the app
         raise HTTPException(status_code=502, detail=f"Could not reach Ollama: {exc}") from exc
+    finally:
+        await provider.aclose()
+    return {"models": models}
+
+
+@router.get("/llamacpp/models")
+async def list_llamacpp_models(base_url: str):
+    """Lists whatever the given llama.cpp server's /v1/models reports —
+    normally exactly one entry (the model it was launched with), unlike
+    Ollama's list of every locally-pulled model. Still useful for the
+    Engines page's model picker: fills the model field with the exact
+    id/name the server reports instead of the user guessing it."""
+    provider = LlamaCppProvider(base_url=base_url)
+    try:
+        models = await provider.list_models()
+    except Exception as exc:  # noqa: BLE001 - surface to the UI, don't crash the app
+        raise HTTPException(status_code=502, detail=f"Could not reach llama.cpp: {exc}") from exc
     finally:
         await provider.aclose()
     return {"models": models}

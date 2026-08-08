@@ -47,6 +47,12 @@ const TRIGGERED_BY_LABELS = {
   manual_filtered: "Filtered batch",
 };
 
+const JOB_LABELS = {
+  sync_media: "Sync wanted / missing",
+  sync_subs: "Pull pending subtitles",
+  push_uploads: "Push queued uploads",
+};
+
 const EVENT_TYPE_LABELS = {
   sending: "sending",
   response: "response",
@@ -82,7 +88,11 @@ createApp({
   data() {
     return {
       pageLoading: true,
-      activeTab: "runs", // 'runs' | 'events' | 'stats'
+      activeTab: "runs", // 'runs' | 'jobs' | 'events' | 'stats'
+
+      // Jobs tab
+      jobEvents: [],
+      jobsLoading: false,
       runs: [],
       total: 0,
       page: 1,
@@ -125,6 +135,20 @@ createApp({
     },
     triggeredByLabel(triggeredBy) {
       return TRIGGERED_BY_LABELS[triggeredBy] || triggeredBy;
+    },
+    jobLabel(job) {
+      return JOB_LABELS[job] || job;
+    },
+    async loadJobEvents() {
+      this.jobsLoading = true;
+      try {
+        const result = await Api.getHistoryJobs();
+        this.jobEvents = result.data;
+      } catch (_) {
+        // keep last known state on transient failure
+      } finally {
+        this.jobsLoading = false;
+      }
     },
     itemDuration,
     runDuration,
@@ -204,7 +228,9 @@ createApp({
     formatLogTimestamp,
     async switchTab(tab) {
       this.activeTab = tab;
-      if (tab === "events" && this.events.length === 0) {
+      if (tab === "jobs" && this.jobEvents.length === 0) {
+        await this.loadJobEvents();
+      } else if (tab === "events" && this.events.length === 0) {
         await this.loadEvents();
       } else if (tab === "stats" && this.stats === null) {
         await this.loadStats();

@@ -37,7 +37,10 @@ class LlamaCppProvider(TranslationProvider):
     a headless HTTP server only, started with a specific model already
     loaded via CLI flags — there is no equivalent to Ollama's /api/pull or
     a model-switching endpoint, so unlike OllamaProvider this provider has
-    no pull_model()/list_models().
+    no pull_model(). It DOES have list_models() (via /v1/models), but
+    unlike Ollama's (which lists every model pulled onto the server,
+    installable/switchable at will) it will almost always report exactly
+    one entry — whichever single model the server was launched with.
 
     `model` is optional and, when set, sent in the request body — most
     llama.cpp server builds ignore it entirely (only one model is ever
@@ -125,9 +128,30 @@ class LlamaCppProvider(TranslationProvider):
                     WATCHDOG_TIMEOUT_SECONDS,
                 )
             except httpx.TimeoutException as exc:
-                raise ProviderRateLimitedError(f"llama.cpp request timed out: {exc}") from exc
+                raise ProviderRateLimitedError(
+                    f"llama.cpp request timed out: {exc or type(exc).__name__}"
+                ) from exc
             except httpx.ConnectError as exc:
-                raise ProviderRateLimitedError(f"llama.cpp connection failed: {exc}") from exc
+                raise ProviderRateLimitedError(
+                    f"llama.cpp connection failed: {exc or type(exc).__name__}"
+                ) from exc
+            except httpx.TransportError as exc:
+                # Catch-all for other transport-level drops (ReadError,
+                # WriteError, RemoteProtocolError, ...) not specific
+                # enough to warrant their own message above — e.g. a
+                # remote server or tunnel (Tailscale, reverse proxy)
+                # resetting the connection mid-response on a long batch.
+                # Confirmed live: httpx.ReadError partway through batch
+                # 14/37 against a remote instance, previously uncaught
+                # here. str(exc) is often EMPTY for these (httpcore raises
+                # ReadError() with no message on a dropped connection) —
+                # falls back to the exception's class name so the item's
+                # error_message is never blank, which is what actually
+                # happened here (translate_item's own error handling
+                # correctly wrote error_message=str(exc), but str(exc)
+                # itself was "").
+                detail = str(exc) or type(exc).__name__
+                raise ProviderRateLimitedError(f"llama.cpp connection dropped: {detail}") from exc
 
         if resp.status_code == 429:
             raise ProviderRateLimitedError("llama.cpp returned 429")
@@ -169,3 +193,16 @@ class LlamaCppProvider(TranslationProvider):
 
         detail = f"responded, model '{model_name}' loaded" if model_name else "responded"
         return ProviderStatus(ok=True, detail=detail)
+
+    async def list_models(self) -> list[dict]:
+        """Returns whatever /v1/models reports — for llama.cpp this is
+        normally exactly one entry (the model the server was launched
+        with via CLI flags), unlike Ollama's list of every locally-pulled
+        model. Still useful for the Engines page's model field: lets the
+        user pick the exact model id/name /v1/models reports instead of
+        guessing it (see the `model` field's hint — some server builds/
+        reverse proxies reject a request with no `model` field, or a
+        wrong one, at all)."""
+        resp = await self._client.get("/v1/models")
+        resp.raise_for_status()
+        return [{"name": m.get("id")} for m in resp.json().get("data", []) if m.get("id")]

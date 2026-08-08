@@ -53,6 +53,10 @@ const Api = (() => {
       const qs = base_url ? `?base_url=${encodeURIComponent(base_url)}` : "";
       return request("GET", `/api/config/engines/ollama/models${qs}`);
     },
+    listLlamaCppModels: (base_url) => {
+      const qs = base_url ? `?base_url=${encodeURIComponent(base_url)}` : "";
+      return request("GET", `/api/config/engines/llamacpp/models${qs}`);
+    },
 
     listEngineInstances: () => request("GET", "/api/config/engine-instances"),
     createEngineInstance: (data) => request("POST", "/api/config/engine-instances", data),
@@ -96,6 +100,7 @@ const Api = (() => {
       return request("GET", `/api/history/events${qs ? "?" + qs : ""}`);
     },
     getHistoryStats: (range = "all") => request("GET", `/api/history/stats?range=${range}`),
+    getHistoryJobs: (limit = 100) => request("GET", `/api/history/jobs?limit=${limit}`),
   };
 })();
 

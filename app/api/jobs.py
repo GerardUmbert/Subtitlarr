@@ -43,13 +43,20 @@ async def run_scheduled_job_now(runner=Depends(state.get_runner)):
 _sync_media_state = {"active": False, "error": None}
 
 
-async def _run_sync_media(runner) -> None:
+async def _run_sync_media(runner, triggered_by: str) -> None:
+    conn = state.get_conn()
+    event_id = repository.start_job_event(conn, "sync_media", triggered_by)
     _sync_media_state["active"] = True
     _sync_media_state["error"] = None
     try:
-        await runner.poll()
+        result = await runner.poll()
+        repository.finish_job_event(
+            conn, event_id, status="done",
+            result=f"{result['episodes_seen']} episodes, {result['movies_seen']} movies seen",
+        )
     except Exception as exc:  # noqa: BLE001 - surface to the UI, don't crash the app
         _sync_media_state["error"] = str(exc)
+        repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
     finally:
         _sync_media_state["active"] = False
 
@@ -60,7 +67,7 @@ async def cron_sync_media(runner) -> None:
     or double-started."""
     if _sync_media_state["active"] or (runner.current is not None and runner.current.active):
         return
-    await _run_sync_media(runner)
+    await _run_sync_media(runner, triggered_by="cron")
 
 
 @router.post("/sync-media")
@@ -73,21 +80,29 @@ async def sync_media(runner=Depends(state.get_runner)):
         return {"started": False, "reason": "A media sync is already in progress"}
     if runner.current is not None and runner.current.active:
         return {"started": False, "reason": "A run is already in progress"}
-    asyncio.create_task(_run_sync_media(runner))
+    asyncio.create_task(_run_sync_media(runner, triggered_by="manual"))
     return {"started": True}
 
 
 _sync_subs_state = {"active": False, "error": None, "result": None}
 
 
-async def _run_sync_subs(runner) -> None:
+async def _run_sync_subs(runner, triggered_by: str) -> None:
+    conn = state.get_conn()
+    event_id = repository.start_job_event(conn, "sync_subs", triggered_by)
     _sync_subs_state["active"] = True
     _sync_subs_state["error"] = None
     _sync_subs_state["result"] = None
     try:
-        _sync_subs_state["result"] = await runner.warm_source_cache()
+        result = await runner.warm_source_cache()
+        _sync_subs_state["result"] = result
+        repository.finish_job_event(
+            conn, event_id, status="done",
+            result=f"{result['resolved']} resolved, {result['cached']} cached",
+        )
     except Exception as exc:  # noqa: BLE001 - surface to the UI, don't crash the app
         _sync_subs_state["error"] = str(exc)
+        repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
     finally:
         _sync_subs_state["active"] = False
 
@@ -95,7 +110,7 @@ async def _run_sync_subs(runner) -> None:
 async def cron_sync_subs(runner) -> None:
     if _sync_subs_state["active"] or (runner.current is not None and runner.current.active):
         return
-    await _run_sync_subs(runner)
+    await _run_sync_subs(runner, triggered_by="cron")
 
 
 @router.post("/sync-subs")
@@ -109,7 +124,7 @@ async def sync_subs(runner=Depends(state.get_runner)):
         return {"started": False, "reason": "A subtitle sync is already in progress"}
     if runner.current is not None and runner.current.active:
         return {"started": False, "reason": "A run is already in progress"}
-    asyncio.create_task(_run_sync_subs(runner))
+    asyncio.create_task(_run_sync_subs(runner, triggered_by="manual"))
     return {"started": True}
 
 
@@ -129,13 +144,20 @@ async def push_uploads(conn=Depends(state.get_conn), client=Depends(state.get_cl
         return {"started": False, "reason": "A push is already in progress"}
 
     async def _run():
+        event_id = repository.start_job_event(conn, "push_uploads", triggered_by="manual")
         _push_uploads_state["active"] = True
         _push_uploads_state["error"] = None
         _push_uploads_state["result"] = None
         try:
-            _push_uploads_state["result"] = await upload_queue.push_pending_uploads(conn, client)
+            result = await upload_queue.push_pending_uploads(conn, client)
+            _push_uploads_state["result"] = result
+            repository.finish_job_event(
+                conn, event_id, status="done",
+                result=f"{result['pushed']} pushed, {result['failed']} failed, {result['reset']} reset",
+            )
         except Exception as exc:  # noqa: BLE001 - surface to the UI, don't crash the app
             _push_uploads_state["error"] = str(exc)
+            repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
         finally:
             _push_uploads_state["active"] = False
 

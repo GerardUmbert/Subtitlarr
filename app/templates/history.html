@@ -17,6 +17,7 @@
   <template v-else>
   <div class="page-tabs">
     <button class="page-tab" :class="{ active: activeTab === 'runs' }" @click="switchTab('runs')">Runs</button>
+    <button class="page-tab" :class="{ active: activeTab === 'jobs' }" @click="switchTab('jobs')">Jobs</button>
     <button class="page-tab" :class="{ active: activeTab === 'events' }" @click="switchTab('events')">Events</button>
     <button class="page-tab" :class="{ active: activeTab === 'stats' }" @click="switchTab('stats')">Stats</button>
   </div>
@@ -108,6 +109,47 @@
       <div style="display:flex; gap:8px;">
         <button class="btn" :disabled="page <= 1" @click="prevPage">Previous</button>
         <button class="btn" :disabled="page >= totalPages" @click="nextPage">Next</button>
+      </div>
+    </div>
+  </template>
+
+  <template v-if="activeTab === 'jobs'">
+    <div class="panel" style="margin-bottom:14px; padding:14px 18px;">
+      <div class="queue-toolbar" style="padding:0; border-bottom:none;">
+        <span class="panel-title-sub">Sync/prefetch/upload jobs — cron-fired and manual alike. Translation runs are on the Runs tab.</span>
+        <button class="btn" @click="loadJobEvents" :disabled="jobsLoading" style="margin-left:auto;">{% raw %}{{ jobsLoading ? 'Loading…' : 'Refresh' }}{% endraw %}</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div v-if="jobsLoading" class="empty-state" style="padding:40px 20px;">Loading jobs…</div>
+      <div v-else-if="!jobEvents.length" class="empty-state" style="padding:40px 20px;">No jobs logged yet.</div>
+      <div class="table-scroll" v-else>
+        <table>
+          <thead>
+            <tr>
+              <th>Job</th>
+              <th>Trigger</th>
+              <th>Started</th>
+              <th>Duration</th>
+              <th>Status</th>
+              <th>Result</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="ev in jobEvents" :key="ev.id">
+              <td>{% raw %}{{ jobLabel(ev.job) }}{% endraw %}</td>
+              <td><span class="chip" style="cursor:default;">{% raw %}{{ ev.triggered_by === 'cron' ? 'Scheduled' : 'Manual' }}{% endraw %}</span></td>
+              <td class="row-time">{% raw %}{{ formatDateTime(ev.started_at) }}{% endraw %}</td>
+              <td class="row-time">{% raw %}{{ runDuration(ev) }}{% endraw %}</td>
+              <td><span :class="'status-pill status-' + (ev.status === 'running' ? 'translating' : ev.status)"><span class="dot"></span>{% raw %}{{ ev.status }}{% endraw %}</span></td>
+              <td
+                :class="ev.error ? 'row-time error-cell' : 'row-time'"
+                :title="ev.error || ''"
+              >{% raw %}{{ ev.error || ev.result || '—' }}{% endraw %}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </template>

@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # provider type (e.g. multiple Gemini keys) in an ordered cascade.
 
     # Scheduling
-    schedule_cron: str = "0 3 * * *"
+    schedule_cron: str = "10 3 * * *"
     age_threshold_days: int = 14
     # A backlog can run into the hundreds of hours of straight LLM work —
     # without a cap, "Run now" or a scheduled run will happily grind through
@@ -43,8 +43,11 @@ class Settings(BaseSettings):
     # source-subtitle prefetching can run ahead of a NAS waking up for
     # translation, or on their own schedule entirely. Empty string = not
     # scheduled (manual-only via the Jobs page, the original behavior).
-    sync_media_cron: str = "40 9 * * *"
-    sync_subs_cron: str = "40 9 * * *"
+    # Staggered a few minutes apart (and ahead of schedule_cron) so the
+    # wanted-list refresh and source prefetch both land before the
+    # translation run starts, instead of racing or colliding.
+    sync_media_cron: str = "0 3 * * *"
+    sync_subs_cron: str = "5 3 * * *"
 
     # Runtime
     db_path: str = "/data/subtitlarr.db"

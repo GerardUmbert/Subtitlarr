@@ -3,6 +3,59 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.9.4]
+
+### Added
+- The two Bazarr sync jobs (wanted-list sync, source prefetch) and the
+  upload push now have durable history — a new `job_events` table records
+  every start/finish, cron-fired or manually triggered from the Jobs
+  page, with status and a short result summary. Previously these had no
+  persisted record at all; only an ephemeral in-memory status shown live
+  on the Jobs page while running, gone the moment it finished or the page
+  was reloaded. Surfaced as a new "Jobs" tab on the History page
+  (`GET /api/history/jobs`), alongside the existing Runs/Events/Stats
+  tabs. Translation runs are unaffected — they already had a durable
+  record via `run_history`/`item_run_log`.
+- The Engines page's llama.cpp instances now get a model picker, same as
+  Ollama's — `GET /api/config/engines/llamacpp/models` reads the
+  server's `/v1/models` and offers it as a dropdown on the Model field
+  (falls back to free text if the list is empty/unreachable, or via the
+  "type a custom model name instead" link). For a plain single-model
+  `llama-server` this will only ever show the one loaded model; a
+  multi-model router/proxy in front (e.g. llama-swap) shows everything
+  it aggregates.
+
+### Changed
+- Default cron schedule for the three daily jobs is now staggered so
+  wanted-list sync and source prefetch both land before the translation
+  run starts, instead of all three firing around 9:40am independent of
+  each other: `sync_media_cron` 3:00am, `sync_subs_cron` 3:05am,
+  `schedule_cron` (translation run) 3:10am.
+
+### Fixed
+- Dashboard's "Wanted" stat tile was labeled "Wanted (Bazarr)", implying
+  it matches Bazarr's own Wanted count exactly — it doesn't. Subtitlarr
+  counts one row per (item, missing target language) pair, while
+  Bazarr's Wanted screen counts one row per episode/movie regardless of
+  how many languages are missing, so the two numbers diverge (roughly by
+  a factor of however many target languages you configure). Relabeled to
+  "Wanted (language-pairs)" so it's not read as directly comparable.
+- A translation that failed alignment/integrity checks (e.g. "only
+  recovered N/M cues") showed no detail anywhere in the UI — the raw LLM
+  response that caused the failure was already being logged to the
+  server log file, but never reached `error_detail`, the field the
+  Queue/History "click for full error" modal reads.
+  `TranslationAlignmentError` now carries that raw response through to
+  the same place every other provider error's detail already shows up.
+- `llamacpp_provider.py` only caught `httpx.TimeoutException`/
+  `ConnectError` as retryable — a dropped connection mid-response
+  (`httpx.ReadError`, seen live against a remote instance) propagated as
+  a raw, unhandled exception with an empty message, showing as a blank
+  failure with no explanation. Now caught alongside the others as a
+  retryable `ProviderRateLimitedError`, with a fallback to the
+  exception's class name whenever `str(exc)` itself is empty (which
+  `httpcore` errors like this commonly are).
+
 ## [0.9.3]
 
 ### Added

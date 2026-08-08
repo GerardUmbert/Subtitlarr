@@ -494,6 +494,38 @@ def get_stats(conn: sqlite3.Connection) -> dict:
     }
 
 
+def start_job_event(conn: sqlite3.Connection, job: str, triggered_by: str) -> int:
+    """Records the start of a non-translation job (sync_media/sync_subs/
+    push_uploads) — cron-fired and manual (Jobs page button) alike. These
+    jobs had no durable history before this; only run_history (translation
+    batches) persisted anything, so a cron-fired sync was invisible on the
+    History page once its ephemeral in-memory status faded."""
+    now = _now()
+    with conn:
+        cur = conn.execute(
+            "INSERT INTO job_events (job, triggered_by, started_at, status) VALUES (?, ?, ?, 'running')",
+            (job, triggered_by, now),
+        )
+        return cur.lastrowid
+
+
+def finish_job_event(
+    conn: sqlite3.Connection, event_id: int, *, status: str, result: str | None = None, error: str | None = None
+) -> None:
+    now = _now()
+    with conn:
+        conn.execute(
+            "UPDATE job_events SET finished_at = ?, status = ?, result = ?, error = ? WHERE id = ?",
+            (now, status, result, error, event_id),
+        )
+
+
+def list_job_events(conn: sqlite3.Connection, *, limit: int = 100) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM job_events ORDER BY started_at DESC LIMIT ?", (limit,)
+    ).fetchall()
+
+
 def start_run(conn: sqlite3.Connection, triggered_by: str) -> int:
     now = _now()
     with conn:

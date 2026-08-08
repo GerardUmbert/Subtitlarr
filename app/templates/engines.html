@@ -87,15 +87,43 @@
               </select>
 
               <template v-else-if="field.ollamaModelPicker">
-                <input v-model="editBuffers[instance.id].config[field.key]" :placeholder="field.placeholder"
-                       :list="'ollama-models-' + instance.id" />
-                <datalist :id="'ollama-models-' + instance.id">
-                  <option v-for="m in (ollamaModels[instance.id] || [])" :key="m.name" :value="m.name">
-                    {% raw %}{{ m.parameter_size }} · {{ m.quantization }}{% endraw %}
+                <select v-if="!customModelEntry[instance.id] && (ollamaModels[instance.id] || []).length"
+                        v-model="editBuffers[instance.id].config[field.key]" @focus="refreshOllamaModels(instance)">
+                  <option v-if="!(ollamaModels[instance.id] || []).some(m => m.name === editBuffers[instance.id].config[field.key])"
+                          :value="editBuffers[instance.id].config[field.key]">
+                    {% raw %}{{ editBuffers[instance.id].config[field.key] || '(none selected)' }}{% endraw %}
                   </option>
-                </datalist>
+                  <option v-for="m in (ollamaModels[instance.id] || [])" :key="m.name" :value="m.name">
+                    {% raw %}{{ m.name }} — {{ m.parameter_size }} · {{ m.quantization }}{% endraw %}
+                  </option>
+                </select>
+                <input v-else v-model="editBuffers[instance.id].config[field.key]" :placeholder="field.placeholder"
+                       @focus="refreshOllamaModels(instance)" />
                 <p class="field-hint" v-if="loadingOllamaModels[instance.id]">Checking installed models…</p>
                 <p class="field-hint" v-else-if="ollamaModelsError[instance.id]">Could not list installed models: {% raw %}{{ ollamaModelsError[instance.id] }}{% endraw %}</p>
+                <button type="button" class="link-btn" style="font-size:11px;"
+                        @click="customModelEntry = { ...customModelEntry, [instance.id]: !customModelEntry[instance.id] }">
+                  {% raw %}{{ customModelEntry[instance.id] ? 'pick from list instead' : 'type a custom model name instead' }}{% endraw %}
+                </button>
+              </template>
+
+              <template v-else-if="field.llamacppModelPicker">
+                <select v-if="!customModelEntry[instance.id] && (llamacppModels[instance.id] || []).length"
+                        v-model="editBuffers[instance.id].config[field.key]" @focus="refreshLlamaCppModels(instance)">
+                  <option v-if="!(llamacppModels[instance.id] || []).some(m => m.name === editBuffers[instance.id].config[field.key])"
+                          :value="editBuffers[instance.id].config[field.key]">
+                    {% raw %}{{ editBuffers[instance.id].config[field.key] || '(none selected)' }}{% endraw %}
+                  </option>
+                  <option v-for="m in (llamacppModels[instance.id] || [])" :key="m.name" :value="m.name">{% raw %}{{ m.name }}{% endraw %}</option>
+                </select>
+                <input v-else v-model="editBuffers[instance.id].config[field.key]" :placeholder="field.placeholder"
+                       @focus="refreshLlamaCppModels(instance)" />
+                <p class="field-hint" v-if="loadingLlamacppModels[instance.id]">Checking available models…</p>
+                <p class="field-hint" v-else-if="llamacppModelsError[instance.id]">Could not reach /v1/models: {% raw %}{{ llamacppModelsError[instance.id] }}{% endraw %}</p>
+                <button type="button" class="link-btn" style="font-size:11px;"
+                        @click="customModelEntry = { ...customModelEntry, [instance.id]: !customModelEntry[instance.id] }">
+                  {% raw %}{{ customModelEntry[instance.id] ? 'pick from list instead' : 'type a custom model name instead' }}{% endraw %}
+                </button>
               </template>
 
               <input v-else-if="field.type === 'password'" v-model="editBuffers[instance.id].config[field.key]"
@@ -105,7 +133,7 @@
                      type="number" :min="field.min" :step="field.step" />
 
               <input v-else v-model="editBuffers[instance.id].config[field.key]" :placeholder="field.placeholder"
-                     @blur="field.key === 'base_url' && instance.provider_type === 'ollama' ? refreshOllamaModels(instance) : null" />
+                     @blur="field.key === 'base_url' && instance.provider_type === 'ollama' ? refreshOllamaModels(instance) : (field.key === 'base_url' && instance.provider_type === 'llamacpp' ? refreshLlamaCppModels(instance) : null)" />
 
               <p class="field-hint" v-if="field.hint">{% raw %}{{ field.hint }}{% endraw %}</p>
             </div>
