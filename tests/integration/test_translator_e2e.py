@@ -20,11 +20,16 @@ class FakeBazarrClient:
     existing-subtitle language and no Spanish subtitle, and records what
     gets uploaded."""
 
-    def __init__(self, wanted_episodes=None, existing_language="en", cues=None):
+    def __init__(self, wanted_episodes=None, existing_language="en", cues=None, extra_subtitles=None):
         self.uploaded = []
         self._wanted_episodes = wanted_episodes or []
         self._existing_language = existing_language
         self._cues = cues
+        # Additional already-present subtitle tracks beyond the single
+        # source one below — e.g. simulating Bazarr already having a real
+        # subtitle in the TARGET language too, which the wanted-list
+        # nonetheless (wrongly) reported as missing.
+        self._extra_subtitles = extra_subtitles or []
 
     async def iter_all_wanted_episodes(self):
         for item in self._wanted_episodes:
@@ -50,7 +55,8 @@ class FakeBazarrClient:
                     forced=False, hi=False,
                     path=f"/tv/The Bear/S03E07.{self._existing_language}.srt",
                     file_size=100, embedded_track_id=None,
-                )
+                ),
+                *self._extra_subtitles,
             ],
             title="Legacy",
             sceneName=None,
@@ -192,6 +198,64 @@ async def test_full_translation_round_trip(conn, monkeypatch):
     assert snapshot["engine"] == "fake"
     assert snapshot["num_ctx"] == 8192  # default when the stubbed instance's config has no num_ctx
     assert snapshot["resolved_batch_token_budget"] > 0
+
+
+@pytest.mark.asyncio
+async def test_skips_translation_when_bazarr_already_has_target_language(conn, monkeypatch):
+    """Regression test: confirmed live (v0.9.7) that ~170 'done' items
+    across 13 shows had target_language set to a language Bazarr's
+    wanted-list had misreported as missing at some earlier poll (Bazarr
+    actually already had a real, downloaded subtitle in that language the
+    whole time) — the item got dutifully translated and marked 'done'
+    anyway, silently duplicating a subtitle Bazarr didn't need. A
+    same-language check right before translation must catch this: mark
+    the item 'done' without calling the provider or uploading anything,
+    since the target language is already genuinely present."""
+    repository.set_config(conn, "source_lang_priority", ["en"])
+    repository.upsert_item_seen(
+        conn, item_type="episode", bazarr_id=42, series_id=1,
+        title="Legacy", series_title="The Bear", season_episode="3x7",
+        target_language="es",
+    )
+
+    # existing_language="en" is the real translation source; extra_subtitles
+    # adds a real, already-downloaded Spanish track — simulating Bazarr
+    # already having the target language even though the wanted-list
+    # (below) still (wrongly) lists it as missing, the exact live mismatch
+    # this guard exists for.
+    fake_client = FakeBazarrClient(
+        wanted_episodes=[
+            WantedEpisode(
+                seriesTitle="The Bear", episode_number="3x7", episodeTitle="Legacy",
+                missing_subtitles=[LanguageInfo(name="Spanish", code2="es", code3="spa")],
+                sonarrSeriesId=1, sonarrEpisodeId=42,
+            )
+        ],
+        existing_language="en",
+        extra_subtitles=[
+            SubtitleInfo(
+                name="Spanish", code2="es", code3="spa", forced=False, hi=False,
+                path="/tv/The Bear/S03E07.es.srt", file_size=100, embedded_track_id=None,
+            )
+        ],
+    )
+
+    from app.config import Settings
+    settings = Settings()
+    fake_provider = FakeProvider()
+    stub_single_provider_cascade(monkeypatch, fake_provider)
+
+    controller = RunController(conn, lambda: fake_client, settings)
+    progress = await controller.run_now()
+
+    assert progress.processed == 1
+    assert progress.failed == 0
+    assert len(fake_client.uploaded) == 0  # nothing uploaded — already present
+    assert fake_provider.received_catalan_vegeta_insults == []  # never even called
+
+    row = conn.execute("SELECT * FROM items WHERE bazarr_id = 42").fetchone()
+    assert row["status"] == "done"
+    assert row["engine_used"] is None
 
 
 @pytest.mark.asyncio

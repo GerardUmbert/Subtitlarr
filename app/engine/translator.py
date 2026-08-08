@@ -469,6 +469,48 @@ async def translate_item(
         "resolved_batch_token_budget": resolved_batch_budget,
     }
 
+    # Guard against translating into a language Bazarr already has a real
+    # subtitle for — confirmed live: ~170 'done' items across 13 shows
+    # (Stargate SG-1, Marshals, Fullmetal Alchemist, etc.) had
+    # target_language set to a language Bazarr's wanted-list reported as
+    # missing at SOME earlier poll (plausibly the "treat bundled
+    # subtitles as downloaded" toggle transiently misreporting — see
+    # app.engine.poller's own docstring), got dutifully translated into
+    # by the LLM, and marked 'done' — even though Bazarr had a real,
+    # already-downloaded subtitle in that language the whole time. Since
+    # 'done' items are treated as a permanent record and survive every
+    # future wanted-list purge by design, nothing ever caught this after
+    # the fact; the language check surfaced it only because it happens to
+    # re-verify against Bazarr's CURRENT state. Checking immediately
+    # before translating (not just at poll time) catches a stale/wrong
+    # wanted-list entry that slipped through, or a race where the file
+    # appeared on Bazarr between the poll and this run. Marks the item
+    # 'done' without spending an LLM call or touching Bazarr — nothing
+    # needs uploading, since the language IS already present.
+    if item["item_type"] == "episode":
+        existing_detail = await client.get_episode_detail(item["bazarr_id"])
+    else:
+        existing_detail = await client.get_movie_detail(item["bazarr_id"])
+    if existing_detail is not None:
+        already_has_target = any(
+            s.code2 == target_lang and s.path and not s.forced
+            for s in existing_detail.subtitles
+        )
+        if already_has_target:
+            logger.warning(
+                "Item %d: Bazarr already has a real '%s' subtitle — skipping "
+                "translation and marking done without uploading anything.",
+                item_id, target_lang,
+            )
+            repository.update_item_status(
+                conn, item_id, "done", source_language=source_lang, mark_completed=True,
+            )
+            repository.log_item_attempt(
+                conn, item_id, run_id, "done",
+                engine_used=None, model_used=None, settings_snapshot=settings_snapshot,
+            )
+            return
+
     repository.update_item_status(conn, item_id, "translating", mark_attempt=True)
     item_started = time.monotonic()
 
