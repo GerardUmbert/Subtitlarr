@@ -3,6 +3,26 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.9.0]
+
+### Fixed
+- **Queued-upload subtitle files were stored in the container's ephemeral
+  temp filesystem, not the persistent `/data` volume** — a container
+  restart while items sat as "translated_pending_upload" (the whole point
+  of `queue_uploads_enabled`, letting a run finish and defer the Bazarr
+  push/disk-wake to later) silently wiped every queued translation.
+  "Push queued uploads" then failed for all of them, since the DB still
+  thought they were queued but the actual translated content was gone.
+  The queue directory now lives at `/data/upload-queue`, alongside the
+  SQLite DB, and survives restarts.
+- A push against an item whose queued file is genuinely missing (e.g.
+  ones queued before this fix) is unrecoverable by retrying — the
+  translated text is gone. Those items are now reset to `pending` instead
+  of being left permanently stuck in `translated_pending_upload`, so the
+  next translation run regenerates them. The Jobs page's push-result line
+  now reports this as "reset N for re-translation" instead of lumping it
+  into "failed".
+
 ## [0.8.8]
 
 ### Added

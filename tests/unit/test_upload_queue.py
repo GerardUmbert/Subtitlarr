@@ -55,7 +55,7 @@ async def test_push_uploads_one_queued_episode(conn, tmp_path):
     client = FakeClient()
     result = await upload_queue.push_pending_uploads(conn, client, queue_dir)
 
-    assert result == {"pushed": 1, "failed": 0}
+    assert result == {"pushed": 1, "failed": 0, "reset": 0}
     assert len(client.uploaded) == 1
     assert client.uploaded[0]["episode_id"] == 42
     assert client.uploaded[0]["language"] == "es"
@@ -97,7 +97,7 @@ async def test_push_uploads_movie(conn, tmp_path):
     client = FakeClient()
     result = await upload_queue.push_pending_uploads(conn, client, queue_dir)
 
-    assert result == {"pushed": 1, "failed": 0}
+    assert result == {"pushed": 1, "failed": 0, "reset": 0}
     assert client.uploaded[0]["radarr_id"] == 99
 
 
@@ -112,7 +112,7 @@ async def test_one_failed_upload_does_not_block_the_rest(conn, tmp_path):
     client = FakeClient(fail_bazarr_ids={1})
     result = await upload_queue.push_pending_uploads(conn, client, queue_dir)
 
-    assert result == {"pushed": 1, "failed": 1}
+    assert result == {"pushed": 1, "failed": 1, "reset": 0}
 
     failing_row = conn.execute("SELECT * FROM items WHERE id = ?", (failing_id,)).fetchone()
     assert failing_row["status"] == "translated_pending_upload"  # left in place for retry
@@ -123,21 +123,26 @@ async def test_one_failed_upload_does_not_block_the_rest(conn, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_missing_scratch_file_counts_as_failed_without_crashing(conn, tmp_path):
+async def test_missing_queued_file_resets_item_to_pending_without_crashing(conn, tmp_path):
+    """The queued file is the only copy of the finished translation — if
+    it's gone (e.g. lost on a container restart before the queue dir moved
+    to the persistent volume), retrying the push can never succeed. The
+    item must be reset to 'pending' so a future run regenerates it,
+    instead of being left permanently stuck."""
     item_id = _seed_pending_item(conn, bazarr_id=7, title="No file")
     queue_dir = tmp_path / "queue"  # never written to — no {item_id}.srt exists
 
     client = FakeClient()
     result = await upload_queue.push_pending_uploads(conn, client, queue_dir)
 
-    assert result == {"pushed": 0, "failed": 1}
+    assert result == {"pushed": 0, "failed": 0, "reset": 1}
     row = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
-    assert row["status"] == "translated_pending_upload"
+    assert row["status"] == "pending"
 
 
 @pytest.mark.asyncio
 async def test_push_uploads_is_a_noop_when_nothing_is_queued(conn, tmp_path):
     client = FakeClient()
     result = await upload_queue.push_pending_uploads(conn, client, tmp_path / "queue")
-    assert result == {"pushed": 0, "failed": 0}
+    assert result == {"pushed": 0, "failed": 0, "reset": 0}
     assert client.uploaded == []

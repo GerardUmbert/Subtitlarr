@@ -83,7 +83,8 @@
       </div>
       <p class="field-hint" v-if="pushUploadsResult">
         ● pushed {% raw %}{{ pushUploadsResult.pushed }}{% endraw %},
-        failed {% raw %}{{ pushUploadsResult.failed }}{% endraw %}
+        failed {% raw %}{{ pushUploadsResult.failed }}{% endraw %}<template v-if="pushUploadsResult.reset">,
+        reset {% raw %}{{ pushUploadsResult.reset }}{% endraw %} for re-translation (queued file was missing)</template>
       </p>
     </div>
   </div>
