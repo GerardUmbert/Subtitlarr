@@ -14,6 +14,7 @@ sweep over a large backlog.
 """
 
 import logging
+import random
 import re
 import sqlite3
 
@@ -135,7 +136,17 @@ def _sample_text(full_text: str) -> str:
     translation failure — as cues 2-17, right after the disclaimer;
     ED songs, "next episode" previews, and credits rolls similarly
     cluster at the very start/end). Sampling the middle avoids all of
-    these categories at once without needing to special-case each one."""
+    these categories at once without needing to special-case each one.
+
+    The starting point within that middle third is randomized (jittered
+    around the true midpoint), not a fixed offset — confirmed live: a
+    fixed offset means the SAME sample gets pulled every single time a
+    given file is checked, so a retry after a false-positive reset (e.g.
+    "Kizumonogatari Part 3" — its middle-third window happened to open on
+    a repeated on-screen caption) would deterministically hit the exact
+    same imperfect stretch again and again, forever. A random start
+    within the window gives a retry a genuine chance at a cleaner sample
+    instead of being stuck on one fixed neighborhood of the file."""
     blocks = full_text.replace("\r\n", "\n").split("\n\n")
     cues: list[tuple[tuple[str, str] | None, str]] = []
     for block in blocks:
@@ -149,7 +160,9 @@ def _sample_text(full_text: str) -> str:
 
     scan_start, scan_end = 0, len(cues)
     if len(cues) >= MIDDLE_THIRD_MIN_CUES:
-        scan_start, scan_end = len(cues) // 3, 2 * len(cues) // 3
+        window_start, window_end = len(cues) // 3, 2 * len(cues) // 3
+        scan_start = random.randint(window_start, max(window_start, window_end - SAMPLE_CUE_COUNT))
+        scan_end = window_end
 
     lines: list[str] = []
     i = scan_start
@@ -167,8 +180,23 @@ def _sample_text(full_text: str) -> str:
         i += 1
         if "subtitlarr" in content.lower():
             continue
-        if len(content) >= MIN_SAMPLE_LINE_LENGTH:
-            lines.append(content)
+        if len(content) < MIN_SAMPLE_LINE_LENGTH:
+            continue
+        # Confirmed live: a repeated on-screen caption (a character's
+        # Japanese name shown as a recurring text overlay, "Hanekawa
+        # Tsubasa" x8) filled an ENTIRE sample with the same line —
+        # each occurrence had different timing, so the duplicate-TIMING
+        # cluster filter above didn't catch it, and the check flagged a
+        # genuinely, entirely correct Italian translation as Japanese
+        # purely because its sample was one repeated proper noun with no
+        # real dialogue signal at all. Skipping a line identical to the
+        # one immediately before it in the SAMPLE (not just adjacent in
+        # the file) prevents any single repeated line from dominating —
+        # real dialogue essentially never repeats verbatim back-to-back
+        # in a sample this sparse, so this doesn't cost genuine variety.
+        if lines and content == lines[-1]:
+            continue
+        lines.append(content)
     return " / ".join(lines)
 
 
