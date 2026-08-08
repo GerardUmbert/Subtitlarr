@@ -158,12 +158,7 @@
             </span>
           </div>
 
-          <!-- Pull-model UI hidden for now (v0.9.11) — the model-name
-               field's "type a custom model name instead" toggle wasn't
-               discoverable enough; pulling a model in the meantime can
-               still be done directly on the Ollama host (e.g. `ollama
-               pull <model>`) or via Ollama's own UI/API. -->
-          <div class="field-row" v-if="false">
+          <div class="field-row" v-if="instance.provider_type === 'ollama'">
             <button class="btn" @click="pullModel(instance)" :disabled="pull.active">
               {% raw %}{{ pull.active ? 'Pulling…' : 'Pull model' }}{% endraw %}
             </button>
@@ -173,7 +168,7 @@
             <span v-else-if="pull.done" class="test-result">● model ready</span>
             <span v-else-if="pull.error" class="test-result error">● {% raw %}{{ pull.error }}{% endraw %}</span>
           </div>
-          <div class="progress-track" v-if="false" style="margin-top:8px;">
+          <div class="progress-track" v-if="instance.provider_type === 'ollama' && pull.active && pull.total" style="margin-top:8px;">
             <div class="progress-fill" :style="{ width: pull.pct + '%' }"></div>
           </div>
 
