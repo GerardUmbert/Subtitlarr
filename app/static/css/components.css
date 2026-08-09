@@ -602,7 +602,17 @@ a.panel:hover {
   color: var(--ink-faint);
   font-size: 15px;
   flex-shrink: 0;
-  padding: 0 2px;
+  /* Padding (not just the 15px glyph) is the real touch target — a
+     thumb is far wider than a 15px glyph with 2px of padding, so most
+     real-phone taps near the handle missed it entirely and landed on
+     the sibling .engine-opt row instead (which has its own click
+     handler and no touch-action override), reaching the browser's
+     default scroll/tap behavior before dragPointerDown ever fired.
+     Negative margin keeps the visual glyph position unchanged while
+     the padding brings the actual hit area close to the ~44px minimum
+     recommended touch target. */
+  padding: 14px 12px;
+  margin: -12px -8px -14px -4px;
   /* Without this, a touch-drag starting on the handle is interpreted as
      a page scroll gesture by the browser before JS ever gets a chance to
      preventDefault() it — confirmed the reason drag didn't work at all

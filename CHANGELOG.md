@@ -3,6 +3,18 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.10.1]
+
+### Fixed
+- The Engines page's drag handle still didn't work on phones even after
+  0.10.0's Pointer Events rewrite — its actual touch target was only
+  about 17px (a 15px glyph plus 2px padding), well under the ~44px
+  minimum a fingertip can reliably hit, so most real-phone taps missed
+  the handle and landed on the card's own expand-on-click area instead,
+  never reaching the drag logic at all. Enlarged the handle's hit area
+  with padding (offset by a matching negative margin so its visual
+  position and the card's layout are unchanged).
+
 ## [0.10.0]
 
 ### Changed
