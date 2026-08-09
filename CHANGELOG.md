@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.9.13]
+
+### Fixed
+- The language check's sample-line filter used a character-count minimum
+  (8 chars), which let short name/honorific lines like "(Kitagawa
+  Marin) Gojo-kun?" through as "substantial" even though they carry
+  almost no real language signal — confirmed live: "My Dress-Up
+  Darling" 1x10 (ES and IT) both got flagged as Japanese despite being
+  genuinely, fully translated, because their samples were mostly
+  character names. Switched to a word-count minimum (4 words), biasing
+  sampling toward real sentences over names/places.
+- A completed item whose translated file had no real dialogue to sample
+  (only the AI-disclaimer cue, itself excluded from sampling) — e.g.
+  "Paperman", a 1-cue file — stayed 'unchecked' forever and got
+  re-selected on every future language-check sweep with nothing to show
+  for it. Such items are now auto-marked 'ok' instead, since there's no
+  content left that could ever be wrong-language.
+
 ## [0.9.12]
 
 ### Changed

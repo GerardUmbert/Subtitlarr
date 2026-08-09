@@ -33,7 +33,14 @@ logger = logging.getLogger(__name__)
 # LLM to confidently name the language, same reasoning as human language
 # identification not needing the whole document.
 SAMPLE_CUE_COUNT = 8
-MIN_SAMPLE_LINE_LENGTH = 8  # skip trivial lines ("Yes.", "No!") that carry little language signal
+# Word count, not character count: a name-plus-honorific line like
+# "(Kitagawa Marin) Gojo-kun?" is 27 characters but carries almost no
+# real language signal and is disproportionately likely to be a proper
+# noun — confirmed live: "My Dress-Up Darling" 1x10 sampled mostly
+# name/honorific lines and got flagged as Japanese despite being a
+# genuinely, fully translated Italian file. Requiring more actual words
+# biases sampling toward real sentences instead.
+MIN_SAMPLE_LINE_WORDS = 4
 
 # Intros (OP songs, often left in romanized Japanese by design — a
 # karaoke convention, not a translation failure) and outros (ED songs,
@@ -180,7 +187,7 @@ def _sample_text(full_text: str) -> str:
         i += 1
         if "subtitlarr" in content.lower():
             continue
-        if len(content) < MIN_SAMPLE_LINE_LENGTH:
+        if len(content.split()) < MIN_SAMPLE_LINE_WORDS:
             continue
         # Confirmed live: a repeated on-screen caption (a character's
         # Japanese name shown as a recurring text overlay, "Hanekawa
@@ -250,7 +257,11 @@ async def run_language_check(
     Returns {"checked": N, "matched": N, "mismatched": N, "skipped": N}
     — skipped covers items whose translated text couldn't be found
     (removed from Bazarr/queue since) or whose result line the response
-    didn't include."""
+    didn't include. An item whose text WAS found but had no dialogue
+    left to sample (e.g. a file containing only the AI-disclaimer cue)
+    is auto-marked 'ok' and counted under matched/checked, not skipped
+    — there's no real content to ever be wrong-language, and leaving it
+    'unchecked' would just re-select it on every future sweep forever."""
     instance_id = repository.get_config(conn, "language_check_instance_id", default=None)
     if instance_id is None:
         raise LanguageCheckError(
@@ -267,14 +278,26 @@ async def run_language_check(
     entries = []
     entry_items = []
     skipped = 0
+    auto_ok = 0
     for item in items:
         text = await _get_translated_text(conn, client, item)
         if not text:
+            # Text genuinely couldn't be fetched (Bazarr/NAS unreachable,
+            # item removed since) — leave 'unchecked' so a later sweep,
+            # once the source is reachable again, gets a real chance at it.
             skipped += 1
             continue
         sample = _sample_text(text)
         if not sample:
-            skipped += 1
+            # Text WAS found, but nothing survived sampling (e.g. a file
+            # whose only cue is the Subtitlarr disclaimer line, itself
+            # filtered out — confirmed live: "Paperman", a 1-cue file).
+            # There is no dialogue left to ever be wrong-language, and
+            # this is permanent (not a transient fetch failure), so
+            # leaving it 'unchecked' forever would just re-select it on
+            # every future sweep for no reason — mark it 'ok' instead.
+            repository.set_language_check_ok(conn, item["id"])
+            auto_ok += 1
             continue
         entries.append({
             "n": len(entries) + 1,
@@ -284,7 +307,7 @@ async def run_language_check(
         entry_items.append(item)
 
     if not entries:
-        return {"checked": 0, "matched": 0, "mismatched": 0, "skipped": skipped}
+        return {"checked": auto_ok, "matched": auto_ok, "mismatched": 0, "skipped": skipped}
 
     provider = registry.build_provider(
         instance["provider_type"], instance["config"], instance_name=instance["name"]
@@ -343,4 +366,5 @@ async def run_language_check(
                 item["id"], item["title"], entry["target_lang_name"], detected_lang,
             )
 
+    matched += auto_ok
     return {"checked": matched + mismatched, "matched": matched, "mismatched": mismatched, "skipped": skipped}
