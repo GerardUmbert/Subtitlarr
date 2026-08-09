@@ -132,14 +132,17 @@ createApp({
       llamacppModelsError: {},
       loadingLlamacppModels: {},
       customModelEntry: {}, // instance_id -> bool, toggles select vs free-text input
+      // Reorder is pointer-events-based (not native HTML5 drag-and-drop)
+      // so it works on touch/mobile too — native HTML5 DnD has no touch
+      // equivalent at all, confirmed live as the reason dragging didn't
+      // work in the mobile PWA. draggingId is set for the duration of a
+      // drag; dragOffsetY is the pointer's live Y position minus the
+      // handle's Y at pointerdown, used to translateY the dragged card so
+      // it visually follows the pointer/finger.
       draggingId: null,
-      // Cards are only draggable while the mouse is actually down on the
-      // ⠿ handle — the native draggable="true" attribute has no built-in
-      // "only from this child" restriction, and applying it to the whole
-      // card made selecting text inside any input/textarea (e.g. an API
-      // key field) get hijacked as a card-drag instead. Toggled on the
-      // handle's mousedown, cleared on dragend/drop.
-      dragEnabledId: null,
+      dragOffsetY: 0,
+      _dragStartClientY: 0,
+      _dragCardHeight: 0,
     };
   },
   methods: {
@@ -287,25 +290,66 @@ createApp({
       });
       await this.load();
     },
-    dragStart(instance) {
+    // Pointer Events fire for mouse, touch, AND pen uniformly — one
+    // implementation covers desktop drag AND mobile/PWA drag, unlike the
+    // old native HTML5 draggable="true" approach (mouse-only, no touch
+    // equivalent exists at all).
+    dragPointerDown(instance, event) {
+      // Only the primary pointer/button starts a drag (a multi-touch
+      // second finger, or a right-click, must not hijack the gesture).
+      if (event.button !== undefined && event.button !== 0) return;
+      const card = event.currentTarget.closest(".engine-card");
       this.draggingId = instance.id;
-    },
-    dragOver(instance, event) {
+      this.dragOffsetY = 0;
+      this._dragStartClientY = event.clientY;
+      this._dragCardHeight = card ? card.getBoundingClientRect().height : 0;
+      // Capturing the pointer on the handle itself means move/up events
+      // keep firing on it even once the finger/cursor has moved over a
+      // DIFFERENT card underneath — without this, a fast drag over
+      // another element interrupts tracking.
+      event.currentTarget.setPointerCapture(event.pointerId);
+      document.addEventListener("pointermove", this._onDragPointerMove);
+      document.addEventListener("pointerup", this._onDragPointerUp, { once: true });
+      // Prevents the page from scrolling while dragging a card on touch
+      // (the default touch-action would otherwise treat a vertical drag
+      // as a scroll gesture instead).
       event.preventDefault();
     },
-    async dropOn(targetInstance) {
-      if (this.draggingId === null || this.draggingId === targetInstance.id) return;
+    _dragPointerMove(event) {
+      if (this.draggingId === null) return;
+      this.dragOffsetY = event.clientY - this._dragStartClientY;
+      // Live reorder: as soon as the dragged card's CENTER has crossed
+      // into a neighboring card's slot, splice it into that position
+      // immediately (not just on drop) — combined with the CSS
+      // transition on .engine-card's position, this is what produces the
+      // "other cards jump out of the way" animation, so it's always
+      // visually obvious whether the card is about to land above or
+      // below its neighbor.
       const ids = this.instances.map((i) => i.id);
       const fromIndex = ids.indexOf(this.draggingId);
-      const toIndex = ids.indexOf(targetInstance.id);
-      ids.splice(fromIndex, 1);
-      ids.splice(toIndex, 0, this.draggingId);
+      if (fromIndex === -1) return;
+      const movedBy = this.dragOffsetY;
+      const slots = Math.round(movedBy / Math.max(1, this._dragCardHeight));
+      const toIndex = Math.min(ids.length - 1, Math.max(0, fromIndex + slots));
+      if (toIndex !== fromIndex) {
+        ids.splice(fromIndex, 1);
+        ids.splice(toIndex, 0, this.draggingId);
+        const byId = Object.fromEntries(this.instances.map((i) => [i.id, i]));
+        this.instances = ids.map((id) => byId[id]);
+        // The dragged card's OWN base position just moved by (toIndex -
+        // fromIndex) slots — subtract that back out of the pointer
+        // offset so the card stays glued to the actual pointer position
+        // instead of jumping an extra slot's worth on top of the reflow.
+        this._dragStartClientY += (toIndex - fromIndex) * this._dragCardHeight;
+        this.dragOffsetY = event.clientY - this._dragStartClientY;
+      }
+    },
+    async _dragPointerUp() {
+      document.removeEventListener("pointermove", this._onDragPointerMove);
+      if (this.draggingId === null) return;
       this.draggingId = null;
-      this.dragEnabledId = null;
-      // Optimistic reorder so the list doesn't visibly snap back while the
-      // request is in flight.
-      const byId = Object.fromEntries(this.instances.map((i) => [i.id, i]));
-      this.instances = ids.map((id) => byId[id]);
+      this.dragOffsetY = 0;
+      const ids = this.instances.map((i) => i.id);
       await Api.reorderEngineInstances(ids);
       await this.load();
     },
@@ -348,14 +392,15 @@ createApp({
       // no pull in progress / endpoint not reachable yet
     }
     this.pageLoading = false;
-    // Safety net: a mousedown on the handle followed by a plain click
-    // (release without ever dragging) never fires dragend, which would
-    // otherwise leave dragEnabledId stuck pointing at that card forever.
-    this._onGlobalMouseUp = () => { this.dragEnabledId = null; };
-    document.addEventListener("mouseup", this._onGlobalMouseUp);
+    // Stable bound references so addEventListener/removeEventListener
+    // target the exact same function — needed since these are attached
+    // dynamically per-drag (dragPointerDown) rather than once here.
+    this._onDragPointerMove = this._dragPointerMove.bind(this);
+    this._onDragPointerUp = this._dragPointerUp.bind(this);
   },
   unmounted() {
     if (this._pullPollHandle) clearTimeout(this._pullPollHandle);
-    document.removeEventListener("mouseup", this._onGlobalMouseUp);
+    document.removeEventListener("pointermove", this._onDragPointerMove);
+    document.removeEventListener("pointerup", this._onDragPointerUp);
   },
 }).mount("#engines-app");

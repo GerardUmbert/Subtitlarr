@@ -29,17 +29,19 @@
     </div>
 
     <div class="panel engine-cascade" v-else>
+    <!-- TransitionGroup gives the OTHER cards' reflow its "jump out of
+         the way" animation for free (Vue's FLIP-based move transition) —
+         only the actively-dragged card additionally gets an inline
+         translateY so it tracks the pointer directly; move-transition is
+         suppressed on it via .dragging (see CSS) so the two don't fight. -->
+    <TransitionGroup tag="div" name="engine-card-move">
     <div class="engine-card" v-for="instance in instances" :key="instance.id"
-         :draggable="dragEnabledId === instance.id"
-         @dragstart="dragStart(instance)"
-         @dragover="dragOver(instance, $event)"
-         @drop="dropOn(instance)"
-         @dragend="dragEnabledId = null; draggingId = null;"
-         :style="{ opacity: draggingId === instance.id ? 0.4 : 1 }">
+         :class="{ dragging: draggingId === instance.id }"
+         :style="draggingId === instance.id ? { transform: 'translateY(' + dragOffsetY + 'px)' } : {}">
 
       <template v-if="isSeparator(instance)">
         <div class="engine-opt separator-row">
-          <span class="drag-handle" @mousedown="dragEnabledId = instance.id">⠿</span>
+          <span class="drag-handle" @pointerdown="dragPointerDown(instance, $event)">⠿</span>
           <span class="separator-label">— cascade stops here — anything below is never tried as a fallback —</span>
           <button class="link-btn" @click="deleteInstance(instance)">remove</button>
         </div>
@@ -47,7 +49,7 @@
 
       <template v-else>
         <div class="engine-opt" @click="toggleExpand(instance)">
-          <span class="drag-handle" @click.stop @mousedown="dragEnabledId = instance.id">⠿</span>
+          <span class="drag-handle" @click.stop @pointerdown="dragPointerDown(instance, $event)">⠿</span>
           <div class="engine-info">
             <div class="engine-name-row">
               <div class="engine-name">{% raw %}{{ editBuffers[instance.id].name }}{% endraw %}</div>
@@ -182,6 +184,7 @@
         </div>
       </template>
     </div>
+    </TransitionGroup>
     </div>
 
     <div class="add-engine-wrap">

@@ -3,6 +3,16 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.10.0]
+
+### Changed
+- Rewrote the Engines page's cascade-reorder drag from native HTML5
+  drag-and-drop to Pointer Events — the old approach is mouse-only with
+  no touch equivalent at all, confirmed live as the reason dragging
+  didn't work in the mobile PWA. The dragged card now tracks the
+  pointer/finger directly and other cards animate out of the way live
+  as it crosses their slot, instead of only reordering on drop.
+
 ## [0.9.13]
 
 ### Fixed
