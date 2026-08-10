@@ -105,6 +105,47 @@ consequences worth using deliberately:
 - See [`docs/api-keys-setup.md`](docs/api-keys-setup.md) for exact steps to
   get Gemini/NVIDIA keys and the token budgets to set per engine.
 
+### How a Gemini content block is handled
+
+Gemini's own safety filter (`PROHIBITED_CONTENT`/`SAFETY`) can reject a
+translation batch outright — most likely on R-rated or intense material.
+Rather than treating the whole batch as a failure and handing all of it to
+a weaker fallback engine, Subtitlarr **bisects** the blocked batch and
+retries each half against the *same* Gemini instance, so only the actual
+offending cues end up isolated — the rest of the batch stays on Gemini at
+full quality. Splitting stops once an isolated chunk shrinks to 10 cues, or
+once the item's bisection budget (extra requests spent narrowing down
+blocks, capped per item) runs out — whichever comes first. Either way, only
+that small leftover chunk falls back, and it skips straight past every
+other configured Gemini instance (they'd just trip the same filter again)
+to the first non-Gemini engine in the cascade, re-chunked to that engine's
+own configured batch size rather than arriving oversized.
+
+```mermaid
+flowchart TD
+    A["Batch sent to Gemini Main\n(e.g. 400 cues, ~4000-token budget)"] -->|translate| B{Blocked?}
+    B -->|no| Z["Reassembled with\nGemini's translation"]
+    B -->|"yes: PROHIBITED_CONTENT / SAFETY"| C{"Bisection budget\nexhausted for this item?"}
+    C -->|yes| F
+    C -->|no| D{"Chunk size ≤ 10 cues?"}
+    D -->|yes| F["Isolated chunk only"]
+    D -->|no| E["Split chunk in half,\nretry EACH half against\nGemini Main (same instance)"]
+    E --> B
+    F --> G["Skip Gemini Secondary / 3.1 / etc.\n(same filter, same content, same result)"]
+    G --> H["Re-chunk to fallback engine's\nOWN batch size (e.g. Ollama, 400 tokens)"]
+    H --> I["Fallback engine translates\njust the isolated chunk"]
+    Z --> J["Merge in original cue order"]
+    I --> J
+```
+
+Net effect: a normal batch costs exactly one request, same as always. A
+batch with a handful of blocked lines costs a few extra Gemini requests to
+isolate them, and only those lines go to the fallback engine. A batch
+blocked densely throughout (e.g. an R-rated film flagged every few lines)
+hits the per-item budget quickly and the remainder falls back in bulk,
+re-chunked properly — so one heavily-flagged movie can't consume a
+disproportionate share of your daily Gemini quota chasing a lost cause.
+
 ## Requirements
 
 - A running Bazarr instance and its API key (Bazarr → Settings → General).
