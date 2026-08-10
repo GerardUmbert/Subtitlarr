@@ -114,42 +114,45 @@ def build_provider(
     instances of the same provider_type stay distinguishable."""
     temperature = config.get("temperature", DEFAULT_TEMPERATURE)
     if provider_type == "ollama":
-        return OllamaProvider(
+        provider = OllamaProvider(
             base_url=config["base_url"],
             model=config["model"],
             num_ctx=config.get("num_ctx", 8192),
             temperature=temperature,
             instance_name=instance_name,
         )
-    if provider_type == "gemini":
-        return GeminiProvider(
+    elif provider_type == "gemini":
+        provider = GeminiProvider(
             api_key=config["api_key"], model=config["model"], temperature=temperature,
             instance_name=instance_name,
         )
-    if provider_type == "nvidia":
-        return NvidiaProvider(
+    elif provider_type == "nvidia":
+        provider = NvidiaProvider(
             api_key=config["api_key"], model=config["model"], temperature=temperature,
             instance_name=instance_name,
         )
-    if provider_type == "openrouter":
-        return OpenRouterProvider(
+    elif provider_type == "openrouter":
+        provider = OpenRouterProvider(
             api_key=config["api_key"], model=config["model"], temperature=temperature,
             instance_name=instance_name,
         )
-    if provider_type == "groq":
-        return GroqProvider(
+    elif provider_type == "groq":
+        provider = GroqProvider(
             api_key=config["api_key"], model=config["model"], temperature=temperature,
             instance_name=instance_name,
         )
-    if provider_type == "llamacpp":
-        return LlamaCppProvider(
+    elif provider_type == "llamacpp":
+        provider = LlamaCppProvider(
             base_url=config["base_url"],
             api_key=config.get("api_key") or None,
             model=config.get("model") or None,
             temperature=temperature,
             instance_name=instance_name,
         )
-    raise ValueError(f"Unknown or unimplemented provider type: {provider_type!r}")
+    else:
+        raise ValueError(f"Unknown or unimplemented provider type: {provider_type!r}")
+    provider.batch_token_budget = config.get("batch_token_budget", 0)
+    return provider
 
 
 def batch_settings_for(config: dict) -> tuple[int, int]:

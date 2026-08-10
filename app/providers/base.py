@@ -79,6 +79,21 @@ class TranslationProvider(ABC):
     # can filter/re-run by actual model regardless of which instance name
     # produced it.
     model: str
+    # This instance's own configured batch_token_budget (see
+    # registry.DEFAULT_CONFIG_BY_TYPE / batch_settings_for) — set by
+    # registry.build_provider() at construction time. An item's batches are
+    # normally sized once, up front, for cascade[0] only (see translator.
+    # translate_item/_batch_token_budget); this attribute exists so code
+    # that later routes content to a DIFFERENT cascade entry mid-item (e.g.
+    # translator._resolve_content_block falling an isolated chunk back to a
+    # weaker engine) can re-chunk for THAT engine's own tuning instead of
+    # handing it a chunk sized for whichever engine was primary — a batch
+    # sized for Gemini's 4000-token budget can badly exceed what a small
+    # local model reliably formats (confirmed live: a ~3500-token batch
+    # recovered as few as 1/106 cues). Defaults to 0 (meaning "unset/use
+    # the caller's own batch as-is") for any provider not going through
+    # build_provider(), e.g. a test double.
+    batch_token_budget: int = 0
 
     @abstractmethod
     async def translate(

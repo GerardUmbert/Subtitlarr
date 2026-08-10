@@ -118,6 +118,188 @@ def _fallback_log_line(prior_name: str, item_id: int, exc: Exception, next_name:
     return f"Provider {prior_name} failed again for item {item_id}; falling back to {next_name}"
 
 
+def _first_non_gemini_index(cascade: list[TranslationProvider], start_index: int) -> int | None:
+    """Index of the first cascade[start_index:] entry that isn't a Gemini
+    instance, or None if every remaining entry is Gemini. A content block is
+    a property of Gemini's safety filter on the TEXT, not of which Gemini
+    instance received it — retrying the same content against another Gemini
+    instance is nearly certain to trip the same filter again, so bisection
+    (see _resolve_content_block) only ever escalates to a non-Gemini entry,
+    never to Gemini Secondary/tertiary/etc."""
+    for i in range(start_index, len(cascade)):
+        if cascade[i].provider_type != "gemini":
+            return i
+    return None
+
+
+# Bisection floor: once a blocked chunk shrinks to this many cues or fewer,
+# stop splitting further and just hand it to the next non-Gemini engine —
+# past this point the extra Gemini requests spent narrowing the blocked
+# region further aren't worth it against the marginal reduction in how much
+# dialogue lands on the (usually weaker) fallback engine.
+CONTENT_BLOCK_BISECTION_FLOOR = 10
+
+# Per-item cap on EXTRA requests spent bisecting blocked batches (i.e. calls
+# beyond the one normal attempt every batch already makes) — a movie with
+# content blocks scattered densely throughout (e.g. many short cues each
+# tripping the filter) can otherwise make bisection recurse on nearly every
+# batch, multiplying Gemini request usage for that single item well past
+# what a normal item costs. Once an item's bisection spend crosses this,
+# _resolve_content_block stops splitting further blocked batches and routes
+# the rest of THAT batch straight to the fallback engine wholesale — same
+# as if no non-Gemini fallback existed — so one heavily-flagged movie can't
+# eat a disproportionate share of the daily Gemini RPD budget.
+DEFAULT_BISECTION_BUDGET_PER_ITEM = 12
+
+
+class BisectionBudget:
+    """Tracks extra bisection requests spent on ONE item, shared across every
+    batch of that item (including concurrent batches within a window — safe
+    under asyncio's cooperative scheduling since spend()/exhausted() never
+    await between checking and incrementing)."""
+
+    def __init__(self, limit: int = DEFAULT_BISECTION_BUDGET_PER_ITEM):
+        self.limit = limit
+        self.spent = 0
+
+    def exhausted(self) -> bool:
+        return self.spent >= self.limit
+
+    def spend(self, n: int = 1) -> None:
+        self.spent += n
+
+
+async def _fall_back_chunk_to_next_engine(
+    chunk: list,
+    source_lang: str,
+    target_lang: str,
+    cascade: list[TranslationProvider],
+    blocked_index: int,
+    catalan_vegeta_insults: bool,
+    language_variants: dict[str, str] | None,
+    item_id: int,
+    batch_index: int,
+    batch_total: int,
+    retry_pause_seconds: float,
+    run_id: int | None,
+    on_call_result,
+    reason: str,
+) -> tuple[list, int]:
+    """Sends `chunk` to the first non-Gemini cascade entry after
+    blocked_index — re-chunked to THAT engine's own batch_token_budget
+    first, since chunk was sized for whichever engine was blocking it
+    (usually Gemini's much larger budget), not for the weaker fallback
+    engine it's now headed to. Confirmed live elsewhere in this file: a
+    batch sized for one provider's context window can badly exceed what a
+    different, smaller model reliably formats. A chunk this small (already
+    at or under CONTENT_BLOCK_BISECTION_FLOOR, or the leftover after a
+    budget cutoff) rarely needs splitting further, but re-chunking is cheap
+    and correct even when it's a no-op (one sub-chunk == the whole chunk)."""
+    fallback_index = _first_non_gemini_index(cascade, blocked_index + 1)
+    fallback_provider = cascade[fallback_index]
+    sub_chunks = (
+        srt_io.chunk_cues(chunk, max_tokens_per_batch=fallback_provider.batch_token_budget)
+        if fallback_provider.batch_token_budget > 0
+        else [chunk]
+    )
+    results: list = []
+    resolved_index = fallback_index
+    for sub_chunk in sub_chunks:
+        llm_response, resolved_index = await _try_cascade(
+            cascade, fallback_index, srt_io.extract_dialogue_text(sub_chunk),
+            source_lang, target_lang, catalan_vegeta_insults, language_variants,
+            item_id, batch_index, batch_total, retry_pause_seconds, run_id,
+            ProviderContentBlockedError(reason), on_call_result,
+        )
+        results.extend(reassemble(sub_chunk, llm_response))
+    return results, resolved_index
+
+
+async def _resolve_content_block(
+    batch: list,
+    source_lang: str,
+    target_lang: str,
+    cascade: list[TranslationProvider],
+    blocked_index: int,
+    catalan_vegeta_insults: bool,
+    language_variants: dict[str, str] | None,
+    item_id: int,
+    batch_index: int,
+    batch_total: int,
+    retry_pause_seconds: float,
+    run_id: int | None,
+    budget: "BisectionBudget",
+    on_call_result=None,
+) -> tuple[list, int]:
+    """A batch just got ProviderContentBlockedError from cascade[blocked_index]
+    (always a Gemini instance — see _first_non_gemini_index). Rather than
+    falling the WHOLE batch back to a weaker engine, bisects it and retries
+    each half against that SAME Gemini instance — most of a typical blocked
+    batch is ordinary dialogue that Gemini translates fine, and only a small
+    number of cues actually trip the filter. Recurses down to
+    CONTENT_BLOCK_BISECTION_FLOOR cues, at which point the isolated chunk
+    (and ONLY that chunk) falls back to the first non-Gemini cascade entry —
+    never to another Gemini instance, since that would just trip the same
+    filter again for no benefit. Returns the reassembled cues for `batch`,
+    in original order.
+
+    `budget` (see BisectionBudget) caps how many EXTRA bisection requests
+    this whole ITEM (not just this one batch) may spend — a movie with
+    blocks scattered densely enough that both halves keep re-blocking on
+    nearly every split could otherwise recurse close to the theoretical
+    worst case (~2x the floor-sized leaf count) on EVERY affected batch.
+    Once exhausted, any batch still under bisection stops splitting
+    immediately and routes its current chunk straight to the fallback
+    engine wholesale (still re-chunked to that engine's own budget — see
+    _fall_back_chunk_to_next_engine), same as hitting the floor.
+
+    Caller (_translate_batch) must confirm a non-Gemini fallback actually
+    exists in the cascade before calling this — bisecting has no payoff if
+    every remaining instance is also Gemini.
+
+    Returns (reassembled_cues, last_engine_index) — a bisected batch can
+    genuinely span two different engines (most of it on Gemini, a small
+    isolated chunk on the fallback), so there's no single fully-accurate
+    engine_used/model_used for the batch as a whole. Reporting whichever
+    engine handled the LAST (highest-index) chunk matches the same
+    last-one-wins convention _translate_batches already uses across
+    batches within one item."""
+    if len(batch) <= CONTENT_BLOCK_BISECTION_FLOOR or len(batch) == 1 or budget.exhausted():
+        reason = (
+            f"Isolated a {len(batch)}-cue chunk Gemini blocks even after bisection"
+            if len(batch) <= CONTENT_BLOCK_BISECTION_FLOOR or len(batch) == 1
+            else f"Item's bisection budget ({budget.limit} extra requests) exhausted; "
+            f"routing remaining {len(batch)}-cue chunk to fallback wholesale"
+        )
+        return await _fall_back_chunk_to_next_engine(
+            batch, source_lang, target_lang, cascade, blocked_index,
+            catalan_vegeta_insults, language_variants, item_id, batch_index, batch_total,
+            retry_pause_seconds, run_id, on_call_result, reason,
+        )
+
+    mid = len(batch) // 2
+    results: list = []
+    last_index = blocked_index
+    for half in (batch[:mid], batch[mid:]):
+        try:
+            budget.spend()
+            llm_response = await _call_provider(
+                cascade[blocked_index], srt_io.extract_dialogue_text(half),
+                source_lang, target_lang, catalan_vegeta_insults, language_variants,
+                item_id, batch_index, batch_total, on_call_result,
+            )
+            results.extend(reassemble(half, llm_response))
+            last_index = blocked_index
+        except ProviderContentBlockedError:
+            half_results, last_index = await _resolve_content_block(
+                half, source_lang, target_lang, cascade, blocked_index,
+                catalan_vegeta_insults, language_variants, item_id, batch_index,
+                batch_total, retry_pause_seconds, run_id, budget, on_call_result,
+            )
+            results.extend(half_results)
+    return results, last_index
+
+
 async def _try_cascade(
     cascade: list[TranslationProvider],
     start_index: int,
@@ -176,6 +358,7 @@ async def _translate_batch(
     batch_index: int = 1,
     batch_total: int = 1,
     on_call_result=None,
+    bisection_budget: "BisectionBudget | None" = None,
 ) -> tuple[list, str, str]:
     """Translates and reconciles ONE batch of cues, walking the cascade on
     failure. Returns (reassembled_subs_for_this_batch, engine_used, model_used).
@@ -252,21 +435,38 @@ async def _translate_batch(
     except ProviderContentBlockedError as blocked_exc:
         # No same-instance retry here — unlike ProviderRateLimitedError,
         # retrying the SAME instance on a content-policy block would just
-        # trip the same filter again (the content didn't change). Go
-        # straight to the next cascade entry, if any, since a different
-        # provider/model may not flag the same content at all. Confirmed
-        # live: a real batch failed outright on Gemini (PROHIBITED_CONTENT)
-        # with a fallback engine configured but never even attempted —
-        # this is the gap that fixes.
-        if len(cascade) < 2:
+        # trip the same filter again (the content didn't change).
+        #
+        # If every remaining cascade entry is ALSO Gemini, there's no point
+        # bisecting — another Gemini instance is nearly certain to trip the
+        # same filter on the same text, so just raise immediately (same
+        # behavior as before bisection existed).
+        #
+        # Otherwise, don't fall the WHOLE batch back to a (usually weaker)
+        # non-Gemini engine over what's often just a handful of offending
+        # cues — bisect against the SAME Gemini instance first to isolate
+        # the actual blocked content, keeping the rest of this batch on
+        # Gemini. See _resolve_content_block. Only the isolated chunk(s)
+        # that still block at the bisection floor fall back to the first
+        # non-Gemini cascade entry — deliberately skipping any other Gemini
+        # instances (Secondary/3.1/etc.), which would just burn quota on
+        # all of them for the same guaranteed-to-fail reason.
+        if _first_non_gemini_index(cascade, engine_index + 1) is None:
             raise
-        llm_response, engine_index = await _try_cascade(
-            cascade, 1, dialogue_text, source_lang, target_lang,
+        budget = bisection_budget if bisection_budget is not None else BisectionBudget()
+        reassembled, resolved_index = await _resolve_content_block(
+            batch, source_lang, target_lang, cascade, engine_index,
             catalan_vegeta_insults, language_variants, item_id, batch_index, batch_total,
-            retry_pause_seconds, run_id, blocked_exc, on_call_result,
+            retry_pause_seconds, run_id, budget, on_call_result,
         )
-        engine_used = cascade[engine_index].name
-        model_used = cascade[engine_index].model
+        # A bisected batch can genuinely span two engines (most of it on
+        # Gemini, a small isolated chunk on the fallback) — no single label
+        # is fully accurate. Reports whichever engine handled the LAST
+        # chunk, same last-one-wins convention _translate_batches already
+        # uses across batches within one item.
+        engine_used = cascade[resolved_index].name
+        model_used = cascade[resolved_index].model
+        return reassembled, engine_used, model_used
 
     try:
         return reassemble(batch, llm_response), engine_used, model_used
@@ -351,6 +551,11 @@ async def _translate_batches(
     engine_used = active_provider.name
     model_used = active_provider.model
     batch_total = len(batches)
+    # ONE budget shared across every batch of this item (sequential or
+    # concurrent) — a per-batch budget would let a movie with blocks spread
+    # across many batches spend the full cap on EACH one, defeating the
+    # point of an item-level ceiling on bisection request spend.
+    bisection_budget = BisectionBudget()
 
     if active_provider.provider_type not in _CONCURRENT_PROVIDERS:
         for i, batch in enumerate(batches):
@@ -361,7 +566,7 @@ async def _translate_batches(
             batch_result, batch_engine, batch_model = await _translate_batch(
                 batch, source_lang, target_lang, cascade, item_id,
                 catalan_vegeta_insults, language_variants, retry_pause_seconds, run_id, i + 1, batch_total,
-                on_call_result,
+                on_call_result, bisection_budget,
             )
             translated_subs.extend(batch_result)
             engine_used = batch_engine
@@ -380,7 +585,7 @@ async def _translate_batches(
                 _translate_batch(
                     batch, source_lang, target_lang, cascade, item_id,
                     catalan_vegeta_insults, language_variants, retry_pause_seconds, run_id,
-                    window_start + offset + 1, batch_total, on_call_result,
+                    window_start + offset + 1, batch_total, on_call_result, bisection_budget,
                 )
                 for offset, batch in enumerate(window)
             )

@@ -983,6 +983,10 @@ th.sortable .sort-indicator {
   opacity: 0;
   transform: translateY(8px);
   transition: opacity 0.18s ease, transform 0.18s ease;
+  max-width: 420px;
+  white-space: normal;
+  overflow-wrap: break-word;
+  pointer-events: auto;
 }
 
 .toast-visible {

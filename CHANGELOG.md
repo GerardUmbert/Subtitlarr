@@ -3,6 +3,33 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.10.2]
+
+### Added
+- Gemini content-policy blocks (`PROHIBITED_CONTENT`/`SAFETY`) on a
+  translation batch no longer fall the whole batch back to a weaker
+  engine — the blocked batch is now bisected and retried against the
+  SAME Gemini instance, isolating just the offending cues instead of
+  handing a large chunk of otherwise-fine dialogue to a fallback engine.
+  Only the smallest isolated chunk that still blocks falls back, and it
+  now skips straight past any other configured Gemini instances (which
+  would just trip the same filter again) to the first non-Gemini engine
+  in the cascade. A per-item budget caps how many extra requests this
+  can spend, so a heavily-flagged movie can't consume a
+  disproportionate share of the daily Gemini quota — once exhausted,
+  remaining blocked content falls back wholesale instead of continuing
+  to bisect. Fallback content is also now re-chunked to the receiving
+  engine's own configured batch size, instead of being sent at
+  whatever size the original (usually larger) Gemini batch was.
+
+### Fixed
+- Run-event toast notifications (batch retry/fallback/failure messages)
+  had no width cap or line-wrapping, so a long message rendered as one
+  unbroken full-width line, and a burst of events (e.g. many batches
+  failing in quick succession) stacked an unbounded number of these
+  across the screen. Toasts now wrap within a fixed max width and are
+  capped at 4 visible at once, with the oldest dismissed first.
+
 ## [0.10.1]
 
 ### Fixed
