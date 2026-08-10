@@ -290,7 +290,20 @@ async def _resolve_content_block(
             )
             results.extend(reassemble(half, llm_response))
             last_index = blocked_index
-        except ProviderContentBlockedError:
+        except (ProviderContentBlockedError, ProviderRateLimitedError):
+            # A rate limit can hit the SAME Gemini instance mid-bisection
+            # (confirmed live: item 46726 — several rapid bisection retries
+            # against Gemini Secondary tripped its 429 partway through,
+            # which propagated uncaught and killed the whole item, wiping
+            # out everything bisection had already recovered). Whatever the
+            # cause, this instance isn't answering right now — route this
+            # half through the SAME budget/floor logic as a content block
+            # rather than letting the exception escape; _fall_back_chunk_
+            # to_next_engine (via the floor/budget-exhausted path) sends it
+            # to the fallback engine, or a fresh bisection attempt just
+            # tries this same instance again if there's still budget left
+            # and the chunk is still above the floor — either way the item
+            # no longer fails outright over a transient rate limit here.
             half_results, last_index = await _resolve_content_block(
                 half, source_lang, target_lang, cascade, blocked_index,
                 catalan_vegeta_insults, language_variants, item_id, batch_index,

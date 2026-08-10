@@ -3,6 +3,18 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.10.3]
+
+### Fixed
+- A rate limit (429) hitting the SAME Gemini instance mid-bisection (see
+  0.10.2's content-block handling) propagated uncaught and failed the
+  whole item outright, discarding everything bisection had already
+  recovered — confirmed live: a real item hit this after several
+  rapid-fire bisection retries against one instance tripped its rate
+  limit partway through. The bisection retry loop now treats a rate
+  limit the same way it treats a content block: falls back through the
+  same budget/floor logic instead of letting the item fail.
+
 ## [0.10.2]
 
 ### Added
