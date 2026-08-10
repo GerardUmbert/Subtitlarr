@@ -447,6 +447,10 @@ a.panel:hover {
 .pill-running { background: var(--accent-soft); color: var(--accent); }
 .pill-running .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 1.6s ease-in-out infinite; }
 .pill-idle { background: var(--surface-2); color: var(--ink-faint); }
+.pill-good { background: var(--good-soft); color: var(--good); }
+.pill-good .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--good); }
+.pill-warn { background: var(--warn-soft); color: var(--warn); }
+.pill-warn .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
@@ -501,6 +505,20 @@ a.panel:hover {
 
 .engine-card .panel-title { margin-bottom: 2px; }
 .engine-card .panel-title-sub { margin-bottom: 14px; }
+
+.engine-card-meta { display: flex; flex-direction: column; gap: 8px; }
+.engine-card-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink-faint);
+}
+a.engine-card-line { color: var(--accent); text-decoration: none; }
+a.engine-card-line:hover { text-decoration: underline; }
+.engine-card-line .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.engine-card-line .dot-good { background: var(--good); }
+.engine-card-line .dot-warn { background: var(--warn); }
 
 .add-engine-wrap {
   position: relative;

@@ -10,8 +10,12 @@ createApp({
       nextRun: "",
       syncMediaCron: "",
       syncSubsCron: "",
+      languageCheckCron: "",
+      pushUploadsCron: "",
       nextSyncMediaRun: "",
       nextSyncSubsRun: "",
+      nextLanguageCheckRun: "",
+      nextPushUploadsRun: "",
       runActive: false,
       running: false,
       runStarted: false,
@@ -73,10 +77,16 @@ createApp({
         const [cfg, nextRuns] = await Promise.all([Api.getScheduleConfig(), Api.getNextRuns()]);
         this.syncMediaCron = cfg.sync_media_cron;
         this.syncSubsCron = cfg.sync_subs_cron;
+        this.languageCheckCron = cfg.language_check_cron;
+        this.pushUploadsCron = cfg.push_uploads_cron;
         this.nextSyncMediaRun = nextRuns.next_sync_media_run
           ? new Date(nextRuns.next_sync_media_run).toLocaleString() : "";
         this.nextSyncSubsRun = nextRuns.next_sync_subs_run
           ? new Date(nextRuns.next_sync_subs_run).toLocaleString() : "";
+        this.nextLanguageCheckRun = nextRuns.next_language_check_run
+          ? new Date(nextRuns.next_language_check_run).toLocaleString() : "";
+        this.nextPushUploadsRun = nextRuns.next_push_uploads_run
+          ? new Date(nextRuns.next_push_uploads_run).toLocaleString() : "";
       } catch (_) {
         // keep last known state on transient failure
       }

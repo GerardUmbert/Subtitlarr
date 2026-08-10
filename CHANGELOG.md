@@ -3,6 +3,37 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.10.4]
+
+### Added
+- A new cron for "Push queued uploads" (`push_uploads_cron`, default
+  5:15 AM) — previously the only way to send translations sitting in
+  "pending upload" to Bazarr was a manual click on the Jobs page, so
+  turning on "Queue uploads" without remembering to push left work
+  stuck indefinitely. Scheduled after the language check so a
+  mismatched item is caught before its subtitle ever reaches Bazarr.
+- The Jobs page's Language check card now shows its cron schedule and
+  next run time, matching the other scheduled jobs — previously it had
+  no visible schedule at all, even though the cron field already
+  existed under the hood.
+- The Dashboard's engine card now shows the actual active engine
+  (name + model), how many configured engines are currently cooling
+  down out of the total, and a link to any items queued for upload —
+  replacing a stale "configure it elsewhere" placeholder left over
+  from before multi-instance cascades existed.
+
+### Changed
+- `language_check_cron` now defaults to a real schedule (5:00 AM,
+  after the nightly translation run) instead of being unset/manual-only.
+
+### Fixed
+- The History page's Events tab (and its live-toast polling, which
+  fires every 2 seconds on any open page) read the ENTIRE server log
+  file on every request — confirmed live: with the log grown to
+  several megabytes, this made the tab intermittently hang. Both now
+  only scan a bounded recent window of the file instead of the whole
+  thing, regardless of how large the log grows.
+
 ## [0.10.3]
 
 ### Fixed

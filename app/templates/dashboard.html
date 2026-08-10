@@ -81,9 +81,25 @@
   </component>
 
   <div class="grid-2">
-    <div class="engine-card">
-      <div class="panel-title">Translation engine</div>
-      <div class="panel-title-sub">Configure in <a href="/engines">Translation Engine</a></div>
+    <div class="panel" style="margin-bottom:0;">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Translation engine</div>
+          <div class="panel-title-sub" v-if="activeEngine">{% raw %}{{ activeEngineLabel }}{% endraw %}</div>
+          <div class="panel-title-sub" v-else>Configure in <a href="/engines">Translation Engine</a></div>
+        </div>
+        <span class="pill pill-good" v-if="engineInstances.length && coolingDownCount === 0">
+          <span class="dot"></span>all available
+        </span>
+        <span class="pill pill-warn" v-else-if="engineInstances.length">
+          <span class="dot"></span>{% raw %}{{ coolingDownCount }}{% endraw %} of {% raw %}{{ engineInstances.length }}{% endraw %} cooling down
+        </span>
+      </div>
+      <div class="panel-body" v-if="pendingUploads > 0">
+        <a class="engine-card-line" href="/queue?status=translated_pending_upload">
+          {% raw %}{{ pendingUploads }}{% endraw %} translation(s) queued for upload →
+        </a>
+      </div>
     </div>
 
     <div class="panel" style="margin-bottom:0;">

@@ -74,6 +74,8 @@
     <div class="panel-body">
     <div class="panel-title">Push queued uploads</div>
     <div class="panel-title-sub">Sends every translated subtitle currently held as "pending upload" to Bazarr in one batch</div>
+      <p class="field-hint">Cron: <span class="mono">{% raw %}{{ pushUploadsCron || 'not scheduled' }}{% endraw %}</span> (<a href="/settings">change</a>)</p>
+      <p class="field-hint" v-if="nextPushUploadsRun">Next scheduled run: {% raw %}{{ nextPushUploadsRun }}{% endraw %}</p>
       <p class="field-hint">{% raw %}{{ pendingUploadCount }}{% endraw %} item{% raw %}{{ pendingUploadCount === 1 ? '' : 's' }}{% endraw %} waiting to be pushed.</p>
       <div class="field-row">
         <button class="btn" @click="pushUploads" :disabled="pushUploadsActive || pushingUploads || pendingUploadCount === 0">
@@ -94,6 +96,8 @@
     <div class="panel-title">Language check</div>
     <div class="panel-title-sub">Audits completed translations' ACTUAL output language against their target — catches a well-formed response that's silently still in the source language, which the normal alignment/integrity checks can't detect</div>
 
+      <p class="field-hint">Cron: <span class="mono">{% raw %}{{ languageCheckCron || 'not scheduled' }}{% endraw %}</span> (<a href="/settings">change</a>)</p>
+      <p class="field-hint" v-if="nextLanguageCheckRun">Next scheduled run: {% raw %}{{ nextLanguageCheckRun }}{% endraw %}</p>
       <p class="field-hint">
         Sends one batched request per run ("here are N files' sample text, what language is each") to a
         SINGLE chosen engine, checking up to 25 not-yet-checked completed items at once — cheap on

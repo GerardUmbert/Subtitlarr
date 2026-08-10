@@ -15,6 +15,7 @@ class ScheduleConfig(BaseModel):
     daily_translation_limit: int
     pause_between_items_seconds: int
     queue_uploads_enabled: bool
+    push_uploads_cron: str
     sync_media_cron: str
     sync_subs_cron: str
     language_check_cron: str
@@ -29,6 +30,7 @@ async def get_schedule_config():
         "daily_translation_limit": settings.daily_translation_limit,
         "pause_between_items_seconds": settings.pause_between_items_seconds,
         "queue_uploads_enabled": settings.queue_uploads_enabled,
+        "push_uploads_cron": settings.push_uploads_cron,
         "sync_media_cron": settings.sync_media_cron,
         "sync_subs_cron": settings.sync_subs_cron,
         "language_check_cron": settings.language_check_cron,
@@ -83,6 +85,10 @@ async def set_schedule_config(
             lambda: jobs_api.cron_language_check(runner),
         )
         _apply_sync_cron(
+            scheduler, "push_uploads", config.push_uploads_cron,
+            jobs_api.cron_push_uploads,
+        )
+        _apply_sync_cron(
             scheduler, "backup", config.backup_cron,
             jobs_api.cron_backup,
         )
@@ -99,6 +105,8 @@ async def set_schedule_config(
     settings_store.save_one(conn, "pause_between_items_seconds", config.pause_between_items_seconds)
     settings.queue_uploads_enabled = config.queue_uploads_enabled
     settings_store.save_one(conn, "queue_uploads_enabled", config.queue_uploads_enabled)
+    settings.push_uploads_cron = config.push_uploads_cron
+    settings_store.save_one(conn, "push_uploads_cron", config.push_uploads_cron)
     settings.sync_media_cron = config.sync_media_cron
     settings_store.save_one(conn, "sync_media_cron", config.sync_media_cron)
     settings.sync_subs_cron = config.sync_subs_cron
@@ -117,6 +125,7 @@ async def next_runs(scheduler=Depends(state.get_scheduler)):
         "next_sync_media_run": _iso(scheduler.next_run_time("sync_media")),
         "next_sync_subs_run": _iso(scheduler.next_run_time("sync_subs")),
         "next_language_check_run": _iso(scheduler.next_run_time("language_check")),
+        "next_push_uploads_run": _iso(scheduler.next_run_time("push_uploads")),
         "next_backup_run": _iso(scheduler.next_run_time("backup")),
     }
 

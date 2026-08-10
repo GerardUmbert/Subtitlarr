@@ -22,6 +22,7 @@ PERSISTED_KEYS = (
     "daily_translation_limit",
     "pause_between_items_seconds",
     "queue_uploads_enabled",
+    "push_uploads_cron",
     "sync_media_cron",
     "sync_subs_cron",
     "language_check_cron",

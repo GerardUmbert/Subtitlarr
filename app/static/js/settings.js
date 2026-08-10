@@ -8,12 +8,14 @@ createApp({
       dailyTranslationLimit: 100,
       pauseBetweenItemsSeconds: 30,
       queueUploadsEnabled: false,
+      pushUploadsCron: "",
       syncMediaCron: "",
       syncSubsCron: "",
       languageCheckCron: "",
       backupCron: "",
       backupKeepCount: 20,
       nextRun: "",
+      nextPushUploadsRun: "",
       nextSyncMediaRun: "",
       nextSyncSubsRun: "",
       nextLanguageCheckRun: "",
@@ -41,6 +43,7 @@ createApp({
       this.dailyTranslationLimit = cfg.daily_translation_limit;
       this.pauseBetweenItemsSeconds = cfg.pause_between_items_seconds;
       this.queueUploadsEnabled = cfg.queue_uploads_enabled;
+      this.pushUploadsCron = cfg.push_uploads_cron;
       this.syncMediaCron = cfg.sync_media_cron;
       this.syncSubsCron = cfg.sync_subs_cron;
       this.languageCheckCron = cfg.language_check_cron;
@@ -61,12 +64,14 @@ createApp({
         this.nextSyncMediaRun = result.next_sync_media_run ? new Date(result.next_sync_media_run).toLocaleString() : "";
         this.nextSyncSubsRun = result.next_sync_subs_run ? new Date(result.next_sync_subs_run).toLocaleString() : "";
         this.nextLanguageCheckRun = result.next_language_check_run ? new Date(result.next_language_check_run).toLocaleString() : "";
+        this.nextPushUploadsRun = result.next_push_uploads_run ? new Date(result.next_push_uploads_run).toLocaleString() : "";
         this.nextBackupRun = result.next_backup_run ? new Date(result.next_backup_run).toLocaleString() : "";
       } catch (_) {
         this.nextRun = "";
         this.nextSyncMediaRun = "";
         this.nextSyncSubsRun = "";
         this.nextLanguageCheckRun = "";
+        this.nextPushUploadsRun = "";
         this.nextBackupRun = "";
       }
     },
@@ -81,6 +86,7 @@ createApp({
           daily_translation_limit: this.dailyTranslationLimit,
           pause_between_items_seconds: this.pauseBetweenItemsSeconds,
           queue_uploads_enabled: this.queueUploadsEnabled,
+          push_uploads_cron: this.pushUploadsCron,
           sync_media_cron: this.syncMediaCron,
           sync_subs_cron: this.syncSubsCron,
           language_check_cron: this.languageCheckCron,

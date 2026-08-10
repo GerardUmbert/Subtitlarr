@@ -72,9 +72,15 @@
       </div>
       <div class="field">
         <label>Language check cron</label>
-        <input v-model="languageCheckCron" placeholder="e.g. 8 3 * * * (blank = manual only)" />
-        <p class="field-hint">Sweeps the entire not-yet-checked backlog each fire (same as the Jobs page button). Requires a check engine to be picked on the Jobs page first — a fire with none configured just logs a failed job event. Schedule this BEFORE the translate cron above, not after — a confirmed mismatch resets the item to pending, and only a check that's already finished in time will catch that reset item in the SAME translation run instead of leaving it a full day.</p>
+        <input v-model="languageCheckCron" placeholder="e.g. 0 5 * * * (blank = manual only)" />
+        <p class="field-hint">Sweeps the entire not-yet-checked backlog each fire (same as the Jobs page button). Requires a check engine to be picked on the Jobs page first — a fire with none configured just logs a failed job event. Scheduling this AFTER the translate cron above (the default) lets it audit that night's own batch too, at the cost of any mismatch found waiting until the NEXT translation run to be retranslated; scheduling it BEFORE instead catches a same-night mismatch reset in time for that night's run, but never audits the batch about to run.</p>
         <p class="field-hint" v-if="nextLanguageCheckRun">Next run: {% raw %}{{ nextLanguageCheckRun }}{% endraw %}</p>
+      </div>
+      <div class="field">
+        <label>Push queued uploads cron</label>
+        <input v-model="pushUploadsCron" placeholder="e.g. 15 5 * * * (blank = manual only)" />
+        <p class="field-hint">Only meaningful when "Queue uploads" above is on — otherwise nothing ever sits queued for this to push. Schedule it after the language check above so mismatched items are caught before their subtitle reaches Bazarr.</p>
+        <p class="field-hint" v-if="nextPushUploadsRun">Next run: {% raw %}{{ nextPushUploadsRun }}{% endraw %}</p>
       </div>
     </div>
   </div>

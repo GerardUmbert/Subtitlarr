@@ -132,6 +132,43 @@ async def sync_subs(runner=Depends(state.get_runner)):
 _push_uploads_state = {"active": False, "error": None, "result": None}
 
 
+async def _run_push_uploads(conn, client, triggered_by: str) -> None:
+    """Uploads every item currently held as 'translated_pending_upload' to
+    Bazarr in one pass — the deferred half of queue_uploads_enabled. Shared
+    by the manual endpoint and the cron entry point below, same as the
+    sync_media/sync_subs/language_check pattern."""
+    event_id = repository.start_job_event(conn, "push_uploads", triggered_by=triggered_by)
+    _push_uploads_state["active"] = True
+    _push_uploads_state["error"] = None
+    _push_uploads_state["result"] = None
+    try:
+        result = await upload_queue.push_pending_uploads(conn, client)
+        _push_uploads_state["result"] = result
+        repository.finish_job_event(
+            conn, event_id, status="done",
+            result=f"{result['pushed']} pushed, {result['failed']} failed, {result['reset']} reset",
+        )
+    except Exception as exc:  # noqa: BLE001 - surface to the UI, don't crash the app
+        _push_uploads_state["error"] = str(exc)
+        repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
+    finally:
+        _push_uploads_state["active"] = False
+
+
+async def cron_push_uploads() -> None:
+    """Cron entry point — same active-guard as the on-demand endpoint,
+    so a fire that lands mid-push is silently skipped rather than
+    double-started. Deliberately NOT gated on a translation run being
+    active, same reasoning as the manual endpoint: it only touches items
+    already sitting in the upload queue, which a live run never writes to
+    mid-progress."""
+    if _push_uploads_state["active"]:
+        return
+    conn = state.get_conn()
+    client = state.get_client()
+    await _run_push_uploads(conn, client, triggered_by="cron")
+
+
 @router.post("/push-uploads")
 async def push_uploads(conn=Depends(state.get_conn), client=Depends(state.get_client)):
     """Uploads every item currently held as 'translated_pending_upload' to
@@ -143,26 +180,7 @@ async def push_uploads(conn=Depends(state.get_conn), client=Depends(state.get_cl
     mid-progress, so there's no real conflict to guard against."""
     if _push_uploads_state["active"]:
         return {"started": False, "reason": "A push is already in progress"}
-
-    async def _run():
-        event_id = repository.start_job_event(conn, "push_uploads", triggered_by="manual")
-        _push_uploads_state["active"] = True
-        _push_uploads_state["error"] = None
-        _push_uploads_state["result"] = None
-        try:
-            result = await upload_queue.push_pending_uploads(conn, client)
-            _push_uploads_state["result"] = result
-            repository.finish_job_event(
-                conn, event_id, status="done",
-                result=f"{result['pushed']} pushed, {result['failed']} failed, {result['reset']} reset",
-            )
-        except Exception as exc:  # noqa: BLE001 - surface to the UI, don't crash the app
-            _push_uploads_state["error"] = str(exc)
-            repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
-        finally:
-            _push_uploads_state["active"] = False
-
-    asyncio.create_task(_run())
+    asyncio.create_task(_run_push_uploads(conn, client, triggered_by="manual"))
     return {"started": True}
 
 

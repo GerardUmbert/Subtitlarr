@@ -27,6 +27,7 @@ createApp({
       stats: {},
       run: { active: false, processed: 0, total: 0, failed: 0, rate_per_min: 0 },
       recentItems: [],
+      engineInstances: [],
       polling: false,
       cancelling: false,
       _refreshTimerHandle: null,
@@ -35,6 +36,52 @@ createApp({
   computed: {
     runActive() {
       return this.run.active;
+    },
+    // Non-separator, enabled instances only — a disabled instance or a
+    // "stop cascade here" separator was never going to be tried, so
+    // counting either toward "N of M cooling down" would misrepresent
+    // how much real fallback capacity the cascade actually has right now.
+    activeCascade() {
+      return this.engineInstances.filter(
+        (i) => i.provider_type !== "separator" && i.enabled
+      );
+    },
+    // The first entry in the active cascade that ISN'T currently
+    // rate-limited — matches how the runner itself picks cascade[0] for a
+    // fresh item (see translator.py), so this reflects which engine would
+    // actually receive the NEXT translation, not just whichever is first
+    // in sort_order regardless of its cooldown state.
+    activeEngine() {
+      const now = Date.now();
+      return (
+        this.activeCascade.find(
+          (i) => !i.rate_limited_until || new Date(i.rate_limited_until).getTime() <= now
+        ) || this.activeCascade[0] || null
+      );
+    },
+    coolingDownCount() {
+      const now = Date.now();
+      return this.activeCascade.filter(
+        (i) => i.rate_limited_until && new Date(i.rate_limited_until).getTime() > now
+      ).length;
+    },
+    // Instance names are free-text and often already include the model
+    // (e.g. "Gemini Secondary gemini-3.1-flash-lite") — appending
+    // config.model unconditionally then reads as "X gemini-3.1-flash-lite
+    // · gemini-3.1-flash-lite". Only append it when the name doesn't
+    // already contain it (case-insensitive, since a user might type the
+    // model in a different case than the API returns it).
+    activeEngineLabel() {
+      const engine = this.activeEngine;
+      if (!engine) return "";
+      const model = engine.config && engine.config.model;
+      if (!model || engine.name.toLowerCase().includes(model.toLowerCase())) {
+        return engine.name;
+      }
+      return `${engine.name} · ${model}`;
+    },
+    pendingUploads() {
+      return (this.stats.by_status && this.stats.by_status.translated_pending_upload) || 0;
     },
     progressPct() {
       if (!this.run.total) return 0;
@@ -75,8 +122,18 @@ createApp({
         // ignore transient errors
       }
     },
+    async refreshEngines() {
+      try {
+        const result = await Api.listEngineInstances();
+        this.engineInstances = result.data;
+      } catch (_) {
+        // ignore transient errors — keep last known state
+      }
+    },
     async refreshAll() {
-      await Promise.all([this.refreshStats(), this.refreshRun(), this.refreshQueue()]);
+      await Promise.all([
+        this.refreshStats(), this.refreshRun(), this.refreshQueue(), this.refreshEngines(),
+      ]);
     },
     async triggerRunNow() {
       try {

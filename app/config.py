@@ -37,6 +37,14 @@ class Settings(BaseSettings):
     # Subtitlarr does directly) and batches that wake-up into one burst
     # whenever you choose to push, instead of once per item.
     queue_uploads_enabled: bool = False
+    # Only meaningful when queue_uploads_enabled is (or was) on — otherwise
+    # there's never anything sitting in 'translated_pending_upload' for
+    # this to act on. Scheduled after language_check_cron (5:00 AM), which
+    # itself runs after schedule_cron (3:10 AM) — pushing before the check
+    # has run would upload items the check hasn't had a chance to catch a
+    # mismatch on yet. Empty string disables it (manual push only, via the
+    # Jobs page).
+    push_uploads_cron: str = "15 5 * * *"
 
     # Independent daily crons for the two Bazarr sync jobs — deliberately
     # separate from schedule_cron (the translation job), so wanted-list and
@@ -48,19 +56,17 @@ class Settings(BaseSettings):
     # translation run starts, instead of racing or colliding.
     sync_media_cron: str = "0 3 * * *"
     sync_subs_cron: str = "5 3 * * *"
-    # Same opt-in pattern as the two syncs above — empty = manual-only via
-    # the Jobs page. Left unset by default since it depends on a dedicated
-    # check engine instance being configured first (see
-    # language_check_instance_id in settings_store); a periodic sweep with
-    # no engine picked would just fail every fire. IMPORTANT if you do
-    # enable it: schedule it BEFORE schedule_cron (currently 3:10), not
-    # after — a confirmed mismatch resets the item straight back to
-    # 'pending', and only a check that's already finished by the time the
-    # translation run starts will catch that reset item in the SAME run,
-    # instead of leaving it to wait a full day for the next one. A slot
-    # like "8 3 * * *" (3:08, two minutes ahead of schedule_cron) fits
-    # the existing 5-minute stagger.
-    language_check_cron: str = ""
+    # Scheduled AFTER schedule_cron (currently 3:10) rather than before —
+    # deliberate tradeoff: running before would let a same-night mismatch
+    # get reset to 'pending' in time for THAT night's translation run to
+    # retranslate it immediately, but would never audit the batch that's
+    # about to run. Running after (5:00 AM, well clear of most runs'
+    # duration) covers that night's own translations too, at the cost of
+    # any mismatch found waiting until the NEXT night's run to be fixed.
+    # Still depends on a check engine instance being configured first (see
+    # language_check_instance_id in settings_store) — a fire with none
+    # picked just fails harmlessly, same as any other unconfigured job.
+    language_check_cron: str = "0 5 * * *"
 
     # Daily snapshot of the whole SQLite database to /data/backups/ (same
     # non-volatile volume as the DB itself, so it survives a container

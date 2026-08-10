@@ -142,6 +142,46 @@ _EVENT_SORT_COLUMNS = {
     "type": lambda e: e.event_type,
 }
 
+# Both read_events() and latest_line_id() used to read the ENTIRE log file
+# on every call, line by line, with a regex match per line — cheap when the
+# file is small, but confirmed live: a real deployment's log had grown to
+# ~4.8MB / ~49,500 lines, and run-events.js polls latest_line_id() every 2
+# SECONDS on any open page, so every poll (not just Events-tab loads) was
+# doing a full-file scan. This is what made the History page intermittently
+# hang as the log grew — not a bug in any one query, just unbounded cost
+# that scales with total log size instead of with what's actually being
+# displayed (a bounded, recent window of events).
+#
+# Fix: only ever look at the last MAX_SCAN_BYTES of the file. Events older
+# than that are effectively unavailable through this tab — acceptable,
+# since (per this module's own docstring) old ROTATED files are already
+# considered disaster-recovery-only, not Events-tab material; this just
+# applies the same "recent window, not full history" boundary within the
+# CURRENT file too. 8MB comfortably covers several hours of even a busy
+# translation run's logging.
+MAX_SCAN_BYTES = 8 * 1024 * 1024
+
+
+def _tail_lines(f) -> tuple[list[str], int]:
+    """Seeks to the last MAX_SCAN_BYTES of an already-open file and returns
+    (lines, first_line_no) — first_line_no is 1-based and approximate when
+    the seek lands mid-file (the partial first line is dropped, and line
+    numbers before the seek point are unknowable without scanning from the
+    start, which is exactly what this avoids). Event .id values are only
+    used as a relative ordering/paging cursor by callers, never displayed
+    as a real absolute line count, so this approximation is fine."""
+    f.seek(0, 2)
+    file_size = f.tell()
+    start = max(0, file_size - MAX_SCAN_BYTES)
+    f.seek(start)
+    lines = f.readlines()
+    if start > 0 and lines:
+        lines = lines[1:]  # drop the partial line the seek landed inside
+        start_line_no = 2  # unknowable real number; id is relative from here
+    else:
+        start_line_no = 1
+    return lines, start_line_no
+
 
 def read_events(
     *,
@@ -153,22 +193,22 @@ def read_events(
     sort_by: str | None = None,
     sort_dir: str = "desc",
 ) -> list[LogEvent]:
-    """Reads the current log file (no rotation-spanning — old rotated
-    files are for disaster recovery, not the Events tab) and returns
-    matched, filtered events, capped at `limit`. `after_id` is a 1-based
-    line number cursor: pass the smallest id already seen to page further
-    back, since chronological order = line order in a single file with no
-    concurrent writers other than this process's own logger (which
-    serializes through the stdlib logging lock). Defaults to newest-first
-    by time; `sort_by` picks a different column from the allowlist above,
-    validated the same way the DB-backed sorts are (never trust the raw
-    query param)."""
+    """Reads up to the last MAX_SCAN_BYTES of the current log file (no
+    rotation-spanning — old rotated files are for disaster recovery, not
+    the Events tab) and returns matched, filtered events, capped at
+    `limit`. `after_id` is a line-number cursor relative to this scan
+    window: pass the smallest id already seen to page further back within
+    it. Defaults to newest-first by time; `sort_by` picks a different
+    column from the allowlist above, validated the same way the DB-backed
+    sorts are (never trust the raw query param)."""
     if not LOG_FILE.exists():
         return []
 
     matched: list[LogEvent] = []
     with LOG_FILE.open("r", encoding="utf-8", errors="replace") as f:
-        for line_no, line in enumerate(f, start=1):
+        lines, start_line_no = _tail_lines(f)
+        for offset, line in enumerate(lines):
+            line_no = start_line_no + offset
             if after_id and line_no >= after_id:
                 continue
             event = _parse_line(line_no, line)
@@ -194,7 +234,13 @@ def read_events(
 
 
 def latest_line_id() -> int:
+    """Cursor for run-events.js's 2-second poll — only needs to detect
+    "did anything new get appended," not a true total line count, so this
+    reads the same bounded tail window read_events() does instead of the
+    whole file (confirmed live: this was the highest-frequency caller of
+    the old full-file scan, running every 2s on any open page)."""
     if not LOG_FILE.exists():
         return 0
     with LOG_FILE.open("r", encoding="utf-8", errors="replace") as f:
-        return sum(1 for _ in f)
+        lines, start_line_no = _tail_lines(f)
+        return start_line_no + len(lines) - 1
