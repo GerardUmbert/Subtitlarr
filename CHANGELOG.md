@@ -3,6 +3,14 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.10.5]
+
+### Fixed
+- `push_uploads_cron` was never installed on app startup — only the
+  Settings page's save handler registered it, in-memory only, so any
+  restart after saving silently dropped the job and queued uploads
+  stopped being pushed on schedule.
+
 ## [0.10.4]
 
 ### Added
