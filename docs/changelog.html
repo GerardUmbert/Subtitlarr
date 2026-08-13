@@ -30,6 +30,289 @@
   <h1>Changelog</h1>
   <p class="lede">Generated from <a href="https://github.com/GerardUmbert/Subtitlarr/blob/master/CHANGELOG.md">CHANGELOG.md</a> — that file is the source of truth.</p>
 <div class="changelog-entry">
+<div class="changelog-version">Unreleased</div>
+<div class="changelog-section-title">Changed</div>
+<ul>
+<li>Ollama setup docs (README, <code>docs/api-keys-setup.md</code>, <code>docs/api-keys.html</code>) now recommend <code>translategemma:12b</code> instead of <code>gemma3:4b</code>, keeping the same <code>400</code>-token batch budget as a safe default for modest/low-end GPUs.</li>
+</ul>
+<div class="changelog-section-title">Added</div>
+<ul>
+<li>README: a &quot;What this doesn&#x27;t do&quot; section, clarifying that Subtitlarr doesn&#x27;t download missing subtitles (that&#x27;s Bazarr&#x27;s job), doesn&#x27;t re-time/fix subtitles with bad sync, and doesn&#x27;t bundle or pre-authorize any LLM access.</li>
+<li>README and <code>docs/api-keys-setup.md</code>/<code>docs/api-keys.html</code>: a &quot;Recommended workflow&quot; section walking through the efficient multi-pass path to a fully translated library — enabling Bazarr&#x27;s embedded-subtitle extraction first (Settings → Subtitles → disable &quot;Treat Embedded Subtitles as Downloaded&quot;, and Settings → Providers → add &quot;Embedded Subtitles&quot;), running the cascade with local engines fenced off, letting a second pass clear transient failures before moving a local engine above the separator (so only genuine leftovers pay for local inference, and content-blocked batches get bisected instead of failing outright), and remembering to run the Jobs page&#x27;s Language Check afterward.</li>
+</ul>
+<div class="changelog-section-title">Changed</div>
+<ul>
+<li><code>docs/features.html</code>: refreshed all page screenshots to the current UI (v0.11.2), and added two new ones for the Compare Engines section (source/engine setup form, and the side-by-side diff view), which previously had no screenshot at all.</li>
+</ul>
+<div class="changelog-section-title">Removed</div>
+<ul>
+<li><code>docs/index.html</code>&#x27;s Lingarr comparison table: dropped the &quot;Multiple library roots&quot; row — it speculated about a Lingarr limitation based on documentation silence, but Lingarr may just write subtitle files next to whatever media file it&#x27;s given regardless of root, making the concern unverified and not fair to claim.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.11.2</div>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li>The UI could still lock up on 0.11.1 during a *sustained* streak of identical run-event toasts — not just an occasional burst. Confirmed live: a cascade with no active non-Gemini fallback (e.g. Ollama present but fenced off past a separator, or otherwise unavailable) makes every content-blocked item in a run fail immediately with no bisection/retry, one after another, ~1-2s apart, for as long as the streak lasts — each failure still spawned a brand-new toast element even with 0.11.1&#x27;s cleanup fix, so a long streak (dozens of episodes) meant continuous DOM work for the whole run. Toasts now collapse: an identical message repeating within 4s updates the existing toast&#x27;s count (&quot;×12&quot;) instead of creating a new one, and a distinct new message arriving faster than every 500ms is dropped rather than queued (the same status is always visible live on the Queue/ Dashboard/History pages regardless).</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.11.1</div>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li>The UI could still freeze solid (tab fully unresponsive) even after 0.11.0&#x27;s server-side fix, on a long-running session with several bursts of run events (batch retries/fallbacks/content-block recoveries) — confirmed live via NAS server logs showing every request answered in milliseconds throughout, ruling out the server, while the browser tab itself was locked. Root cause: a toast evicted from view before its own fade-in animation frame had run never received the CSS class its removal depended on, so the <code>transitionend</code> event it was waiting for to actually delete the DOM node never fired — the toast was invisible but never cleaned up. Frequent event bursts (common with Gemini content-block bisection and cascade fallbacks) accumulated enough orphaned nodes and listeners over time to eventually lock up the tab. Toasts are now removed on a fixed timer instead of waiting on a transition event that isn&#x27;t guaranteed to fire.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.11.0</div>
+<div class="changelog-section-title">Changed</div>
+<ul>
+<li>The Dashboard&#x27;s &quot;Translation engine&quot; card now shows a large, prominent callout for items sitting in &quot;pending upload&quot; instead of a small muted text link — translated items waiting on a push to Bazarr were easy to miss before.</li>
+</ul>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li>The Dashboard&#x27;s &quot;Translatable&quot; stat linked to the Queue page with no status filter (showing every item, not just translatable ones) instead of <code>status=pending</code>.</li>
+<li>The &quot;N cooling down&quot; count on the Dashboard&#x27;s engine card divided by the raw instance count, including separators and disabled instances — overstating the denominator and making the fraction misleading.</li>
+<li>The cascade separator row on the Translation Engines page rendered as an oversized box with the label floating in a large empty area instead of a compact divider.</li>
+<li>The UI (Queue, Dashboard, History, Jobs — any page left open) would freeze/hang and requests would time out, worsening the longer the app ran. Root cause: every DB-backed API route was declared <code>async def</code>, so FastAPI ran it directly on the single-threaded event loop instead of a worker thread — each blocking SQLite call stalled the entire server for its duration, including every other open tab&#x27;s poll request. With 5-6 pages independently polling every 2-5 seconds, this was enough to make the app feel unresponsive within minutes. Fixed by allowing the shared SQLite connection to be used across threads (guarded by a single lock held only around each individual query, never across an <code>await</code>) and converting the actual polling routes (queue/dashboard/history list &amp; stats endpoints, and a handful of other pure-DB routes) to synchronous handlers, which FastAPI runs in a worker thread instead of the event loop.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.10.5</div>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li><code>push_uploads_cron</code> was never installed on app startup — only the Settings page&#x27;s save handler registered it, in-memory only, so any restart after saving silently dropped the job and queued uploads stopped being pushed on schedule.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.10.4</div>
+<div class="changelog-section-title">Added</div>
+<ul>
+<li>A new cron for &quot;Push queued uploads&quot; (<code>push_uploads_cron</code>, default 5:15 AM) — previously the only way to send translations sitting in &quot;pending upload&quot; to Bazarr was a manual click on the Jobs page, so turning on &quot;Queue uploads&quot; without remembering to push left work stuck indefinitely. Scheduled after the language check so a mismatched item is caught before its subtitle ever reaches Bazarr.</li>
+<li>The Jobs page&#x27;s Language check card now shows its cron schedule and next run time, matching the other scheduled jobs — previously it had no visible schedule at all, even though the cron field already existed under the hood.</li>
+<li>The Dashboard&#x27;s engine card now shows the actual active engine (name + model), how many configured engines are currently cooling down out of the total, and a link to any items queued for upload — replacing a stale &quot;configure it elsewhere&quot; placeholder left over from before multi-instance cascades existed.</li>
+</ul>
+<div class="changelog-section-title">Changed</div>
+<ul>
+<li><code>language_check_cron</code> now defaults to a real schedule (5:00 AM, after the nightly translation run) instead of being unset/manual-only.</li>
+</ul>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li>The History page&#x27;s Events tab (and its live-toast polling, which fires every 2 seconds on any open page) read the ENTIRE server log file on every request — confirmed live: with the log grown to several megabytes, this made the tab intermittently hang. Both now only scan a bounded recent window of the file instead of the whole thing, regardless of how large the log grows.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.10.3</div>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li>A rate limit (429) hitting the SAME Gemini instance mid-bisection (see 0.10.2&#x27;s content-block handling) propagated uncaught and failed the whole item outright, discarding everything bisection had already recovered — confirmed live: a real item hit this after several rapid-fire bisection retries against one instance tripped its rate limit partway through. The bisection retry loop now treats a rate limit the same way it treats a content block: falls back through the same budget/floor logic instead of letting the item fail.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.10.2</div>
+<div class="changelog-section-title">Added</div>
+<ul>
+<li>Gemini content-policy blocks (<code>PROHIBITED_CONTENT</code>/<code>SAFETY</code>) on a translation batch no longer fall the whole batch back to a weaker engine — the blocked batch is now bisected and retried against the SAME Gemini instance, isolating just the offending cues instead of handing a large chunk of otherwise-fine dialogue to a fallback engine. Only the smallest isolated chunk that still blocks falls back, and it now skips straight past any other configured Gemini instances (which would just trip the same filter again) to the first non-Gemini engine in the cascade. A per-item budget caps how many extra requests this can spend, so a heavily-flagged movie can&#x27;t consume a disproportionate share of the daily Gemini quota — once exhausted, remaining blocked content falls back wholesale instead of continuing to bisect. Fallback content is also now re-chunked to the receiving engine&#x27;s own configured batch size, instead of being sent at whatever size the original (usually larger) Gemini batch was.</li>
+</ul>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li>Run-event toast notifications (batch retry/fallback/failure messages) had no width cap or line-wrapping, so a long message rendered as one unbroken full-width line, and a burst of events (e.g. many batches failing in quick succession) stacked an unbounded number of these across the screen. Toasts now wrap within a fixed max width and are capped at 4 visible at once, with the oldest dismissed first.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.10.1</div>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li>The Engines page&#x27;s drag handle still didn&#x27;t work on phones even after 0.10.0&#x27;s Pointer Events rewrite — its actual touch target was only about 17px (a 15px glyph plus 2px padding), well under the ~44px minimum a fingertip can reliably hit, so most real-phone taps missed the handle and landed on the card&#x27;s own expand-on-click area instead, never reaching the drag logic at all. Enlarged the handle&#x27;s hit area with padding (offset by a matching negative margin so its visual position and the card&#x27;s layout are unchanged).</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.10.0</div>
+<div class="changelog-section-title">Changed</div>
+<ul>
+<li>Rewrote the Engines page&#x27;s cascade-reorder drag from native HTML5 drag-and-drop to Pointer Events — the old approach is mouse-only with no touch equivalent at all, confirmed live as the reason dragging didn&#x27;t work in the mobile PWA. The dragged card now tracks the pointer/finger directly and other cards animate out of the way live as it crosses their slot, instead of only reordering on drop.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.9.13</div>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li>The language check&#x27;s sample-line filter used a character-count minimum (8 chars), which let short name/honorific lines like &quot;(Kitagawa Marin) Gojo-kun?&quot; through as &quot;substantial&quot; even though they carry almost no real language signal — confirmed live: &quot;My Dress-Up Darling&quot; 1x10 (ES and IT) both got flagged as Japanese despite being genuinely, fully translated, because their samples were mostly character names. Switched to a word-count minimum (4 words), biasing sampling toward real sentences over names/places.</li>
+<li>A completed item whose translated file had no real dialogue to sample (only the AI-disclaimer cue, itself excluded from sampling) — e.g. &quot;Paperman&quot;, a 1-cue file — stayed &#x27;unchecked&#x27; forever and got re-selected on every future language-check sweep with nothing to show for it. Such items are now auto-marked &#x27;ok&#x27; instead, since there&#x27;s no content left that could ever be wrong-language.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.9.12</div>
+<div class="changelog-section-title">Changed</div>
+<ul>
+<li>Un-hid the &quot;Pull model&quot; button on the Engines page (hidden in 0.9.11) — it already had a &quot;type a custom model name instead&quot; toggle next to the dropdown for pulling a model not yet installed; it just wasn&#x27;t obvious enough at a glance.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.9.11</div>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li>Restoring a backup taken on an older release left the live database on that old schema until the next restart, since nothing re-applied migrations — the very next call to a function touching a column added since would crash. Migrations are now re-applied immediately after every restore.</li>
+<li>Backup filenames could collide at second resolution — restore&#x27;s own safety-snapshot-before-restoring step guaranteed a same-second collision on every restore that followed shortly after a backup, silently overwriting the very file about to be restored from before it was ever read. Bumped to millisecond resolution.</li>
+</ul>
+<div class="changelog-section-title">Changed</div>
+<ul>
+<li>Hid the &quot;Pull model&quot; button on the Engines page for now — the model-name field&#x27;s &quot;type a custom model name instead&quot; toggle wasn&#x27;t discoverable. Pull a model directly on the Ollama host in the meantime.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.9.10</div>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li>Language-check and stale-audit resets could get silently deleted by the very next Bazarr poll — confirmed live: three flagged items vanished entirely, gone from the Queue AND from a fresh Bazarr pull. Both resets set an item back to pending so the next run retries it, but the routine &quot;purge unsynced items&quot; cleanup treats any pending item as safe to wipe, and Bazarr never re-reports a reset item as missing (the flagged-wrong or pre-existing file is still sitting in that slot). Reset items are now exempted from that purge until they actually complete again.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.9.9</div>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li>The 0.9.8 same-language guard checked existence only, not content, so it broke every language-check mismatch reset outright — a reset item went back to pending to get retranslated, but Bazarr still had the just-flagged-WRONG file in that slot, and the guard saw that file, concluded &quot;already there,&quot; and silently marked the item done again without ever fixing it. Confirmed live: flagged items vanished from the Queue instead of reappearing as pending. Now checks the existing file&#x27;s content for the Subtitlarr disclaimer before skipping — only a genuinely untouched file skips translation.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.9.8</div>
+<div class="changelog-section-title">Added</div>
+<ul>
+<li><strong>Stale translation audit</strong> (Jobs page) — checks every &quot;done&quot; item against Bazarr&#x27;s CURRENT subtitle list (one cheap call per item, no LLM involved) and resets any with no real subtitle actually present for their target language back to pending. Confirmed live: 156 of 869 done items on a real backup were stale — marked translated with no real subtitle on Bazarr for that language — while genuine gaps were correctly left untouched.</li>
+</ul>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li>Translation now checks immediately before starting whether Bazarr already has a real subtitle in the target language, and skips straight to done without spending an LLM call or uploading anything if so. Root-caused via the language check and a real NAS backup: confirmed items were ending up marked &quot;done&quot; with target_language set to a language Bazarr&#x27;s wanted-list had misreported as missing at some earlier poll, even though Bazarr already had the real file the whole time (Stargate SG-1, Marshals, Fullmetal Alchemist, and others).</li>
+<li>Fixed CI failing on every push since the last release — the test suite&#x27;s fake translation-provider stand-ins were missing the <code>ask()</code> method added alongside the Compare Engines tool, so every test that instantiated one failed outright.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.9.7</div>
+<div class="changelog-section-title">Added</div>
+<ul>
+<li><strong>Daily automatic database backups</strong> — snapshots the whole SQLite database to <code>/data/backups/</code> on a daily cron (on by default), keeping the last 20 and pruning older ones automatically. Uses sqlite3&#x27;s own online backup API rather than a raw file copy, so it&#x27;s safe to run concurrently with a live translation run or any other job. The only recovery path for a destructive mistake (clear-database has no undo) or a bad migration. Also runnable on demand from Settings.</li>
+<li><strong>Restore from a backup snapshot</strong> — the Settings page now lists every available snapshot and can restore any of them into the live database in place (same backup API, run in reverse), with no app restart needed for the data itself. A safety snapshot of the pre-restore state is taken automatically first, so a restore is always itself undoable. Blocked while any job is active.</li>
+</ul>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li>The language check could hang forever if an entire batch skipped (no usable sample text, or the model&#x27;s response omitted that line) — since a skipped item&#x27;s status never changes, the same batch got re-selected and re-fetched every iteration with zero progress. Confirmed live: a NAS run repeatedly re-fetched the same 25 Bazarr subtitles thousands of times (2600+ skipped, 0 checked) with no exit. The sweep now stops as soon as one batch makes no progress at all, not only when a batch comes back smaller than requested.</li>
+<li>The sidebar&#x27;s version label was hardcoded and had gone stale across several releases (still read v0.9.2) — corrected, and will be kept in sync with every future release going forward.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.9.6</div>
+<div class="changelog-section-title">Added</div>
+<ul>
+<li><strong>Language check</strong>: a batched audit of already-completed translations&#x27; ACTUAL output language against their target language — catches a well-formed, correctly-indexed translation that&#x27;s simply still in the wrong language (confirmed live: gemini-3.5-flash-lite echoing English back for a Catalan target), which the existing structural checks can&#x27;t detect. One LLM call covers many items per sweep (a short dialogue sample per item, not the whole file) against a dedicated, independently configurable check engine, to avoid burning a separate request per item against a large backlog. Triggered manually from the Jobs page (now sweeps the ENTIRE unchecked backlog per click instead of stopping after one batch of 25) or on its own optional cron (Settings page, blank by default). Blocked while a translation run is active, since the check&#x27;s own engine call could otherwise compete with a live run for the same instance&#x27;s rate-limit window.</li>
+<li>A confirmed mismatch resets the item to <code>pending</code> for retranslation (discarding any locally-queued file first) and logs a permanent record to a new <strong>Language Mismatches</strong> tab on the History page — showing show/movie, episode, expected vs. detected language, and whether the wrong-language file had already been pushed to Bazarr — so that trail isn&#x27;t lost once the item is retranslated and its own status resets.</li>
+</ul>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li>The language check&#x27;s sampling could false-positive on two unrelated, structural parts of a file that were never real dialogue in the first place: fansub-style staff-credits rolls (multiple cues sharing the exact same timestamp, e.g. &quot;Translation Consultant&quot; / &quot;Visual Typesettings&quot;) and opening-song lyrics left in romanized Japanese by design (a karaoke convention, not a translation failure). Both cluster at the very start/end of an episode, so the sample is now taken from the middle third of the file&#x27;s cues instead of scanning from the top — verified against real flagged episodes (&quot;One Outs&quot;, &quot;Big Windup!&quot;) that no longer false-positive after the fix.</li>
+<li>A weak local model was found to occasionally echo the literal <code>&lt;translated text&gt;</code> placeholder from the system prompt&#x27;s own format description back as part of its output, prefixing otherwise-correct translated lines with that literal string instead of substituting real content — the same class of bug as the earlier <code>&lt;index&gt;</code> tag leak, now stripped the same way during reassembly.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.9.5</div>
+<div class="changelog-section-title">Added</div>
+<ul>
+<li>New <strong>Compare Engines</strong> tool (linked from the Engines page footer) — translates the same source subtitle with two engine instances (or one engine against an uploaded reference translation) and shows a git-style side-by-side diff, per-side timing/query-count/avg-seconds-per-cue stats, and a hover tooltip on each row showing what the original source line said. Source can be picked from Bazarr&#x27;s FULL episode/movie library (not just Subtitlarr&#x27;s own narrower &quot;wanted&quot; queue) or uploaded directly as a raw <code>.srt</code>. Runs sequentially or in parallel (with a warning if both engines share the same base URL), and never touches the real queue, <code>items</code>/<code>item_run_log</code>, or Bazarr uploads — output is cached under its own scratch subfolder, cleared on restart like the existing prefetch cache. Per-side overrides for the Catalan &quot;Vegeta insults&quot; toggle and temperature, independent of each instance&#x27;s saved config, so the tool can actually show what either setting changes.</li>
+<li><strong>Temperature is now a configurable per-engine-instance setting</strong> (0.0–2.0, default 0.2) across all six providers — previously unset entirely, silently defaulting to whatever each API&#x27;s own default is (typically ~1.0, tuned for general chat/creative use, not literal format-strict subtitle translation). Validated both client-side (hard clamp on blur) and server-side (a request outside the range Gemini&#x27;s own API documents — confirmed live: it rejects &gt;2.0 with &quot;temperature must be in the range [0.0, 2.0]&quot; — is rejected with a clear 422 before ever reaching a provider).</li>
+</ul>
+<div class="changelog-section-title">Changed</div>
+<ul>
+<li>Strengthened the system prompt&#x27;s anti-merge instruction: models were observed occasionally combining two consecutive cues that read as one continuous sentence into a single output block despite the existing &quot;do not merge&quot; wording — the instruction now explicitly names this exact temptation and requires one output block per input index, always.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.9.4</div>
+<div class="changelog-section-title">Added</div>
+<ul>
+<li>The two Bazarr sync jobs (wanted-list sync, source prefetch) and the upload push now have durable history — a new <code>job_events</code> table records every start/finish, cron-fired or manually triggered from the Jobs page, with status and a short result summary. Previously these had no persisted record at all; only an ephemeral in-memory status shown live on the Jobs page while running, gone the moment it finished or the page was reloaded. Surfaced as a new &quot;Jobs&quot; tab on the History page (<code>GET /api/history/jobs</code>), alongside the existing Runs/Events/Stats tabs. Translation runs are unaffected — they already had a durable record via <code>run_history</code>/<code>item_run_log</code>.</li>
+<li>The Engines page&#x27;s llama.cpp instances now get a model picker, same as Ollama&#x27;s — <code>GET /api/config/engines/llamacpp/models</code> reads the server&#x27;s <code>/v1/models</code> and offers it as a dropdown on the Model field (falls back to free text if the list is empty/unreachable, or via the &quot;type a custom model name instead&quot; link). For a plain single-model <code>llama-server</code> this will only ever show the one loaded model; a multi-model router/proxy in front (e.g. llama-swap) shows everything it aggregates.</li>
+</ul>
+<div class="changelog-section-title">Changed</div>
+<ul>
+<li>Default cron schedule for the three daily jobs is now staggered so wanted-list sync and source prefetch both land before the translation run starts, instead of all three firing around 9:40am independent of each other: <code>sync_media_cron</code> 3:00am, <code>sync_subs_cron</code> 3:05am, <code>schedule_cron</code> (translation run) 3:10am.</li>
+</ul>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li>Dashboard&#x27;s &quot;Wanted&quot; stat tile was labeled &quot;Wanted (Bazarr)&quot;, implying it matches Bazarr&#x27;s own Wanted count exactly — it doesn&#x27;t. Subtitlarr counts one row per (item, missing target language) pair, while Bazarr&#x27;s Wanted screen counts one row per episode/movie regardless of how many languages are missing, so the two numbers diverge (roughly by a factor of however many target languages you configure). Relabeled to &quot;Wanted (language-pairs)&quot; so it&#x27;s not read as directly comparable.</li>
+<li>A translation that failed alignment/integrity checks (e.g. &quot;only recovered N/M cues&quot;) showed no detail anywhere in the UI — the raw LLM response that caused the failure was already being logged to the server log file, but never reached <code>error_detail</code>, the field the Queue/History &quot;click for full error&quot; modal reads. <code>TranslationAlignmentError</code> now carries that raw response through to the same place every other provider error&#x27;s detail already shows up.</li>
+<li><code>llamacpp_provider.py</code> only caught <code>httpx.TimeoutException</code>/ <code>ConnectError</code> as retryable — a dropped connection mid-response (<code>httpx.ReadError</code>, seen live against a remote instance) propagated as a raw, unhandled exception with an empty message, showing as a blank failure with no explanation. Now caught alongside the others as a retryable <code>ProviderRateLimitedError</code>, with a fallback to the exception&#x27;s class name whenever <code>str(exc)</code> itself is empty (which <code>httpcore</code> errors like this commonly are).</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.9.3</div>
+<div class="changelog-section-title">Added</div>
+<ul>
+<li>Subtitlarr is now installable as a PWA — <code>manifest.json</code>, <code>theme-color</code>/ <code>apple-touch-icon</code> tags, and a service worker (<code>app/static/js/sw.js</code>) wired into <code>base.html</code>. The service worker is intentionally a bare passthrough (installability only, no caching): every page already busts its own JS/CSS on each server restart via <code>asset_version</code>, and the dashboard&#x27;s actual data (queue, stats) is meaningless without a live connection anyway, so caching would only risk serving stale assets or a frozen queue view. Also added the <code>apple-mobile-web-app-capable</code>/ <code>-title</code>/<code>-status-bar-style</code> and <code>mobile-web-app-capable</code> meta tags (missing these is why &quot;Add to Home Screen&quot; opens inside Safari&#x27;s browser chrome instead of standalone), and rasterized <code>icon.svg</code> into real 192×192/512×512 PNGs (<code>app/static/icons/</code>) with both <code>any</code> and <code>maskable</code> purpose entries in the manifest — an SVG-only icon is a known flaky spot for some Chrome/Android install-criteria checks.</li>
+</ul>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li><strong>Wanted/translatable/no-source stats could drift permanently out of sync with Bazarr and never recover.</strong> Every poll only ever upserted items and flipped resolved ones to <code>done</code> — nothing ever deleted a stale row, so <code>wanted</code> was really &quot;every item ever seen,&quot; not &quot;every item Bazarr currently wants.&quot; A transient spike (e.g. toggling Bazarr&#x27;s &quot;treat bundled subtitles as downloaded&quot; setting) permanently inflated the count with no way back short of a full &quot;Clear database.&quot; Each poll now purges every item that isn&#x27;t <code>done</code>/ <code>translated_pending_upload</code> before re-syncing, so wanted/translatable/ no-source are rebuilt fresh from Bazarr&#x27;s current wanted list on every sync; only the translated total persists across polls.</li>
+<li>The running web app itself had no favicon — <code>docs/assets/icon.svg</code> (the public site&#x27;s icon) was never wired into <code>app/templates/base.html</code>. Copied to <code>app/static/icon.svg</code> and linked so the app&#x27;s own browser tab now shows it too.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.9.2</div>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li><strong>Bulk-running the Queue page&#x27;s &quot;Pending upload&quot; filter did nothing</strong> — <code>translated_pending_upload</code> (an item that finished translating but hasn&#x27;t been pushed to Bazarr yet) was missing from the set of re- runnable statuses, even though the Queue page&#x27;s own &quot;Pending upload&quot; status filter is a real, selectable option and treats that status the same as &quot;Done&quot; everywhere else. Filtering to it and clicking &quot;Run all N matching&quot; silently returned zero items instead of re-running them.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.9.1</div>
+<div class="changelog-section-title">Added</div>
+<ul>
+<li>The AI-translation disclaimer cue prepended to every subtitle is now itself translated into the target language instead of always being in English — e.g. a Spanish subtitle gets a Spanish disclaimer, not an English one at the top of a Spanish file. Covers all ~187 languages Bazarr recognizes (<code>app/subtitles/disclaimer_translations.json</code>, generated once via Gemini, committed as a static file — no extra AI call at translation time). The template fills in the actual source/ target language names (e.g. &quot;Subtitlarr used AI to translate this from English into Spanish...&quot;); falls back to the English template for any language code not in the file.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.9.0</div>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li><strong>Queued-upload subtitle files were stored in the container&#x27;s ephemeral temp filesystem, not the persistent <code>/data</code> volume</strong> — a container restart while items sat as &quot;translated_pending_upload&quot; (the whole point of <code>queue_uploads_enabled</code>, letting a run finish and defer the Bazarr push/disk-wake to later) silently wiped every queued translation. &quot;Push queued uploads&quot; then failed for all of them, since the DB still thought they were queued but the actual translated content was gone. The queue directory now lives at <code>/data/upload-queue</code>, alongside the SQLite DB, and survives restarts.</li>
+<li>A push against an item whose queued file is genuinely missing (e.g. ones queued before this fix) is unrecoverable by retrying — the translated text is gone. Those items are now reset to <code>pending</code> instead of being left permanently stuck in <code>translated_pending_upload</code>, so the next translation run regenerates them. The Jobs page&#x27;s push-result line now reports this as &quot;reset N for re-translation&quot; instead of lumping it into &quot;failed&quot;.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.8.8</div>
+<div class="changelog-section-title">Added</div>
+<ul>
+<li>Language names used in LLM translation prompts now prefer Bazarr&#x27;s own <code>GET /api/system/languages</code> list — fetched at startup and again whenever the Bazarr connection is saved, best-effort. This correctly covers Bazarr-specific non-standard codes (e.g. <code>pb</code> for Brazilian Portuguese, <code>ea</code> for Latin American Spanish) that ISO 639-1 doesn&#x27;t define, without hardcoding guesses at those codes&#x27; meanings. Falls back to the bare uppercased code, same as any unrecognized code, until a Bazarr connection has been configured and reached at least once.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.8.7</div>
+<div class="changelog-section-title">Added</div>
+<ul>
+<li><strong>Mobile/narrow-viewport layout</strong>, across most pages — confirmed live on a real phone via DevTools: - Dashboard&#x27;s stat-card grid, page header, Current-run title/Stop- button row, and Rate/Failed/ETA row now wrap or drop to fewer columns at real phone widths instead of squeezing 4 cards or a fixed-width row into ~375-430px. - Mobile&#x27;s responsive <code>.stats</code>/<code>.shell</code>/<code>main</code>/<code>.grid-2</code> overrides were living in <code>base.css</code>, which loads BEFORE <code>components.css</code> in <code>base.html</code> — with equal selector specificity, the later-loading stylesheet always wins regardless of which file&#x27;s media query actually matched, so <code>components.css</code>&#x27;s unconditional 4-column <code>.stats</code> rule silently beat every mobile override at every width. Moved into <code>components.css</code> instead, alongside the sidebar&#x27;s existing same-reasoning fix. - <code>.shell</code>&#x27;s <code>min-height: 100vh</code> (needed on desktop) left a large empty gap between the mobile top bar and page content on short pages — confirmed via DevTools that <code>main</code>&#x27;s own box was stretched far taller than its content, a side effect of CSS Grid&#x27;s default row-stretch behavior once <code>.shell</code> collapses to a single column. - The mobile top bar is now <code>position: sticky</code> (was <code>static</code> — scrolled away with the page). - Any table wrapped in <code>.table-scroll</code> (Queue, History, Events) now actually scrolls horizontally instead of squeezing every column to fit and wrapping cell text mid-word — <code>table</code> needed <code>width: max-content</code>, not <code>width: 100%</code>/<code>min-width: 100%</code>, since <code>table-layout: auto</code> still shrinks columns to fit a percentage-based width before ever considering real overflow. - Engines page: each cascade row&#x27;s name/badges/status/expand-arrow no longer squeeze onto one unbreakable line — badges wrap as whole units (previously wrapped mid-word, e.g. &quot;recommend/ed&quot;), and the drag handle sits at a predictable position by the instance name instead of centering against the row&#x27;s full (and inconsistent) wrapped height. - History&#x27;s collapsed run cards: a long dynamically-built engine- summary badge (e.g. &quot;Gemini Main gemini-3.1-flash-lite (+1 via Gemini Secondary gemini-3.1-flash-lite)&quot;) overflowed underneath the files/ok/failed stats instead of wrapping, visually overlapping them — now wraps normally, and the stats block drops to its own row below the title when there isn&#x27;t room for both on one line.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.8.6</div>
+<div class="changelog-section-title">Changed</div>
+<ul>
+<li><strong>Stopping a run now interrupts an item mid-translation, not just between items.</strong> Previously, clicking Stop only took effect once the currently in-flight item finished ALL of its batches — a large multi-batch item could keep running for minutes after Stop was clicked. <code>_translate_batches()</code> now takes a <code>cancel_check</code> callable, polled before every batch (sequential engines) or before every window of batches (concurrent engines — a window already in flight via <code>asyncio.gather()</code> can&#x27;t be interrupted mid-window, only between them). A new <code>RunCancelledError</code> marks the interrupted item as <code>failed</code> with a clear &quot;cancelled&quot; message — a partial translation is never uploaded.</li>
+</ul>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li><strong><code>.srt</code>-only source subtitle filtering</strong>: <code>app/subtitles/srt_io.py</code>&#x27;s parser only understands <code>.srt</code> structure, but <code>build_source_map()</code> previously accepted any subtitle path Bazarr returned regardless of extension. Confirmed live: Bazarr&#x27;s own <code>/api/subtitles/contents</code> endpoint 500&#x27;d trying to serve an <code>.ass</code> file&#x27;s content. Non-<code>.srt</code> source candidates (<code>.ass</code>, <code>.ssa</code>, <code>.vtt</code>, <code>.sub</code>, etc.) are now filtered out before ever being attempted as a translation source, falling back to another available language&#x27;s <code>.srt</code> track if one exists instead of failing the item outright.</li>
+</ul>
+</div>
+<div class="changelog-entry">
+<div class="changelog-version">0.8.5</div>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li><strong>Queue page</strong>: the Language column (<code>EN → ES</code>) had no <code>white-space: nowrap</code>, so once the row&#x27;s available width got squeezed by the Error column&#x27;s own wrap fix (0.8.4), the arrow/target-language span could end up wrapped onto its own line. New <code>.lang-cell</code> class keeps the whole language pair on one line.</li>
+</ul>
+<div class="changelog-section-title">Added</div>
+<ul>
+<li>A public docs/landing site under <code>docs/</code> (index, install, engine setup, features with real screenshots, and an auto-generated changelog page via <code>docs/assets/build_changelog.py</code>), plus a <code>docs-pages.yml</code> GitHub Actions workflow to deploy it to GitHub Pages on every push touching <code>docs/</code>. Not yet live — GitHub Pages requires the repo to be public first, and Pages itself has no private option on the Free plan, so this stays dormant until that&#x27;s a deliberate choice.</li>
+</ul>
+</div>
+<div class="changelog-entry">
 <div class="changelog-version">0.8.4</div>
 <div class="changelog-section-title">Added</div>
 <ul>
