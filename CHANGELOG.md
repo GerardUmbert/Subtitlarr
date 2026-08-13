@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Changed
+- Ollama setup docs (README, `docs/api-keys-setup.md`, `docs/api-keys.html`)
+  now recommend `translategemma:12b` instead of `gemma3:4b`, keeping the
+  same `400`-token batch budget as a safe default for modest/low-end GPUs.
+
+### Added
+- README: a "What this doesn't do" section, clarifying that Subtitlarr
+  doesn't download missing subtitles (that's Bazarr's job), doesn't
+  re-time/fix subtitles with bad sync, and doesn't bundle or
+  pre-authorize any LLM access.
+
 ## [0.11.2]
 
 ### Fixed
