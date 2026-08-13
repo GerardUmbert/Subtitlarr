@@ -32,6 +32,13 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   (source/engine setup form, and the side-by-side diff view), which
   previously had no screenshot at all.
 
+### Removed
+- `docs/index.html`'s Lingarr comparison table: dropped the "Multiple
+  library roots" row — it speculated about a Lingarr limitation based
+  on documentation silence, but Lingarr may just write subtitle files
+  next to whatever media file it's given regardless of root, making
+  the concern unverified and not fair to claim.
+
 ## [0.11.2]
 
 ### Fixed

@@ -123,11 +123,6 @@
         <td>One container, one connection (Bazarr's URL + API key) — everything else (engines, languages, schedule) is configured from its own web UI afterward</td>
         <td>Connects separately to Radarr, Sonarr, and needs media volumes mapped correctly for every library</td>
       </tr>
-      <tr>
-        <td>Multiple library roots</td>
-        <td>Not a concern — Bazarr already tracks every library/root folder it manages, so Subtitlarr sees everything through one connection regardless of how many separate paths your Sonarr/Radarr setup uses (e.g. Anime and TV under one Sonarr instance at two different filesystem paths)</td>
-        <td>Documented setup only shows two fixed mount points (<code>/movies</code>, <code>/tv</code>) — nothing in Lingarr's public docs addresses tracking more than one distinct root per media type. Whether a multi-root setup like Anime+TV under one Sonarr instance is actually supported, needs a workaround, or is just undocumented isn't clear from what's published</td>
-      </tr>
     </tbody>
   </table>
   <p style="font-size:12.5px; color:var(--ink-faint);">Comparison based on Lingarr's own public documentation as of this writing — worth double-checking their current docs if something here looks out of date.</p>
