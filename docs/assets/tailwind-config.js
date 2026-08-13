@@ -6,6 +6,17 @@
 // properties, so Tailwind utilities that reference var(--token) pick up
 // the dark values automatically with no separate dark: variants needed.
 tailwind.config = {
+  // site.css is a separate linked stylesheet, unlike a typical Tailwind
+  // page where all CSS lives in one place after Tailwind in the cascade.
+  // The Play CDN script injects its own <style> at runtime, appended to
+  // <head> AFTER site.css's <link> regardless of original tag order —
+  // its preflight reset (which zeroes out heading sizes/margins, resets
+  // font-family, etc.) was silently overriding site.css's typography and
+  // spacing site-wide. Disabling it here keeps Tailwind's utility classes
+  // available without it clobbering the existing hand-written design.
+  corePlugins: {
+    preflight: false,
+  },
   theme: {
     extend: {
       colors: {
