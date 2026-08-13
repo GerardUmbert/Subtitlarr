@@ -60,6 +60,16 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   tables get their own horizontal scroller instead of the page
   scrolling sideways. `docs/assets/build_changelog.py`'s template
   updated to match, so future regenerations keep the current nav/head.
+- Docs site: switched Tailwind from the Play CDN runtime script to a
+  real build (`docs/package.json`, `tailwind.config.js`,
+  `npm run build:css` → `assets/tailwind.build.css`). The CDN script
+  injects its own reset at runtime, appended after `site.css`'s
+  `<link>` regardless of source order — it was silently overriding
+  fonts, heading sizes, spacing, and image sizing site-wide (screenshot
+  images collapsing to zero height was the same root cause). The real
+  build has no runtime reset-injection timing issue, is smaller
+  (~4KB, purged to only what's used), and avoids the CDN script's own
+  documented "not for production" warning.
 
 ## [0.11.2]
 

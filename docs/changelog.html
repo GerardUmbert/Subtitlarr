@@ -9,8 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="assets/tailwind-config.js"></script>
+<link rel="stylesheet" href="assets/tailwind.build.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
 </head>
@@ -66,6 +65,7 @@
 <div class="changelog-section-title">Changed</div>
 <ul>
 <li>Docs site: fixed a real mobile-layout bug (nav overflowing/wrapping badly on narrow viewports, caused by <code>.site-nav</code>&#x27;s flex item not being allowed to shrink below its unwrapped content width) with a proper collapsing hamburger menu below 720px. Also added Tailwind CDN + GSAP scroll-reveal entrance animations across all six pages, IBM Plex Mono now actually loads (previously referenced in CSS but never linked, silently falling back to system monospace), and wide tables get their own horizontal scroller instead of the page scrolling sideways. <code>docs/assets/build_changelog.py</code>&#x27;s template updated to match, so future regenerations keep the current nav/head.</li>
+<li>Docs site: switched Tailwind from the Play CDN runtime script to a real build (<code>docs/package.json</code>, <code>tailwind.config.js</code>, <code>npm run build:css</code> → <code>assets/tailwind.build.css</code>). The CDN script injects its own reset at runtime, appended after <code>site.css</code>&#x27;s <code>&lt;link&gt;</code> regardless of source order — it was silently overriding fonts, heading sizes, spacing, and image sizing site-wide (screenshot images collapsing to zero height was the same root cause). The real build has no runtime reset-injection timing issue, is smaller (~4KB, purged to only what&#x27;s used), and avoids the CDN script&#x27;s own documented &quot;not for production&quot; warning.</li>
 </ul>
 </div>
 <div class="changelog-entry reveal-scroll">

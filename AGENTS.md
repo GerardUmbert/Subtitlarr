@@ -68,6 +68,28 @@ the file you touched — several bugs this project has hit were in shared
 code (the reconciler, the migration runner) that many tests exercise
 indirectly.
 
+## Docs site (GitHub Pages, `docs/`)
+
+Separate from the app itself — a static site deployed via
+`.github/workflows/docs-pages.yml` on every push that touches `docs/**`.
+Two things need a manual rebuild after editing their source, since neither
+runs automatically on deploy:
+
+- **Tailwind CSS**: real build (not the CDN runtime script — see
+  `docs/assets/tailwind.build.css`'s header comment in `tailwind.config.js`
+  for why), scoped to its own `docs/package.json`. After adding/removing
+  Tailwind utility classes in any `docs/*.html` file, run:
+  ```bash
+  cd docs && npm install && npm run build:css
+  ```
+  and commit the regenerated `docs/assets/tailwind.build.css`.
+- **Changelog page**: `docs/changelog.html` is generated from the root
+  `CHANGELOG.md` by `docs/assets/build_changelog.py`. After editing
+  `CHANGELOG.md`, run `python docs/assets/build_changelog.py` and commit
+  the regenerated HTML — if you edit `build_changelog.py`'s
+  `PAGE_HEAD`/`PAGE_TAIL` templates (nav links, head tags), regenerate too
+  or the next real changelog update will silently revert them.
+
 ## Project-specific things worth knowing
 
 - **Bazarr is the only thing with filesystem access.** This app never

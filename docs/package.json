@@ -1,0 +1,14 @@
+{
+  "name": "subtitlarr-docs",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Build tooling for the docs/ static site (GitHub Pages). Not a runtime dependency of the app itself.",
+  "scripts": {
+    "build:css": "tailwindcss -i ./assets/tailwind.src.css -o ./assets/tailwind.build.css --minify"
+  },
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "tailwindcss": "^3.4.19"
+  }
+}
