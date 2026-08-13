@@ -35,6 +35,7 @@
     <a href="#nvidia">NVIDIA NIM</a>
     <a href="#ollama">Local Ollama</a>
     <a href="#cascade">Recommended cascade shape</a>
+    <a href="#workflow">Recommended workflow</a>
   </div>
 
   <h2 id="gemini">Google Gemini</h2>
@@ -128,6 +129,34 @@
   </table>
   <p>Drop rows 3 and 4 for the quality-first version instead (1000/day, every item on <code>gemini-3.5-flash-lite</code>).</p>
   <p>Optionally add an NVIDIA instance (<code>deepseek-ai/deepseek-v4-flash</code>, budget <code>700</code>) either above the separator as a 5th cloud fallback, or below it alongside Ollama, depending on whether you want it tried automatically or reserved for manual runs.</p>
+
+  <h2 id="workflow">Recommended workflow</h2>
+  <p>Getting a library fully translated efficiently is a multi-pass process:</p>
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body"><p><strong>Make sure Bazarr can actually see your existing subtitles first.</strong> A subtitle muxed into the video file (not a separate <code>.srt</code> on disk) is invisible to Subtitlarr until Bazarr extracts it. In Bazarr:</p>
+    <ul>
+      <li><strong>Settings → Subtitles → (disable) "Treat Embedded Subtitles as Downloaded"</strong></li>
+      <li><strong>Settings → Providers → add "Embedded Subtitles"</strong> (if not already there)</li>
+    </ul>
+    <p>Neither toggle retroactively extracts anything by itself — Bazarr still needs to scan your library afterward, either via its own scheduled task (can take up to a full day) or triggered manually. Give it time before assuming a source language is missing.</p></div>
+  </div>
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body"><p>Run the cascade with local engines fenced off behind a separator and let it translate everything it can. Leave failures as <code>failed</code> for now rather than chasing each one down individually.</p></div>
+  </div>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body"><p>Run it again once the queue is drained. A second pass often clears a meaningful chunk of failures on its own (rate limits expiring, quota resets) — re-running costs nothing extra for items already <code>done</code>.</p></div>
+  </div>
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body"><p>Only then, drag your local engine above the separator for whatever remains <code>failed</code>. With a non-Gemini engine actually in reach, a content-blocked batch gets <em>bisected</em> instead of failing outright (see above) — Gemini still handles everything except the specific isolated cues that trip its filter. Doing this from the start means paying local inference time on every content-blocked item instead of only the genuine leftovers.</p></div>
+  </div>
+  <div class="step">
+    <div class="step-num">5</div>
+    <div class="step-body"><p>Run the <strong>Language Check</strong> job (Jobs page) after a big batch. A "successful" translation can still silently come back in the wrong language — this audits recently-completed items against their actual detected output and resets any mismatch back to <code>pending</code>. It needs a check engine picked on the Jobs page first, and isn't scheduled by default unless <code>LANGUAGE_CHECK_CRON</code> is set — otherwise it's manual-only, so remember to run it.</p></div>
+  </div>
 </main>
 
 <footer class="site-footer">

@@ -15,6 +15,16 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   doesn't download missing subtitles (that's Bazarr's job), doesn't
   re-time/fix subtitles with bad sync, and doesn't bundle or
   pre-authorize any LLM access.
+- README and `docs/api-keys-setup.md`/`docs/api-keys.html`: a "Recommended
+  workflow" section walking through the efficient multi-pass path to a
+  fully translated library — enabling Bazarr's embedded-subtitle
+  extraction first (Settings → Subtitles → disable "Treat Embedded
+  Subtitles as Downloaded", and Settings → Providers → add "Embedded
+  Subtitles"), running the cascade with local engines fenced off, letting
+  a second pass clear transient failures before moving a local engine
+  above the separator (so only genuine leftovers pay for local inference,
+  and content-blocked batches get bisected instead of failing outright),
+  and remembering to run the Jobs page's Language Check afterward.
 
 ## [0.11.2]
 

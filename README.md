@@ -120,6 +120,62 @@ consequences worth using deliberately:
 - See [`docs/api-keys-setup.md`](docs/api-keys-setup.md) for exact steps to
   get Gemini/NVIDIA keys and the token budgets to set per engine.
 
+### Recommended workflow
+
+Getting a library fully translated efficiently is a multi-pass process, not
+a single run — trying to do everything in one pass either wastes local
+GPU/CPU time on what's usually a temporary cloud issue, or leaves
+recoverable items sitting as permanent failures.
+
+1. **Make sure Bazarr can actually see your existing subtitles first.** A
+   subtitle muxed into the video file itself (not a separate `.srt` on
+   disk) is invisible to Subtitlarr until Bazarr extracts it — Subtitlarr
+   only ever reads/writes through Bazarr's API, never the filesystem
+   directly. In Bazarr:
+   - **Settings → Subtitles → (disable) "Treat Embedded Subtitles as
+     Downloaded"**
+   - **Settings → Providers → add "Embedded Subtitles"** (if it isn't
+     already enabled), so Bazarr actually extracts those tracks to real
+     files instead of just counting them as already satisfied.
+
+   Neither toggle retroactively extracts anything by itself — Bazarr still
+   needs to actually scan your library after enabling them, either by
+   waiting for its own scheduled task to run (can take up to a full day
+   depending on your Bazarr settings) or triggering it manually. Skipping
+   this step, or not giving Bazarr time to run it, means Subtitlarr
+   silently has fewer usable source languages to translate from than your
+   library actually has.
+2. **Run the cascade with local engines fenced off behind a separator**
+   (see above) and just let it translate everything it can. Items that hit
+   a genuine content block with no non-Gemini fallback in reach — or any
+   other failure — end up `failed` and stay there; leave them alone for
+   now rather than immediately chasing each one down individually.
+3. **Once the queue is drained, run it again.** A second full pass often
+   clears a meaningful chunk of yesterday's failures on its own — a
+   Gemini rate limit expires, a transient error doesn't repeat, quota
+   resets overnight. Re-running costs nothing extra for items that are
+   already `done`.
+4. **Only then, move your local engine (Ollama/llama.cpp) above the
+   separator** (drag it up in the Translation Engine page) for whatever's
+   still `failed`. This is deliberate, not automatic, for a reason: with a
+   non-Gemini engine actually in reach, content-blocked batches get
+   **bisected** instead of failing outright (see below) — Gemini keeps
+   handling everything except the specific isolated cues that trip its
+   filter, and only that small leftover chunk goes to the local engine.
+   Doing this from the start would mean paying local inference time on
+   every single content-blocked item; doing it last means only the
+   genuine leftovers ever reach it.
+5. **Run the Language Check job.** Even a "successful" translation can
+   silently come back in the wrong language (the LLM echoing the source
+   text instead of translating it) — Subtitlarr's own structural checks
+   can't catch this, since the response is well-formed, just wrong. The
+   **Jobs** page's Language Check audits recently-completed items against
+   their actual detected output language and resets any mismatch back to
+   `pending` for a real retry. It needs a check engine picked on the Jobs
+   page first, and isn't scheduled by default unless you've set
+   `LANGUAGE_CHECK_CRON` — otherwise it's manual-only, so remember to run
+   it (or schedule it) after a big batch, not just once and forget it.
+
 ### How a Gemini content block is handled
 
 Gemini's own safety filter (`PROHIBITED_CONTENT`/`SAFETY`) can reject a

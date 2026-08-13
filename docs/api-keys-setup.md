@@ -131,3 +131,41 @@ Optionally add an NVIDIA instance (`deepseek-ai/deepseek-v4-flash`, budget
 `700`) either above the separator as a 5th cloud fallback, or below it
 alongside Ollama, depending on whether you want it tried automatically or
 reserved for manual runs.
+
+## Recommended workflow
+
+Getting a library fully translated efficiently is a multi-pass process:
+
+1. **Make sure Bazarr can actually see your existing subtitles first.** A
+   subtitle muxed into the video file (not a separate `.srt` on disk) is
+   invisible to Subtitlarr until Bazarr extracts it. In Bazarr:
+   - **Settings → Subtitles → (disable) "Treat Embedded Subtitles as
+     Downloaded"**
+   - **Settings → Providers → add "Embedded Subtitles"** (if not already
+     there), so those tracks get extracted to real files instead of just
+     counting as already satisfied.
+
+   Neither toggle retroactively extracts anything by itself — Bazarr still
+   needs to scan your library afterward, either via its own scheduled task
+   (can take up to a full day) or triggered manually. Give it time before
+   assuming a source language is missing.
+2. **Run the cascade with local engines fenced off behind a separator**
+   and let it translate everything it can. Leave failures as `failed` for
+   now rather than chasing each one down individually.
+3. **Run it again once the queue is drained.** A second pass often clears
+   a meaningful chunk of failures on its own (rate limits expiring, quota
+   resets) — re-running costs nothing extra for items already `done`.
+4. **Only then, drag your local engine above the separator** for whatever
+   remains `failed`. With a non-Gemini engine actually in reach, a
+   content-blocked batch gets *bisected* instead of failing outright —
+   see below — so Gemini still handles everything except the specific
+   isolated cues that trip its filter. Doing this from the start means
+   paying local inference time on every content-blocked item instead of
+   only the genuine leftovers.
+5. **Run the Language Check job** (Jobs page) after a big batch. A
+   "successful" translation can still silently come back in the wrong
+   language — this audits recently-completed items against their actual
+   detected output and resets any mismatch back to `pending`. It needs a
+   check engine picked on the Jobs page first, and isn't scheduled by
+   default unless `LANGUAGE_CHECK_CRON` is set — otherwise it's
+   manual-only, so remember to run it.
