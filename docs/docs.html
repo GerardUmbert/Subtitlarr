@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docs — Subtitlarr</title>
+<meta name="description" content="Full reference: every setting, the recommended translation workflow, how the engine cascade and content-block bisection work, and troubleshooting.">
+<link rel="icon" href="assets/icon.svg">
+<link rel="stylesheet" href="assets/site.css">
+<style>
+  .docs-layout {
+    max-width: 1180px;
+    margin: 0 auto;
+    display: flex;
+    align-items: flex-start;
+    gap: 40px;
+    padding: 32px 24px 80px;
+  }
+  .docs-sidebar {
+    position: sticky;
+    top: 65px;
+    width: 220px;
+    flex-shrink: 0;
+    max-height: calc(100vh - 65px);
+    overflow-y: auto;
+    padding: 8px 0 24px;
+  }
+  .docs-sidebar-group {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 16px 10px 6px;
+  }
+  .docs-sidebar-group:first-child { padding-top: 0; }
+  .docs-sidebar a {
+    display: block;
+    padding: 5px 10px;
+    border-radius: 7px;
+    font-size: 13px;
+    color: var(--ink-dim);
+    text-decoration: none;
+    line-height: 1.4;
+  }
+  .docs-sidebar a:hover { color: var(--ink); background: var(--surface-2); }
+  .docs-sidebar a.active { color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+
+  .docs-content { flex: 1; min-width: 0; max-width: 760px; }
+  .docs-content h2 {
+    padding-top: 24px;
+    margin-top: 48px;
+    border-top: 1px solid var(--border);
+  }
+  .docs-content h2:first-of-type { margin-top: 0; border-top: none; padding-top: 0; }
+  .docs-content h3 { margin-top: 28px; }
+  .docs-content p { color: var(--ink-dim); }
+
+  @media (max-width: 880px) {
+    .docs-layout { flex-direction: column; }
+    .docs-sidebar { position: static; width: 100%; max-height: none; }
+  }
+
+  .callout-warn { border-left-color: var(--warn); background: var(--warn-soft); }
+  .callout-warn code { background: rgba(0,0,0,0.06); }
+
+  table code { font-size: 0.85em; }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <a class="brand" href="index.html">
+    <span class="brand-mark">S</span>
+    Subtitlarr
+  </a>
+  <nav class="site-nav">
+    <a href="index.html">Home</a>
+    <a href="install.html">Install</a>
+    <a href="api-keys.html">Engine Setup</a>
+    <a href="features.html">Features</a>
+    <a href="changelog.html">Changelog</a>
+    <a href="docs.html" class="active">Docs</a>
+  </nav>
+  <div class="site-actions">
+    <a class="btn" href="https://github.com/GerardUmbert/Subtitlarr">GitHub</a>
+  </div>
+</header>
+
+<div class="docs-layout">
+
+  <aside class="docs-sidebar">
+    <div class="docs-sidebar-group">Workflow</div>
+    <a href="#recommended-workflow">Recommended workflow</a>
+    <a href="#bazarr-extraction">Bazarr extraction</a>
+    <a href="#pass-strategy">Multi-pass strategy</a>
+    <a href="#language-check">Language check</a>
+
+    <div class="docs-sidebar-group">Engine cascade</div>
+    <a href="#cascade-basics">How the cascade works</a>
+    <a href="#content-blocks">Content-block bisection</a>
+    <a href="#rate-limits">Rate limits &amp; cooldown</a>
+
+    <div class="docs-sidebar-group">Configuration</div>
+    <a href="#env-vars">All settings reference</a>
+    <a href="#queue-uploads">Queue uploads explained</a>
+
+    <div class="docs-sidebar-group">Reference</div>
+    <a href="#troubleshooting">Troubleshooting</a>
+    <a href="#limitations">Known limitations</a>
+  </aside>
+
+  <main class="docs-content">
+
+    <div style="margin-bottom: 40px;">
+      <div class="badge-row" style="justify-content:flex-start; margin: 0 0 12px;">
+        <span class="badge">Reference</span>
+      </div>
+      <h1>Docs</h1>
+      <p class="lede">The deep-reference page — every setting, the recommended way to run a big translation job, how the engine cascade actually behaves, and what to check when something goes wrong. For getting started, see <a href="install.html">Install</a> and <a href="api-keys.html">Engine Setup</a>.</p>
+    </div>
+
+    <!-- ── RECOMMENDED WORKFLOW ── -->
+    <h2 id="recommended-workflow">Recommended workflow</h2>
+    <p>Getting a library fully translated efficiently is a multi-pass process, not a single run — trying to do everything in one pass either wastes local GPU/CPU time on what's usually a temporary cloud issue, or leaves recoverable items sitting as permanent failures.</p>
+
+    <h3 id="bazarr-extraction">1. Make sure Bazarr can see your existing subtitles</h3>
+    <p>A subtitle muxed into the video file itself (not a separate <code>.srt</code> on disk) is invisible to Subtitlarr until Bazarr extracts it — Subtitlarr only ever reads/writes through Bazarr's API, never the filesystem directly. In Bazarr:</p>
+    <ul>
+      <li><strong>Settings → Subtitles → (disable) "Treat Embedded Subtitles as Downloaded"</strong></li>
+      <li><strong>Settings → Providers → add "Embedded Subtitles"</strong> (if it isn't already there), so Bazarr actually extracts those tracks to real files instead of just counting them as already satisfied</li>
+    </ul>
+    <div class="callout">
+      Neither toggle retroactively extracts anything by itself — Bazarr still needs to actually scan your library after enabling them, either by waiting for its own scheduled task to run (can take up to a full day depending on your Bazarr settings) or triggering it manually. Skipping this, or not giving Bazarr time to run it, means Subtitlarr silently has fewer usable source languages to translate from than your library actually has.
+    </div>
+
+    <h3 id="pass-strategy">2–4. Translate in passes, escalate to local last</h3>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h3>Run the cascade with local engines fenced off</h3>
+        <p>Put a <strong>separator</strong> right after your cloud/free-tier instances (see <a href="api-keys.html#cascade">Recommended cascade shape</a>) and let it translate everything it can. Items that hit a genuine content block with no non-Gemini fallback in reach — or any other failure — end up <code>failed</code> and stay there. Leave them alone for now rather than chasing each one down individually.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h3>Run it again once the queue is drained</h3>
+        <p>A second full pass often clears a meaningful chunk of yesterday's failures on its own — a rate limit expires, a transient error doesn't repeat, quota resets overnight. Re-running costs nothing extra for items that are already <code>done</code>.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <h3>Only then, move your local engine above the separator</h3>
+        <p>Drag it up in the Translation Engine page for whatever's still <code>failed</code>. This is deliberate, not automatic: with a non-Gemini engine actually in reach, content-blocked batches get <a href="#content-blocks">bisected</a> instead of failing outright — Gemini keeps handling everything except the specific isolated cues that trip its filter, and only that small leftover chunk goes to the local engine. Doing this from the start would mean paying local inference time on every single content-blocked item; doing it last means only the genuine leftovers ever reach it.</p>
+      </div>
+    </div>
+
+    <h3 id="language-check">5. Run the Language Check job</h3>
+    <p>Even a "successful" translation can silently come back in the wrong language — the LLM echoing the source text instead of translating it. Subtitlarr's own structural checks can't catch this, since the response is well-formed, just wrong. The <strong>Jobs</strong> page's Language Check audits recently-completed items against their actual detected output language and resets any mismatch back to <code>pending</code> for a real retry.</p>
+    <div class="callout">
+      It needs a check engine picked on the Jobs page first, and isn't scheduled by default unless you've set <code>LANGUAGE_CHECK_CRON</code> — otherwise it's manual-only, so remember to run it (or schedule it) after a big batch, not just once and forget it.
+    </div>
+
+    <!-- ── ENGINE CASCADE ── -->
+    <h2 id="cascade-basics">How the cascade works</h2>
+    <p>Subtitlarr doesn't use a single fixed engine — you build an ordered list of one or more configured instances (Ollama, llama.cpp, Gemini, NVIDIA NIM, OpenRouter, Groq). Every item is tried against the first instance; if that fails (rate limit, error, content block), it falls through to the next instance in order, and so on. A <strong>separator</strong> row can fence off a group so nothing below it is ever tried as an automatic fallback — the run simply stops with the remaining items left <code>pending</code> once everything above the separator is exhausted.</p>
+
+    <h2 id="content-blocks">Content-block bisection</h2>
+    <p>Gemini's own safety filter (<code>PROHIBITED_CONTENT</code>/<code>SAFETY</code>) can reject a translation batch outright — most likely on R-rated or intense material. Rather than treating the whole batch as a failure and handing all of it to a weaker fallback engine, Subtitlarr <strong>bisects</strong> the blocked batch and retries each half against the <em>same</em> Gemini instance, so only the actual offending cues end up isolated — the rest of the batch stays on Gemini at full quality.</p>
+    <p>Splitting stops once an isolated chunk shrinks to 10 cues, or once the item's bisection budget (extra requests spent narrowing down blocks, capped per item) runs out — whichever comes first. Either way, only that small leftover chunk falls back, and it skips straight past every other configured Gemini instance (they'd just trip the same filter again) to the first non-Gemini engine in the cascade, re-chunked to that engine's own configured batch size rather than arriving oversized.</p>
+    <div class="callout">
+      Bisection only ever engages if a non-Gemini engine is actually reachable in the cascade (not fenced off behind a separator, not rate-limited, not disabled). If every remaining cascade entry is also Gemini, a content-blocked batch fails immediately instead — there's no point bisecting toward another Gemini instance that will almost certainly trip the same filter on the same text.
+    </div>
+    <p>Net effect: a normal batch costs exactly one request, same as always. A batch with a handful of blocked lines costs a few extra Gemini requests to isolate them, and only those lines go to the fallback engine. A batch blocked densely throughout (e.g. an R-rated film flagged every few lines) hits the per-item budget quickly and the remainder falls back in bulk, re-chunked properly — so one heavily-flagged movie can't consume a disproportionate share of your daily Gemini quota chasing a lost cause.</p>
+
+    <h2 id="rate-limits">Rate limits &amp; cooldown</h2>
+    <p>3 consecutive failures against an engine instance trip a 24-hour cooldown — the instance is skipped without even attempting a live round-trip for the rest of that window. This clears automatically after 24 hours, or immediately via a <strong>Test Connection</strong> on that instance, or the Jobs page's manual "clear all rate limits" action.</p>
+
+    <!-- ── CONFIGURATION ── -->
+    <h2 id="env-vars">All settings reference</h2>
+    <p>None of this needs to be touched at container start — every one of these is also editable from the web UI afterward (Settings / Language Rules / Bazarr Connection pages). This table exists purely as a reference for what each setting does and its default. Translation engine setup lives entirely in the <strong>Translation Engine</strong> page — see <a href="api-keys.html">Engine Setup</a> — not in this table.</p>
+    <table>
+      <thead><tr><th>Variable</th><th>Purpose</th><th>Default</th></tr></thead>
+      <tbody>
+        <tr><td><code>BAZARR_BASE_URL</code></td><td>Bazarr root URL</td><td><em>set from the UI</em></td></tr>
+        <tr><td><code>BAZARR_API_KEY</code></td><td>Bazarr API key</td><td><em>set from the UI</em></td></tr>
+        <tr><td><code>SCHEDULE_CRON</code></td><td>5-field cron expression for the main scheduled translation job</td><td><code>10 3 * * *</code></td></tr>
+        <tr><td><code>AGE_THRESHOLD_DAYS</code></td><td>Days a subtitle must be missing before a scheduled run will translate it</td><td><code>14</code></td></tr>
+        <tr><td><code>DAILY_TRANSLATION_LIMIT</code></td><td>Max items translated per day by scheduled/full runs (0 = unlimited); per-item re-runs bypass this</td><td><code>100</code></td></tr>
+        <tr><td><code>PAUSE_BETWEEN_ITEMS_SECONDS</code></td><td>Rest between translations so the GPU isn't pegged non-stop</td><td><code>30</code></td></tr>
+        <tr><td><code>QUEUE_UPLOADS_ENABLED</code></td><td>Hold translated subtitles locally instead of uploading immediately — see <a href="#queue-uploads">below</a></td><td><code>false</code></td></tr>
+        <tr><td><code>PUSH_UPLOADS_CRON</code></td><td>Optional cron to auto-push queued uploads (only meaningful with <code>QUEUE_UPLOADS_ENABLED</code>); blank = manual only</td><td><code>15 5 * * *</code></td></tr>
+        <tr><td><code>SYNC_MEDIA_CRON</code></td><td>Optional cron to auto-refresh Bazarr's wanted list; blank = manual only</td><td><code>0 3 * * *</code></td></tr>
+        <tr><td><code>SYNC_SUBS_CRON</code></td><td>Optional cron to auto pre-fetch source subtitle content; blank = manual only</td><td><code>5 3 * * *</code></td></tr>
+        <tr><td><code>LANGUAGE_CHECK_CRON</code></td><td>Optional cron to audit recently-completed items for the wrong output language and reset any mismatch to pending; needs a check engine picked on the Jobs page first; blank = manual only</td><td><code>0 5 * * *</code></td></tr>
+        <tr><td><code>BACKUP_CRON</code></td><td>Daily snapshot of the whole database to <code>/data/backups/</code>; blank disables it</td><td><code>30 2 * * *</code></td></tr>
+        <tr><td><code>BACKUP_KEEP_COUNT</code></td><td>How many daily/manual snapshots to retain before pruning the oldest</td><td><code>20</code></td></tr>
+        <tr><td><code>DB_PATH</code></td><td>SQLite file path inside the container</td><td><code>/data/subtitlarr.db</code></td></tr>
+        <tr><td><code>RUN_CONCURRENCY</code></td><td>Reserved for future use</td><td><code>1</code></td></tr>
+        <tr><td><code>LOG_LEVEL</code></td><td>Logging verbosity</td><td><code>INFO</code></td></tr>
+      </tbody>
+    </table>
+    <p><code>PORT</code> is accepted but currently has no effect — the container always listens on <code>7777</code> internally (map it to any host port you like via Docker's own port mapping).</p>
+
+    <h3 id="queue-uploads">Queue uploads, explained</h3>
+    <p>If your Bazarr host — or its storage, e.g. a NAS array — spins its disks down when idle, every immediate upload wakes it. With <code>QUEUE_UPLOADS_ENABLED=false</code> (the default), a completed translation uploads to Bazarr right away; over a long run translating many items, that's one wake-up <em>per item</em>.</p>
+    <p>Setting it <code>true</code> holds each finished translation locally as <code>translated_pending_upload</code> instead, and nothing touches Bazarr's storage until you push the whole batch at once — manually from the Jobs page, or automatically via <code>PUSH_UPLOADS_CRON</code>. That turns N wake-ups into one.</p>
+    <table>
+      <thead><tr><th>Your setup</th><th>Recommended</th></tr></thead>
+      <tbody>
+        <tr><td>Disks/storage never spin down</td><td>Either setting works — <code>false</code> is simplest</td></tr>
+        <tr><td>Disks spin down, but are already kept awake by something else</td><td><code>false</code> — no benefit to queuing</td></tr>
+        <tr><td>Disks spin down and nothing else keeps them awake</td><td><code>true</code> — push the batch once you're ready, or schedule it</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ── TROUBLESHOOTING ── -->
+    <h2 id="troubleshooting">Troubleshooting</h2>
+
+    <h3>Translations come back mostly untranslated, or with low cue recovery</h3>
+    <p>This is usually a batch-size problem, not a translation-quality one. The batch token budget (set per engine instance) is not the same thing as that model's context window — a batch that technically fits inside the context window doesn't mean a smaller/weaker local model can reliably <em>format</em> that much structured output. Small models lose structural reliability on long responses well before hitting their real context limit. Try lowering the batch token budget on that engine instance before assuming anything else is wrong.</p>
+
+    <h3>An item is stuck as "translating" after a restart</h3>
+    <p>There's no checkpointing mid-item — if the app process is killed while an item is actively translating, it's automatically reset back to <code>pending</code> the next time the app starts, and gets fully retried later. Nothing is lost, but whatever GPU/API time was already spent on that attempt is.</p>
+
+    <h3>A run stopped early with items still <code>pending</code></h3>
+    <p>Check the engine cascade — this is expected behavior when every instance above a separator becomes rate-limited or disabled mid-run, not a bug. The run stops rather than silently falling through to local engines fenced off behind a separator. Pick up the leftovers with a manual run, or wait for cooldowns/quota to reset.</p>
+
+    <h3>A completed subtitle is in the wrong language</h3>
+    <p>Run the <a href="#language-check">Language Check job</a> — this exact scenario (a well-formed response that's simply still in the source language) is what it exists to catch, since structural checks alone can't detect it.</p>
+
+    <h2 id="limitations">Known limitations</h2>
+    <ul>
+      <li>Subtitlarr never mounts your media library directly — everything goes through Bazarr's REST API. If Bazarr can't see a subtitle, neither can Subtitlarr.</li>
+      <li>Translation is text-only. The original timestamps are always reused as-is; a subtitle that's out of sync before translation stays out of sync after.</li>
+      <li>An item with no existing subtitle in any language is skipped, not sourced — that needs speech-to-text, which is out of scope for this project.</li>
+    </ul>
+
+  </main>
+
+</div>
+
+<footer class="site-footer">
+  Subtitlarr is open source — <a href="https://github.com/GerardUmbert/Subtitlarr">source on GitHub</a>
+</footer>
+
+<script>
+  var sections = document.querySelectorAll('.docs-content h2[id]');
+  var links = document.querySelectorAll('.docs-sidebar a');
+
+  function updateActiveDocsLink() {
+    var current = '';
+    sections.forEach(function (s) {
+      if (window.scrollY >= s.offsetTop - 90) current = s.id;
+    });
+    links.forEach(function (a) {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+    });
+  }
+  window.addEventListener('scroll', updateActiveDocsLink, { passive: true });
+  updateActiveDocsLink();
+</script>
+
+</body>
+</html>

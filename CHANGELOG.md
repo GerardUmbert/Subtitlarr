@@ -39,6 +39,16 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   next to whatever media file it's given regardless of root, making
   the concern unverified and not fair to claim.
 
+### Added
+- New `docs/docs.html` page: a single-page deep reference with a sticky
+  sidebar that tracks scroll position (same pattern as the Garage
+  Opener project's docs page, adapted to Subtitlarr's own site design
+  instead of copying its visual theme) — the full env var table, the
+  recommended multi-pass workflow, how the engine cascade and
+  content-block bisection actually work, an explanation of
+  `QUEUE_UPLOADS_ENABLED`, and a troubleshooting section. Linked as
+  "Docs", the last item, in every page's nav.
+
 ## [0.11.2]
 
 ### Fixed
