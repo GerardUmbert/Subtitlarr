@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.11.2]
+
+### Fixed
+- The UI could still lock up on 0.11.1 during a *sustained* streak of
+  identical run-event toasts — not just an occasional burst. Confirmed
+  live: a cascade with no active non-Gemini fallback (e.g. Ollama
+  present but fenced off past a separator, or otherwise unavailable)
+  makes every content-blocked item in a run fail immediately with no
+  bisection/retry, one after another, ~1-2s apart, for as long as the
+  streak lasts — each failure still spawned a brand-new toast element
+  even with 0.11.1's cleanup fix, so a long streak (dozens of episodes)
+  meant continuous DOM work for the whole run. Toasts now collapse: an
+  identical message repeating within 4s updates the existing toast's
+  count ("×12") instead of creating a new one, and a distinct new
+  message arriving faster than every 500ms is dropped rather than
+  queued (the same status is always visible live on the Queue/
+  Dashboard/History pages regardless).
+
 ## [0.11.1]
 
 ### Fixed
