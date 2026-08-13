@@ -40,12 +40,32 @@
   });
 
   gsap.utils.toArray('.reveal-scroll').forEach(function (el) {
-    gsap.from(el, {
-      opacity: 0,
-      y: 16,
+    gsap.to(el, {
+      opacity: 1,
+      y: 0,
       duration: 0.5,
       ease: 'power3.out',
-      scrollTrigger: { trigger: el, start: 'top 92%', toggleActions: 'play none none none' },
+      scrollTrigger: {
+        trigger: el,
+        start: 'top 92%',
+        toggleActions: 'play none none none',
+      },
     });
   });
+
+  // Images loading in after ScrollTrigger's initial position calculation
+  // shift every trigger point below them — recalculating once each image
+  // finishes (and once more after full load, as a safety net) keeps
+  // "already in viewport" elements from getting stuck hidden because
+  // their measured position was wrong at calculation time.
+  document.querySelectorAll('img').forEach(function (img) {
+    if (img.complete) return;
+    img.addEventListener('load', function () { ScrollTrigger.refresh(); }, { once: true });
+  });
+  window.addEventListener('load', function () { ScrollTrigger.refresh(); });
+
+  // Force an immediate check right after setup too, so anything already
+  // in view animates in on load instead of waiting for the user to
+  // scroll at all (which may never happen on a short page).
+  ScrollTrigger.refresh();
 })();

@@ -5,6 +5,21 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Docs site: `.reveal-scroll` elements (screenshots, cards, most page
+  content below the fold) could get stuck permanently invisible instead
+  of animating in. `gsap.from(el, {opacity: 0, ...})` set every element
+  to invisible immediately on script execution, before ScrollTrigger had
+  evaluated whether it was already inside the viewport — and images still
+  loading in shifted every trigger point below them, so an
+  already-in-view element's calculated position could be wrong by the
+  time (or never) its trigger fired. Switched to `gsap.to(el, {opacity:
+  1, ...})` (CSS already sets the invisible starting state, so `.to()`
+  only needs to animate forward once triggered) and added
+  `ScrollTrigger.refresh()` after each image loads and again on full
+  page load, so already-visible content reveals immediately instead of
+  waiting on a scroll event that may never come.
+
 ### Changed
 - Ollama setup docs (README, `docs/api-keys-setup.md`, `docs/api-keys.html`)
   now recommend `translategemma:12b` instead of `gemma3:4b`, keeping the

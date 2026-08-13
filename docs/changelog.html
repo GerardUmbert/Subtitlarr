@@ -41,6 +41,10 @@
   <p class="lede reveal">Generated from <a href="https://github.com/GerardUmbert/Subtitlarr/blob/master/CHANGELOG.md">CHANGELOG.md</a> — that file is the source of truth.</p>
 <div class="changelog-entry reveal-scroll">
 <div class="changelog-version">Unreleased</div>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li>Docs site: <code>.reveal-scroll</code> elements (screenshots, cards, most page content below the fold) could get stuck permanently invisible instead of animating in. <code>gsap.from(el, {opacity: 0, ...})</code> set every element to invisible immediately on script execution, before ScrollTrigger had evaluated whether it was already inside the viewport — and images still loading in shifted every trigger point below them, so an already-in-view element&#x27;s calculated position could be wrong by the time (or never) its trigger fired. Switched to <code>gsap.to(el, {opacity: 1, ...})</code> (CSS already sets the invisible starting state, so <code>.to()</code> only needs to animate forward once triggered) and added <code>ScrollTrigger.refresh()</code> after each image loads and again on full page load, so already-visible content reveals immediately instead of waiting on a scroll event that may never come.</li>
+</ul>
 <div class="changelog-section-title">Changed</div>
 <ul>
 <li>Ollama setup docs (README, <code>docs/api-keys-setup.md</code>, <code>docs/api-keys.html</code>) now recommend <code>translategemma:12b</code> instead of <code>gemma3:4b</code>, keeping the same <code>400</code>-token batch budget as a safe default for modest/low-end GPUs.</li>
