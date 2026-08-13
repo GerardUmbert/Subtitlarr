@@ -3,105 +3,32 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [0.11.3]
+
+### Added
+- New **Docs** page on the website — a full reference covering every
+  setting, the recommended way to translate a large library, how the
+  engine cascade and fallback behavior work, and troubleshooting.
+- A "What this doesn't do" section on the README, clarifying that
+  Subtitlarr doesn't download missing subtitles, doesn't fix
+  out-of-sync timing, and doesn't come with any bundled AI access —
+  you bring your own engine.
+- A "Recommended workflow" guide for getting a whole library translated
+  efficiently, including a note about enabling Bazarr's embedded-subtitle
+  extraction first.
+- Screenshots on the Features page for the Compare Engines tool.
+
+### Changed
+- Recommended Ollama model updated to `translategemma:12b`.
+- The website is now readable and usable on mobile — the navigation
+  menu, page layout, and images all work properly on small screens.
+- Refreshed all screenshots on the Features page to match the current app.
 
 ### Fixed
-- Docs site: the header wasn't sticky on desktop, and `docs.html`'s
-  sidebar scrolled out of view instead of staying pinned. Root cause:
-  `overflow-x: hidden` on `html`/`body` (added earlier to stop
-  horizontal page overflow) creates a new scrolling context on ANY
-  explicit `overflow-x`/`-y` value other than `visible` — which
-  silently breaks `position: sticky` for every descendant, since sticky
-  only sticks relative to its nearest scrolling ancestor. Removed; the
-  actual overflow sources (flex sizing, wide tables, long headings) are
-  constrained directly instead of papering over the symptom at the
-  root and taking sticky positioning down with it.
-- Mobile nav toggle button rendered in the middle of the header instead
-  of pinned to the right edge — `justify-content: space-between` with
-  4 flex children (brand, toggle, nav, actions) distributes them
-  evenly rather than pinning the last group to the edge. Replaced with
-  `margin-left: auto` on whichever item should start the
-  right-hugging group (the nav on desktop, the toggle on mobile, since
-  the nav drops to its own row there and stops sharing the row).
-- Docs site: `.reveal-scroll` elements (screenshots, cards, most page
-  content below the fold) could get stuck permanently invisible instead
-  of animating in. `gsap.from(el, {opacity: 0, ...})` set every element
-  to invisible immediately on script execution, before ScrollTrigger had
-  evaluated whether it was already inside the viewport — and images still
-  loading in shifted every trigger point below them, so an
-  already-in-view element's calculated position could be wrong by the
-  time (or never) its trigger fired. Switched to `gsap.to(el, {opacity:
-  1, ...})` (CSS already sets the invisible starting state, so `.to()`
-  only needs to animate forward once triggered) and added
-  `ScrollTrigger.refresh()` after each image loads and again on full
-  page load, so already-visible content reveals immediately instead of
-  waiting on a scroll event that may never come.
-
-### Changed
-- Ollama setup docs (README, `docs/api-keys-setup.md`, `docs/api-keys.html`)
-  now recommend `translategemma:12b` instead of `gemma3:4b`, keeping the
-  same `400`-token batch budget as a safe default for modest/low-end GPUs.
-
-### Added
-- README: a "What this doesn't do" section, clarifying that Subtitlarr
-  doesn't download missing subtitles (that's Bazarr's job), doesn't
-  re-time/fix subtitles with bad sync, and doesn't bundle or
-  pre-authorize any LLM access.
-- README and `docs/api-keys-setup.md`/`docs/api-keys.html`: a "Recommended
-  workflow" section walking through the efficient multi-pass path to a
-  fully translated library — enabling Bazarr's embedded-subtitle
-  extraction first (Settings → Subtitles → disable "Treat Embedded
-  Subtitles as Downloaded", and Settings → Providers → add "Embedded
-  Subtitles"), running the cascade with local engines fenced off, letting
-  a second pass clear transient failures before moving a local engine
-  above the separator (so only genuine leftovers pay for local inference,
-  and content-blocked batches get bisected instead of failing outright),
-  and remembering to run the Jobs page's Language Check afterward.
-
-### Changed
-- `docs/features.html`: refreshed all page screenshots to the current
-  UI (v0.11.2), and added two new ones for the Compare Engines section
-  (source/engine setup form, and the side-by-side diff view), which
-  previously had no screenshot at all.
-
-### Removed
-- `docs/index.html`'s Lingarr comparison table: dropped the "Multiple
-  library roots" row — it speculated about a Lingarr limitation based
-  on documentation silence, but Lingarr may just write subtitle files
-  next to whatever media file it's given regardless of root, making
-  the concern unverified and not fair to claim.
-
-### Added
-- New `docs/docs.html` page: a single-page deep reference with a sticky
-  sidebar that tracks scroll position (same pattern as the Garage
-  Opener project's docs page, adapted to Subtitlarr's own site design
-  instead of copying its visual theme) — the full env var table, the
-  recommended multi-pass workflow, how the engine cascade and
-  content-block bisection actually work, an explanation of
-  `QUEUE_UPLOADS_ENABLED`, and a troubleshooting section. Linked as
-  "Docs", the last item, in every page's nav.
-
-### Changed
-- Docs site: fixed a real mobile-layout bug (nav overflowing/wrapping
-  badly on narrow viewports, caused by `.site-nav`'s flex item not
-  being allowed to shrink below its unwrapped content width) with a
-  proper collapsing hamburger menu below 720px. Also added Tailwind
-  CDN + GSAP scroll-reveal entrance animations across all six pages,
-  IBM Plex Mono now actually loads (previously referenced in CSS but
-  never linked, silently falling back to system monospace), and wide
-  tables get their own horizontal scroller instead of the page
-  scrolling sideways. `docs/assets/build_changelog.py`'s template
-  updated to match, so future regenerations keep the current nav/head.
-- Docs site: switched Tailwind from the Play CDN runtime script to a
-  real build (`docs/package.json`, `tailwind.config.js`,
-  `npm run build:css` → `assets/tailwind.build.css`). The CDN script
-  injects its own reset at runtime, appended after `site.css`'s
-  `<link>` regardless of source order — it was silently overriding
-  fonts, heading sizes, spacing, and image sizing site-wide (screenshot
-  images collapsing to zero height was the same root cause). The real
-  build has no runtime reset-injection timing issue, is smaller
-  (~4KB, purged to only what's used), and avoids the CDN script's own
-  documented "not for production" warning.
+- The website's header no longer scrolls away when it shouldn't, and
+  the Docs page's sidebar stays in place while scrolling.
+- Page content and images on the website could occasionally fail to
+  appear.
 
 ## [0.11.2]
 
