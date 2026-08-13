@@ -26,6 +26,12 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   and content-blocked batches get bisected instead of failing outright),
   and remembering to run the Jobs page's Language Check afterward.
 
+### Changed
+- `docs/features.html`: refreshed all page screenshots to the current
+  UI (v0.11.2), and added two new ones for the Compare Engines section
+  (source/engine setup form, and the side-by-side diff view), which
+  previously had no screenshot at all.
+
 ## [0.11.2]
 
 ### Fixed
