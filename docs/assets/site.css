@@ -150,13 +150,8 @@ a { color: var(--accent); }
    .site-nav a's white-space: nowrap. */
 @media (max-width: 720px) {
   .site-header { padding: 12px 16px; }
-  /* .site-actions' margin-left:auto (desktop) does nothing here once
-     the nav drops to its own full-width row below — the toggle needs
-     its own push instead, since on this row it's the first of the two
-     remaining items (toggle, then site-actions) that should hug the
-     right edge. */
-  .nav-toggle { display: flex; margin-left: auto; }
-  .site-actions { margin-left: 0; }
+  .nav-toggle { display: flex; margin-left: 10px; height: auto; align-self: stretch; order: 2; }
+  .site-actions { margin-left: auto; order: 1; }
   .site-nav {
     position: static;
     left: auto;
