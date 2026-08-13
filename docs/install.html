@@ -77,11 +77,12 @@ docker compose up -d</code></pre>
     <tbody>
       <tr><td><code>BAZARR_BASE_URL</code></td><td>Bazarr root URL</td><td><em>set from the UI</em></td></tr>
       <tr><td><code>BAZARR_API_KEY</code></td><td>Bazarr API key</td><td><em>set from the UI</em></td></tr>
-      <tr><td><code>SCHEDULE_CRON</code></td><td>Cron expression for the main translation job</td><td><code>0 3 * * *</code></td></tr>
+      <tr><td><code>SCHEDULE_CRON</code></td><td>Cron expression for the main translation job</td><td><code>10 3 * * *</code></td></tr>
       <tr><td><code>AGE_THRESHOLD_DAYS</code></td><td>Days missing before a scheduled run translates it</td><td><code>14</code></td></tr>
       <tr><td><code>DAILY_TRANSLATION_LIMIT</code></td><td>Max items/day for scheduled runs (0 = unlimited)</td><td><code>100</code></td></tr>
       <tr><td><code>PAUSE_BETWEEN_ITEMS_SECONDS</code></td><td>Rest between translations</td><td><code>30</code></td></tr>
       <tr><td><code>QUEUE_UPLOADS_ENABLED</code></td><td>Hold uploads for a manual batch push instead of immediate</td><td><code>false</code></td></tr>
+      <tr><td><code>BACKUP_CRON</code></td><td>Daily database snapshot to <code>/data/backups/</code>; blank disables it</td><td><code>30 2 * * *</code></td></tr>
     </tbody>
   </table>
   <p>See the <a href="https://github.com/GerardUmbert/Subtitlarr#configuration">full README</a> for the complete list.</p>

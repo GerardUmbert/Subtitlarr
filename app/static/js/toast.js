@@ -18,8 +18,19 @@ const Toast = (() => {
   }
 
   function dismiss(el) {
+    // A toast evicted by the MAX_VISIBLE cap can still be mid-flight —
+    // show() runs synchronously in a loop when a poll picks up several
+    // events at once, and its own requestAnimationFrame (which adds
+    // toast-visible) hasn't necessarily run yet by the time an OLDER
+    // toast gets evicted. Removing a class an element never had fires no
+    // CSS transition, so a listener-based removal would never fire and
+    // el.remove() would never run — leaking the node and its listener
+    // forever. Confirmed live: a long session with frequent event bursts
+    // (retries/fallbacks) accumulated enough orphaned toast nodes and
+    // listeners to eventually lock up the tab. A plain timeout removal
+    // works regardless of whether a transition ever started.
     el.classList.remove("toast-visible");
-    el.addEventListener("transitionend", () => el.remove(), { once: true });
+    setTimeout(() => el.remove(), 250);
   }
 
   function show(message, { duration = 4000 } = {}) {

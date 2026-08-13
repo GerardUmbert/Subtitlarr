@@ -3,6 +3,25 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.11.1]
+
+### Fixed
+- The UI could still freeze solid (tab fully unresponsive) even after
+  0.11.0's server-side fix, on a long-running session with several
+  bursts of run events (batch retries/fallbacks/content-block
+  recoveries) — confirmed live via NAS server logs showing every
+  request answered in milliseconds throughout, ruling out the server,
+  while the browser tab itself was locked. Root cause: a toast evicted
+  from view before its own fade-in animation frame had run never
+  received the CSS class its removal depended on, so the
+  `transitionend` event it was waiting for to actually delete the DOM
+  node never fired — the toast was invisible but never cleaned up.
+  Frequent event bursts (common with Gemini content-block bisection
+  and cascade fallbacks) accumulated enough orphaned nodes and
+  listeners over time to eventually lock up the tab. Toasts are now
+  removed on a fixed timer instead of waiting on a transition event
+  that isn't guaranteed to fire.
+
 ## [0.11.0]
 
 ### Changed

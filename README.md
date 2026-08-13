@@ -146,6 +146,28 @@ hits the per-item budget quickly and the remainder falls back in bulk,
 re-chunked properly — so one heavily-flagged movie can't consume a
 disproportionate share of your daily Gemini quota chasing a lost cause.
 
+## Comparing engines
+
+The **Compare Engines** page (linked from the top of Translation Engine)
+runs the same source subtitle
+through two configured instances side by side — or one instance against an
+uploaded reference translation — so you can judge speed, reliability, and
+actual output quality before committing an instance to your real cascade.
+
+- **Pick a source**: search Bazarr's whole library (not just Subtitlarr's own
+  wanted queue) for an item that already has a subtitle in some language, or
+  upload a `.srt` directly.
+- **Pick what to compare**: two engine instances (run in parallel or
+  sequentially, each with its own editable temperature), or one instance
+  against an uploaded reference translation you already trust.
+- **Nothing here touches your real queue or Bazarr.** Output is cached
+  separately from normal translation runs and cleared on restart — this is a
+  sandbox for testing engine/model choices, not a way to translate for real.
+
+Useful before adding a new engine instance to your cascade, after changing a
+model or temperature, or when deciding whether a paid/cloud engine is
+actually worth it over a local one for your content.
+
 ## Requirements
 
 - A running Bazarr instance and its API key (Bazarr → Settings → General).
@@ -229,13 +251,17 @@ table.
 |---|---|---|
 | `BAZARR_BASE_URL` | Bazarr root URL | *(set from the Bazarr Connection page)* |
 | `BAZARR_API_KEY` | Bazarr API key | *(set from the Bazarr Connection page)* |
-| `SCHEDULE_CRON` | 5-field cron expression for the main scheduled translation job | `0 3 * * *` |
+| `SCHEDULE_CRON` | 5-field cron expression for the main scheduled translation job | `10 3 * * *` |
 | `AGE_THRESHOLD_DAYS` | Days a subtitle must be missing before a scheduled run will translate it | `14` |
 | `DAILY_TRANSLATION_LIMIT` | Max items translated per day by scheduled/full runs (0 = unlimited); per-item re-runs bypass this | `100` |
 | `PAUSE_BETWEEN_ITEMS_SECONDS` | Rest between translations so the GPU isn't pegged non-stop | `30` |
 | `QUEUE_UPLOADS_ENABLED` | Hold translated subtitles locally instead of uploading immediately — push them all later in one batch from the Jobs page (see note below) | `false` |
-| `SYNC_MEDIA_CRON` | Optional cron to auto-refresh Bazarr's wanted list; blank = manual only | *(blank)* |
-| `SYNC_SUBS_CRON` | Optional cron to auto pre-fetch source subtitle content; blank = manual only | *(blank)* |
+| `PUSH_UPLOADS_CRON` | Optional cron to auto-push queued uploads (only meaningful with `QUEUE_UPLOADS_ENABLED`); blank = manual only | `15 5 * * *` |
+| `SYNC_MEDIA_CRON` | Optional cron to auto-refresh Bazarr's wanted list; blank = manual only | `0 3 * * *` |
+| `SYNC_SUBS_CRON` | Optional cron to auto pre-fetch source subtitle content; blank = manual only | `5 3 * * *` |
+| `LANGUAGE_CHECK_CRON` | Optional cron to audit recently-completed items for the wrong output language and reset any mismatch to pending; needs a check engine picked on the Jobs page first; blank = manual only | `0 5 * * *` |
+| `BACKUP_CRON` | Daily snapshot of the whole database to `/data/backups/`; blank disables it | `30 2 * * *` |
+| `BACKUP_KEEP_COUNT` | How many daily/manual snapshots to retain before pruning the oldest | `20` |
 | `DB_PATH` | SQLite file path inside the container | `/data/subtitlarr.db` |
 | `RUN_CONCURRENCY` | Reserved for future use | `1` |
 | `LOG_LEVEL` | Logging verbosity | `INFO` |
