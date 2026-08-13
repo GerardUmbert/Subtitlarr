@@ -25,6 +25,20 @@ configured age threshold, so Bazarr's normal providers get first chance at
 finding a real subtitle. You can always force an immediate run — for the
 whole queue or a single item — from the UI.
 
+## What this doesn't do
+
+- **Doesn't download missing subtitles.** Subtitlarr only translates a
+  subtitle that already exists in some language — finding/downloading
+  subtitles from providers is Bazarr's job, not this project's. An item
+  with no existing subtitle in any language is skipped, not sourced.
+- **Doesn't re-time or fix subtitles with bad sync/timing issues.**
+  Translation is text-only — the original timestamps are always reused
+  as-is (see step 3 above); a subtitle that's out of sync before
+  translation stays out of sync after.
+- **Doesn't come with a pre-configured LLM or API key.** You bring your
+  own engine — a local Ollama/llama.cpp server, or your own API key for
+  Gemini/NVIDIA/OpenRouter/Groq. Nothing is bundled or pre-authorized.
+
 ## Translation engines
 
 Subtitlarr doesn't use a single fixed engine — you build a **cascade** of one
@@ -43,7 +57,8 @@ automatically):
 
 - **Ollama** — local, free, no rate limits. CPU inference works but is slow
   on modest hardware; a dedicated/integrated GPU helps more with larger
-  models than small ones. Pull a model first, e.g. `ollama pull gemma3:4b`.
+  models than small ones. Pull a model first, e.g.
+  `ollama pull translategemma:12b`.
 - **llama.cpp** — [llama.cpp's](https://github.com/ggml-org/llama.cpp) own
   built-in local HTTP server. A separate local runtime from Ollama, not
   another name for it — no web UI, no model-switching endpoint; the server

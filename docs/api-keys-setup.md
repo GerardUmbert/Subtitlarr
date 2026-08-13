@@ -92,16 +92,16 @@ No API key needed — this is your own local (or LAN) inference server.
 
 1. Install [Ollama](https://ollama.com) and pull a model, e.g.:
    ```bash
-   ollama pull gemma3:4b
+   ollama pull translategemma:12b
    ```
 2. In Subtitlarr, add a new engine instance: provider **Ollama**, base URL
    pointing at your Ollama server (e.g. `http://localhost:11434` or
-   `http://<lan-ip>:11434`), model `gemma3:4b`.
+   `http://<lan-ip>:11434`), model `translategemma:12b`.
 3. **Batch token budget: `400`**. Small local models lose reliable output
-   formatting well before they run out of raw context window — this budget
-   is calibrated for `gemma3:4b`'s formatting reliability, not the model's
-   actual context limit. If you use a larger/more capable local model you
-   may be able to raise this.
+   formatting well before they run out of raw context window — `400` is a
+   safe starting point for modest/low-end GPUs, including with
+   `translategemma:12b`. If you use a more capable local GPU/model you may
+   be able to raise this.
 
 ## Recommended cascade shape
 
@@ -122,7 +122,7 @@ bottom, once everything above is set up (max-throughput version, 2000/day):
 | 3 | Gemini Main gemini-3.1-flash-lite *(optional — see quality note above)* | Gemini · `gemini-3.1-flash-lite` | `4000` |
 | 4 | Gemini Secondary gemini-3.1-flash-lite *(optional)* | Gemini · `gemini-3.1-flash-lite` | `4000` |
 | — | *— cascade stops here — anything below is never tried as a fallback —* | *(separator)* | — |
-| 5 | Ollama | Ollama · `gemma3:4b` | `400` |
+| 5 | Ollama | Ollama · `translategemma:12b` | `400` |
 
 Drop rows 3 and 4 for the quality-first version instead (1000/day, every
 item on `gemini-3.5-flash-lite`).

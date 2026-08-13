@@ -100,15 +100,15 @@
   <p>No API key needed — this is your own local (or LAN) inference server.</p>
   <div class="step">
     <div class="step-num">1</div>
-    <div class="step-body"><p>Install <a href="https://ollama.com">Ollama</a> and pull a model:</p><pre><code>ollama pull gemma3:4b</code></pre></div>
+    <div class="step-body"><p>Install <a href="https://ollama.com">Ollama</a> and pull a model:</p><pre><code>ollama pull translategemma:12b</code></pre></div>
   </div>
   <div class="step">
     <div class="step-num">2</div>
-    <div class="step-body"><p>In Subtitlarr, add a new engine instance: provider <strong>Ollama</strong>, base URL pointing at your Ollama server (e.g. <code>http://localhost:11434</code> or <code>http://&lt;lan-ip&gt;:11434</code>), model <code>gemma3:4b</code>.</p></div>
+    <div class="step-body"><p>In Subtitlarr, add a new engine instance: provider <strong>Ollama</strong>, base URL pointing at your Ollama server (e.g. <code>http://localhost:11434</code> or <code>http://&lt;lan-ip&gt;:11434</code>), model <code>translategemma:12b</code>.</p></div>
   </div>
   <div class="step">
     <div class="step-num">3</div>
-    <div class="step-body"><p>Batch token budget: <code>400</code>. Small local models lose reliable output formatting well before they run out of raw context window — this is calibrated for <code>gemma3:4b</code>'s formatting reliability, not its context limit. A larger/more capable local model may support a higher budget.</p></div>
+    <div class="step-body"><p>Batch token budget: <code>400</code>. Small local models lose reliable output formatting well before they run out of raw context window — <code>400</code> is a safe starting point for modest/low-end GPUs, including with <code>translategemma:12b</code>. A more capable local GPU/model may support a higher budget.</p></div>
   </div>
 
   <h2 id="cascade">Recommended cascade shape</h2>
@@ -123,7 +123,7 @@
       <tr><td>3</td><td>Gemini Main gemini-3.1-flash-lite <em>(optional — see quality note above)</em></td><td>Gemini · <code>gemini-3.1-flash-lite</code></td><td><code>4000</code></td></tr>
       <tr><td>4</td><td>Gemini Secondary gemini-3.1-flash-lite <em>(optional)</em></td><td>Gemini · <code>gemini-3.1-flash-lite</code></td><td><code>4000</code></td></tr>
       <tr><td>—</td><td colspan="3"><em>— cascade stops here — anything below is never tried as a fallback —</em></td></tr>
-      <tr><td>5</td><td>Ollama</td><td>Ollama · <code>gemma3:4b</code></td><td><code>400</code></td></tr>
+      <tr><td>5</td><td>Ollama</td><td>Ollama · <code>translategemma:12b</code></td><td><code>400</code></td></tr>
     </tbody>
   </table>
   <p>Drop rows 3 and 4 for the quality-first version instead (1000/day, every item on <code>gemini-3.5-flash-lite</code>).</p>
