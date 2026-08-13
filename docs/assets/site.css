@@ -156,6 +156,7 @@ a { color: var(--accent); }
      remaining items (toggle, then site-actions) that should hug the
      right edge. */
   .nav-toggle { display: flex; margin-left: auto; }
+  .site-actions { margin-left: 0; }
   .site-nav {
     position: static;
     left: auto;
