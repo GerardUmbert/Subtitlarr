@@ -262,7 +262,14 @@
 
 <script src="assets/site-motion.js"></script>
 <script>
-  var sections = document.querySelectorAll('.docs-content h2[id]');
+  // Every sidebar link's #target is either an h2 or h3 in the content —
+  // querying only h2[id] left the sidebar's h3-anchored links (Bazarr
+  // extraction, Multi-pass strategy, Language check, Queue uploads
+  // explained) never able to become .active at all, since `current`
+  // could never match their id — the highlighted item stayed stuck on
+  // whichever h2 came before them instead of tracking the real
+  // subsection on screen.
+  var sections = document.querySelectorAll('.docs-content h2[id], .docs-content h3[id]');
   var links = document.querySelectorAll('.docs-sidebar a');
 
   function updateActiveDocsLink() {

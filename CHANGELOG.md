@@ -3,6 +3,12 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.11.4]
+
+### Fixed
+- The Docs page's sidebar was highlighting the wrong section while
+  scrolling past some subsections.
+
 ## [0.11.3]
 
 ### Added
