@@ -1,6 +1,7 @@
 import sqlite3
 from dataclasses import dataclass
 
+from app import state
 from app.bazarr.client import BazarrClient
 from app.db import repository
 
@@ -100,7 +101,8 @@ async def resolve_and_gate(
         source_map = await build_source_map(client, item["item_type"], item["bazarr_id"])
         matched_lang = pick_source_language(source_map, item["target_language"], source_priority)
         if matched_lang is None:
-            repository.mark_skipped_no_source(conn, item["id"])
+            with state.db_lock:
+                repository.mark_skipped_no_source(conn, item["id"])
             continue
         ready.append(
             {
@@ -113,11 +115,13 @@ async def resolve_and_gate(
 
 
 def get_age_gated_queue(conn: sqlite3.Connection, age_threshold_days: int) -> list[sqlite3.Row]:
-    return repository.get_age_gated_queue(conn, age_threshold_days)
+    with state.db_lock:
+        return repository.get_age_gated_queue(conn, age_threshold_days)
 
 
 def get_full_translatable_queue(conn: sqlite3.Connection) -> list[sqlite3.Row]:
-    return repository.get_full_translatable_queue(conn)
+    with state.db_lock:
+        return repository.get_full_translatable_queue(conn)
 
 
 def get_filtered_translatable_queue(
@@ -128,6 +132,7 @@ def get_filtered_translatable_queue(
     search: str | None = None,
     model: str | None = None,
 ) -> list[sqlite3.Row]:
-    return repository.get_translatable_queue_filtered(
-        conn, status=status, item_type=item_type, search=search, model=model
-    )
+    with state.db_lock:
+        return repository.get_translatable_queue_filtered(
+            conn, status=status, item_type=item_type, search=search, model=model
+        )

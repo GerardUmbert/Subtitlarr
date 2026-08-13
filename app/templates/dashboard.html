@@ -29,7 +29,7 @@
       <div class="stat-value">{% raw %}{{ stats.wanted ?? '—' }}{% endraw %}</div>
       <div class="stat-hint">missing item/language pairs</div>
     </a>
-    <a class="stat" href="/queue?status=&item_type=&exclude_no_source=1">
+    <a class="stat" href="/queue?status=pending&item_type=&exclude_no_source=1">
       <div class="stat-label">Translatable</div>
       <div class="stat-value accent">{% raw %}{{ stats.translatable ?? '—' }}{% endraw %}</div>
       <div class="stat-hint">have a usable source language</div>
@@ -88,18 +88,20 @@
           <div class="panel-title-sub" v-if="activeEngine">{% raw %}{{ activeEngineLabel }}{% endraw %}</div>
           <div class="panel-title-sub" v-else>Configure in <a href="/engines">Translation Engine</a></div>
         </div>
-        <span class="pill pill-good" v-if="engineInstances.length && coolingDownCount === 0">
+        <span class="pill pill-good" v-if="activeCascade.length && coolingDownCount === 0">
           <span class="dot"></span>all available
         </span>
-        <span class="pill pill-warn" v-else-if="engineInstances.length">
-          <span class="dot"></span>{% raw %}{{ coolingDownCount }}{% endraw %} of {% raw %}{{ engineInstances.length }}{% endraw %} cooling down
+        <span class="pill pill-warn" v-else-if="activeCascade.length">
+          <span class="dot"></span>{% raw %}{{ coolingDownCount }}{% endraw %} of {% raw %}{{ activeCascade.length }}{% endraw %} cooling down
         </span>
       </div>
-      <div class="panel-body" v-if="pendingUploads > 0">
-        <a class="engine-card-line" href="/queue?status=translated_pending_upload">
-          {% raw %}{{ pendingUploads }}{% endraw %} translation(s) queued for upload →
-        </a>
-      </div>
+      <a class="upload-callout" href="/queue?status=translated_pending_upload" v-if="pendingUploads > 0">
+        <div class="upload-callout-text">
+          <span class="upload-callout-num">{% raw %}{{ pendingUploads }}{% endraw %}</span>
+          <span class="upload-callout-label">translation(s) done, waiting to upload</span>
+        </div>
+        <span class="upload-callout-arrow">→</span>
+      </a>
     </div>
 
     <div class="panel" style="margin-bottom:0;">

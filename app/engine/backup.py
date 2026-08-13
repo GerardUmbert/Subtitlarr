@@ -12,6 +12,8 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+from app import state
+
 logger = logging.getLogger(__name__)
 
 BACKUP_DIRNAME = "backups"
@@ -129,7 +131,8 @@ def restore_backup(conn: sqlite3.Connection, db_path: str, filename: str) -> dic
 
     source = sqlite3.connect(str(source_path))
     try:
-        source.backup(conn)
+        with state.db_lock:
+            source.backup(conn)
     finally:
         source.close()
 

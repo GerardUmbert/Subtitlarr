@@ -520,6 +520,42 @@ a.engine-card-line:hover { text-decoration: underline; }
 .engine-card-line .dot-good { background: var(--good); }
 .engine-card-line .dot-warn { background: var(--warn); }
 
+.upload-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 14px 20px 20px;
+  padding: 14px 16px;
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  text-decoration: none;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.upload-callout:hover { transform: translateY(-1px); box-shadow: var(--mono-shadow); }
+
+.upload-callout-text { display: flex; flex-direction: column; }
+.upload-callout-num {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--warn);
+}
+.upload-callout-label {
+  font-size: 13px;
+  color: var(--ink);
+  margin-top: 2px;
+}
+.upload-callout-arrow {
+  font-size: 20px;
+  color: var(--warn);
+  flex-shrink: 0;
+}
+
 .add-engine-wrap {
   position: relative;
   display: inline-block;
@@ -527,24 +563,11 @@ a.engine-card-line:hover { text-decoration: underline; }
 
 .engine-opt {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
   padding: 6px 8px;
   border-radius: 8px;
   cursor: pointer;
-}
-.engine-opt .drag-handle,
-.engine-opt .engine-status,
-.engine-opt .expand-arrow {
-  /* .engine-opt is align-items: flex-start (not center) so the drag
-     handle sits at a predictable, fixed position — the top-left of the
-     card — regardless of how many lines .engine-info wraps to (name +
-     badges + meta can be 2-3 lines now that badges live in their own
-     row). flex-start alone would leave these three sitting flush with
-     the very top edge, though, which looks equally odd against a
-     SHORT single-line card — this nudge roughly centers them against
-     just the name line's own height instead. */
-  margin-top: 2px;
 }
 .engine-opt:hover { background: var(--surface-2); }
 
@@ -620,17 +643,6 @@ a.engine-card-line:hover { text-decoration: underline; }
   color: var(--ink-faint);
   font-size: 15px;
   flex-shrink: 0;
-  /* Padding (not just the 15px glyph) is the real touch target — a
-     thumb is far wider than a 15px glyph with 2px of padding, so most
-     real-phone taps near the handle missed it entirely and landed on
-     the sibling .engine-opt row instead (which has its own click
-     handler and no touch-action override), reaching the browser's
-     default scroll/tap behavior before dragPointerDown ever fired.
-     Negative margin keeps the visual glyph position unchanged while
-     the padding brings the actual hit area close to the ~44px minimum
-     recommended touch target. */
-  padding: 14px 12px;
-  margin: -12px -8px -14px -4px;
   /* Without this, a touch-drag starting on the handle is interpreted as
      a page scroll gesture by the browser before JS ever gets a chance to
      preventDefault() it — confirmed the reason drag didn't work at all
@@ -643,15 +655,17 @@ a.engine-card-line:hover { text-decoration: underline; }
 
 .separator-row {
   cursor: default;
+  align-items: center;
+  padding: 8px 8px;
   background: var(--surface-2);
-  border-style: dashed;
+  border: 1px dashed var(--border);
 }
 .separator-label {
   flex: 1;
   font-size: 11.5px;
   color: var(--ink-faint);
   font-family: "IBM Plex Mono", monospace;
-  text-align: center;
+  text-align: left;
 }
 
 .add-engine-menu {

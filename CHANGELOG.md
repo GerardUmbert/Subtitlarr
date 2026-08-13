@@ -3,6 +3,39 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.11.0]
+
+### Changed
+- The Dashboard's "Translation engine" card now shows a large, prominent
+  callout for items sitting in "pending upload" instead of a small muted
+  text link — translated items waiting on a push to Bazarr were easy to
+  miss before.
+
+### Fixed
+- The Dashboard's "Translatable" stat linked to the Queue page with no
+  status filter (showing every item, not just translatable ones) instead
+  of `status=pending`.
+- The "N cooling down" count on the Dashboard's engine card divided by
+  the raw instance count, including separators and disabled instances —
+  overstating the denominator and making the fraction misleading.
+- The cascade separator row on the Translation Engines page rendered as
+  an oversized box with the label floating in a large empty area instead
+  of a compact divider.
+- The UI (Queue, Dashboard, History, Jobs — any page left open) would
+  freeze/hang and requests would time out, worsening the longer the app
+  ran. Root cause: every DB-backed API route was declared `async def`,
+  so FastAPI ran it directly on the single-threaded event loop instead
+  of a worker thread — each blocking SQLite call stalled the entire
+  server for its duration, including every other open tab's poll
+  request. With 5-6 pages independently polling every 2-5 seconds, this
+  was enough to make the app feel unresponsive within minutes. Fixed by
+  allowing the shared SQLite connection to be used across threads
+  (guarded by a single lock held only around each individual query,
+  never across an `await`) and converting the actual polling routes
+  (queue/dashboard/history list & stats endpoints, and a handful of
+  other pure-DB routes) to synchronous handlers, which FastAPI runs in
+  a worker thread instead of the event loop.
+
 ## [0.10.5]
 
 ### Fixed

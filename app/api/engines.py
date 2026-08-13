@@ -77,7 +77,7 @@ async def pull_ollama_model(req: PullModelRequest):
 
 
 @router.get("/ollama/pull")
-async def get_pull_status():
+def get_pull_status():
     p = pull_state.current_pull
     return {
         "model": p.model,

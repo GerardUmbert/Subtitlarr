@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 
 @router.get("")
-async def get_jobs(
+def get_jobs(
     conn=Depends(state.get_conn), scheduler=Depends(state.get_scheduler), runner=Depends(state.get_runner)
 ):
     next_run = scheduler.next_run_time()
@@ -45,19 +45,22 @@ _sync_media_state = {"active": False, "error": None}
 
 
 async def _run_sync_media(runner, triggered_by: str) -> None:
-    conn = state.get_conn()
-    event_id = repository.start_job_event(conn, "sync_media", triggered_by)
+    conn = state.db_conn
+    with state.db_lock:
+        event_id = repository.start_job_event(conn, "sync_media", triggered_by)
     _sync_media_state["active"] = True
     _sync_media_state["error"] = None
     try:
         result = await runner.poll()
-        repository.finish_job_event(
-            conn, event_id, status="done",
-            result=f"{result['episodes_seen']} episodes, {result['movies_seen']} movies seen",
-        )
+        with state.db_lock:
+            repository.finish_job_event(
+                conn, event_id, status="done",
+                result=f"{result['episodes_seen']} episodes, {result['movies_seen']} movies seen",
+            )
     except Exception as exc:  # noqa: BLE001 - surface to the UI, don't crash the app
         _sync_media_state["error"] = str(exc)
-        repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
+        with state.db_lock:
+            repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
     finally:
         _sync_media_state["active"] = False
 
@@ -89,21 +92,24 @@ _sync_subs_state = {"active": False, "error": None, "result": None}
 
 
 async def _run_sync_subs(runner, triggered_by: str) -> None:
-    conn = state.get_conn()
-    event_id = repository.start_job_event(conn, "sync_subs", triggered_by)
+    conn = state.db_conn
+    with state.db_lock:
+        event_id = repository.start_job_event(conn, "sync_subs", triggered_by)
     _sync_subs_state["active"] = True
     _sync_subs_state["error"] = None
     _sync_subs_state["result"] = None
     try:
         result = await runner.warm_source_cache()
         _sync_subs_state["result"] = result
-        repository.finish_job_event(
-            conn, event_id, status="done",
-            result=f"{result['resolved']} resolved, {result['cached']} cached",
-        )
+        with state.db_lock:
+            repository.finish_job_event(
+                conn, event_id, status="done",
+                result=f"{result['resolved']} resolved, {result['cached']} cached",
+            )
     except Exception as exc:  # noqa: BLE001 - surface to the UI, don't crash the app
         _sync_subs_state["error"] = str(exc)
-        repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
+        with state.db_lock:
+            repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
     finally:
         _sync_subs_state["active"] = False
 
@@ -137,20 +143,23 @@ async def _run_push_uploads(conn, client, triggered_by: str) -> None:
     Bazarr in one pass — the deferred half of queue_uploads_enabled. Shared
     by the manual endpoint and the cron entry point below, same as the
     sync_media/sync_subs/language_check pattern."""
-    event_id = repository.start_job_event(conn, "push_uploads", triggered_by=triggered_by)
+    with state.db_lock:
+        event_id = repository.start_job_event(conn, "push_uploads", triggered_by=triggered_by)
     _push_uploads_state["active"] = True
     _push_uploads_state["error"] = None
     _push_uploads_state["result"] = None
     try:
         result = await upload_queue.push_pending_uploads(conn, client)
         _push_uploads_state["result"] = result
-        repository.finish_job_event(
-            conn, event_id, status="done",
-            result=f"{result['pushed']} pushed, {result['failed']} failed, {result['reset']} reset",
-        )
+        with state.db_lock:
+            repository.finish_job_event(
+                conn, event_id, status="done",
+                result=f"{result['pushed']} pushed, {result['failed']} failed, {result['reset']} reset",
+            )
     except Exception as exc:  # noqa: BLE001 - surface to the UI, don't crash the app
         _push_uploads_state["error"] = str(exc)
-        repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
+        with state.db_lock:
+            repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
     finally:
         _push_uploads_state["active"] = False
 
@@ -164,9 +173,8 @@ async def cron_push_uploads() -> None:
     mid-progress."""
     if _push_uploads_state["active"]:
         return
-    conn = state.get_conn()
     client = state.get_client()
-    await _run_push_uploads(conn, client, triggered_by="cron")
+    await _run_push_uploads(state.db_conn, client, triggered_by="cron")
 
 
 @router.post("/push-uploads")
@@ -192,7 +200,8 @@ async def _run_language_check(conn, client, triggered_by: str) -> None:
     """Sweeps every batch of the unchecked backlog (not just one) in a
     single call — shared by both the manual endpoint and the cron entry
     point below, same as the sync_media/sync_subs pattern."""
-    event_id = repository.start_job_event(conn, "language_check", triggered_by=triggered_by)
+    with state.db_lock:
+        event_id = repository.start_job_event(conn, "language_check", triggered_by=triggered_by)
     _language_check_state["active"] = True
     _language_check_state["error"] = None
     _language_check_state["result"] = None
@@ -226,19 +235,22 @@ async def _run_language_check(conn, client, triggered_by: str) -> None:
                 break  # this batch made no progress — stop instead of looping forever
             if result["checked"] + result["skipped"] < _LANGUAGE_CHECK_BATCH_SIZE:
                 break  # fewer items came back than asked for — backlog is empty
-        repository.finish_job_event(
-            conn, event_id, status="done",
-            result=(
-                f"{totals['checked']} checked, {totals['matched']} ok, "
-                f"{totals['mismatched']} mismatch, {totals['skipped']} skipped"
-            ),
-        )
+        with state.db_lock:
+            repository.finish_job_event(
+                conn, event_id, status="done",
+                result=(
+                    f"{totals['checked']} checked, {totals['matched']} ok, "
+                    f"{totals['mismatched']} mismatch, {totals['skipped']} skipped"
+                ),
+            )
     except language_check.LanguageCheckError as exc:
         _language_check_state["error"] = str(exc)
-        repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
+        with state.db_lock:
+            repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
     except Exception as exc:  # noqa: BLE001 - surface to the UI, don't crash the app
         _language_check_state["error"] = str(exc)
-        repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
+        with state.db_lock:
+            repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
     finally:
         _language_check_state["active"] = False
 
@@ -249,7 +261,7 @@ async def cron_language_check(runner) -> None:
     or double-started."""
     if _language_check_state["active"] or (runner.current is not None and runner.current.active):
         return
-    conn = state.get_conn()
+    conn = state.db_conn
     client = state.get_client()
     await _run_language_check(conn, client, triggered_by="cron")
 
@@ -287,7 +299,7 @@ class LanguageCheckSettings(BaseModel):
 
 
 @router.get("/language-check/settings")
-async def get_language_check_settings(conn=Depends(state.get_conn)):
+def get_language_check_settings(conn=Depends(state.get_conn)):
     return {
         "instance_id": repository.get_config(conn, "language_check_instance_id", default=None),
         "pending_count": repository.count_language_check_pending(conn),
@@ -304,20 +316,26 @@ _backup_state = {"active": False, "error": None, "result": None}
 
 
 async def _run_backup(conn, triggered_by: str) -> None:
-    event_id = repository.start_job_event(conn, "backup", triggered_by=triggered_by)
+    with state.db_lock:
+        event_id = repository.start_job_event(conn, "backup", triggered_by=triggered_by)
     _backup_state["active"] = True
     _backup_state["error"] = None
     _backup_state["result"] = None
     try:
+        # run_backup() opens its own separate sqlite3 connections (source
+        # and dest) against the DB file — it never touches state.db_conn,
+        # so it doesn't need db_lock even though it's a blocking sync call.
         result = backup.run_backup(settings.db_path, keep_count=settings.backup_keep_count)
         _backup_state["result"] = result
-        repository.finish_job_event(
-            conn, event_id, status="done",
-            result=f"snapshot written, {result['pruned']} old snapshot(s) pruned",
-        )
+        with state.db_lock:
+            repository.finish_job_event(
+                conn, event_id, status="done",
+                result=f"snapshot written, {result['pruned']} old snapshot(s) pruned",
+            )
     except Exception as exc:  # noqa: BLE001 - surface to the UI, don't crash the app
         _backup_state["error"] = str(exc)
-        repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
+        with state.db_lock:
+            repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
     finally:
         _backup_state["active"] = False
 
@@ -328,7 +346,7 @@ async def cron_backup() -> None:
     safe to run concurrently with a translation run or any other job."""
     if _backup_state["active"]:
         return
-    conn = state.get_conn()
+    conn = state.db_conn
     await _run_backup(conn, triggered_by="cron")
 
 
@@ -345,7 +363,7 @@ async def run_backup_now(conn=Depends(state.get_conn)):
 
 
 @router.get("/backups")
-async def list_backups():
+def list_backups():
     """Every snapshot currently on disk (daily-cron and manual alike),
     newest first — the restore dropdown's data source and, since only a
     filename from this exact list is accepted back by /backups/restore,
@@ -450,7 +468,7 @@ async def run_stale_audit_now(
 
 
 @router.get("/sync-status")
-async def get_sync_status():
+def get_sync_status():
     return {
         "sync_media": dict(_sync_media_state),
         "sync_subs": dict(_sync_subs_state),

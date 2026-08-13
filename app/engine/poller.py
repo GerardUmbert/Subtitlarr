@@ -1,6 +1,7 @@
 import logging
 import sqlite3
 
+from app import state
 from app.bazarr.client import BazarrClient
 from app.db import repository
 from app.engine import selector
@@ -24,15 +25,18 @@ async def _resolve_and_preview_source(
     stay invisible to every future run forever, even once a real source
     exists (confirmed live: an EN subtitle became available after the item
     was already marked skipped_no_source, and nothing ever re-checked it)."""
-    item = repository.get_item_by_bazarr_id(conn, item_type, bazarr_id, target_language)
+    with state.db_lock:
+        item = repository.get_item_by_bazarr_id(conn, item_type, bazarr_id, target_language)
     if item is None or item["status"] not in ("pending", "skipped_no_source"):
         return
     source_map = await selector.build_source_map(client, item_type, bazarr_id)
     matched_lang = selector.pick_source_language(source_map, target_language, source_priority)
     if matched_lang is None:
-        repository.mark_skipped_no_source(conn, item["id"])
+        with state.db_lock:
+            repository.mark_skipped_no_source(conn, item["id"])
     else:
-        repository.set_resolved_source_language(conn, item["id"], matched_lang)
+        with state.db_lock:
+            repository.set_resolved_source_language(conn, item["id"], matched_lang)
 
 
 async def poll_once(conn: sqlite3.Connection, client: BazarrClient) -> dict:
@@ -48,26 +52,29 @@ async def poll_once(conn: sqlite3.Connection, client: BazarrClient) -> dict:
     Upserts newly-seen (item, missing target language) pairs, stamping
     first_seen_wanted only on first sight, and eagerly previews each new
     item's source language for display."""
-    purged = repository.purge_unsynced_items(conn)
+    with state.db_lock:
+        purged = repository.purge_unsynced_items(conn)
     if purged:
         logger.info("Purged %d unsynced item(s) ahead of fresh poll", purged)
 
     episodes_seen = 0
     movies_seen = 0
-    source_priority = repository.get_config(conn, "source_lang_priority", default=[])
+    with state.db_lock:
+        source_priority = repository.get_config(conn, "source_lang_priority", default=[])
 
     async for wanted in client.iter_all_wanted_episodes():
         for lang in wanted.missing_subtitles:
-            repository.upsert_item_seen(
-                conn,
-                item_type="episode",
-                bazarr_id=wanted.sonarrEpisodeId,
-                series_id=wanted.sonarrSeriesId,
-                title=wanted.episodeTitle,
-                series_title=wanted.seriesTitle,
-                season_episode=wanted.episode_number,
-                target_language=lang.code2,
-            )
+            with state.db_lock:
+                repository.upsert_item_seen(
+                    conn,
+                    item_type="episode",
+                    bazarr_id=wanted.sonarrEpisodeId,
+                    series_id=wanted.sonarrSeriesId,
+                    title=wanted.episodeTitle,
+                    series_title=wanted.seriesTitle,
+                    season_episode=wanted.episode_number,
+                    target_language=lang.code2,
+                )
             await _resolve_and_preview_source(
                 conn, client, "episode", wanted.sonarrEpisodeId, lang.code2, source_priority
             )
@@ -75,16 +82,17 @@ async def poll_once(conn: sqlite3.Connection, client: BazarrClient) -> dict:
 
     async for wanted in client.iter_all_wanted_movies():
         for lang in wanted.missing_subtitles:
-            repository.upsert_item_seen(
-                conn,
-                item_type="movie",
-                bazarr_id=wanted.radarrId,
-                series_id=None,
-                title=wanted.title,
-                series_title=None,
-                season_episode=None,
-                target_language=lang.code2,
-            )
+            with state.db_lock:
+                repository.upsert_item_seen(
+                    conn,
+                    item_type="movie",
+                    bazarr_id=wanted.radarrId,
+                    series_id=None,
+                    title=wanted.title,
+                    series_title=None,
+                    season_episode=None,
+                    target_language=lang.code2,
+                )
             await _resolve_and_preview_source(
                 conn, client, "movie", wanted.radarrId, lang.code2, source_priority
             )

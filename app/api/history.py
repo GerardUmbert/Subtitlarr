@@ -10,7 +10,7 @@ router = APIRouter(prefix="/api/history", tags=["history"])
 
 
 @router.get("")
-async def list_history(
+def list_history(
     page: int = 1,
     page_size: int = 20,
     sort_by: str | None = None,
@@ -24,7 +24,7 @@ async def list_history(
 
 
 @router.get("/{run_id}/items")
-async def get_history_run_items(run_id: int, conn=Depends(state.get_conn)):
+def get_history_run_items(run_id: int, conn=Depends(state.get_conn)):
     row = conn.execute("SELECT id FROM run_history WHERE id = ?", (run_id,)).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -32,7 +32,7 @@ async def get_history_run_items(run_id: int, conn=Depends(state.get_conn)):
 
 
 @router.get("/events")
-async def get_events(
+def get_events(
     after_id: int = 0,
     limit: int = 200,
     item_id: int | None = None,
@@ -49,7 +49,7 @@ async def get_events(
 
 
 @router.get("/jobs")
-async def get_job_events(limit: int = 100, conn=Depends(state.get_conn)):
+def get_job_events(limit: int = 100, conn=Depends(state.get_conn)):
     """Start/finish log of the non-translation jobs (Bazarr wanted-list
     sync, source prefetch, upload push) — cron-fired and manual alike.
     Translation runs are NOT included here; see the main list_history
@@ -58,7 +58,7 @@ async def get_job_events(limit: int = 100, conn=Depends(state.get_conn)):
 
 
 @router.get("/language-mismatches")
-async def get_language_mismatches(limit: int = 100, conn=Depends(state.get_conn)):
+def get_language_mismatches(limit: int = 100, conn=Depends(state.get_conn)):
     """Permanent record of every confirmed language-check mismatch ever
     found — survives independently of the flagged item, which gets reset
     to 'pending' and its own trace cleared the moment it's requeued for
@@ -70,7 +70,7 @@ async def get_language_mismatches(limit: int = 100, conn=Depends(state.get_conn)
 
 
 @router.get("/stats")
-async def get_stats(range: str = "all", conn=Depends(state.get_conn)):
+def get_stats(range: str = "all", conn=Depends(state.get_conn)):
     if range not in ("7d", "30d", "all"):
         raise HTTPException(status_code=400, detail="range must be one of: 7d, 30d, all")
     return stats.compute_stats(conn, range_=range)

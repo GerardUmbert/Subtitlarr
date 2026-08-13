@@ -6,6 +6,7 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from app import state
 from app.bazarr.client import BazarrClient
 from app.db import engine_instances_repo, repository
 from app.engine import prefetch
@@ -275,12 +276,14 @@ async def run_compare(
     temperature_a/_b work the same way — None on either side falls back to
     that instance's own SAVED temperature (registry.DEFAULT_TEMPERATURE if
     that instance predates the setting existing)."""
-    instance_a = engine_instances_repo.get_instance(conn, instance_id_a)
+    with state.db_lock:
+        instance_a = engine_instances_repo.get_instance(conn, instance_id_a)
     if instance_a is None:
         raise CompareError("Selected engine instance no longer exists")
     instance_b = None
     if instance_id_b is not None:
-        instance_b = engine_instances_repo.get_instance(conn, instance_id_b)
+        with state.db_lock:
+            instance_b = engine_instances_repo.get_instance(conn, instance_id_b)
         if instance_b is None:
             raise CompareError("Selected engine instance no longer exists")
 
@@ -317,10 +320,12 @@ async def run_compare(
         result_item_id = None
 
     run_id = uuid.uuid4().hex[:12]
-    saved_catalan_vegeta_insults = repository.get_config(conn, "catalan_vegeta_insults", default=False)
+    with state.db_lock:
+        saved_catalan_vegeta_insults = repository.get_config(conn, "catalan_vegeta_insults", default=False)
     resolved_insults_a = catalan_vegeta_insults_a if catalan_vegeta_insults_a is not None else saved_catalan_vegeta_insults
     resolved_insults_b = catalan_vegeta_insults_b if catalan_vegeta_insults_b is not None else saved_catalan_vegeta_insults
-    language_variants = repository.get_config(conn, "language_variants", default={})
+    with state.db_lock:
+        language_variants = repository.get_config(conn, "language_variants", default={})
 
     common_kwargs = dict(
         original_subs=original_subs, source_lang=source_lang, target_lang=target_lang,

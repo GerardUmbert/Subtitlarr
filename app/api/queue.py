@@ -24,7 +24,7 @@ def _with_cached_flag(rows: list) -> list[dict]:
 
 
 @router.get("")
-async def list_queue(
+def list_queue(
     status: str | None = None,
     item_type: str | None = None,
     search: str | None = None,
@@ -47,14 +47,14 @@ async def list_queue(
 
 
 @router.get("/models")
-async def list_used_models(conn=Depends(state.get_conn)):
+def list_used_models(conn=Depends(state.get_conn)):
     """Every distinct model_used value seen across all items — populates
     the Queue page's model filter chips."""
     return {"models": repository.list_used_models(conn)}
 
 
 @router.get("/matching-count")
-async def get_matching_count(
+def get_matching_count(
     status: str | None = None,
     item_type: str | None = None,
     search: str | None = None,
@@ -111,7 +111,7 @@ async def run_by_ids(req: RunByIdsRequest, runner=Depends(state.get_runner)):
 
 
 @router.get("/current-run")
-async def get_current_run_items(conn=Depends(state.get_conn), runner=Depends(state.get_runner)):
+def get_current_run_items(conn=Depends(state.get_conn), runner=Depends(state.get_runner)):
     """Every item touched by the currently-active run, in ANY status
     (queued/translating/done/failed) — the Queue page's 'current batch'
     view, so a running batch is visible as a whole rather than only
@@ -124,7 +124,7 @@ async def get_current_run_items(conn=Depends(state.get_conn), runner=Depends(sta
 
 
 @router.get("/{item_id}")
-async def get_item(item_id: int, conn=Depends(state.get_conn)):
+def get_item(item_id: int, conn=Depends(state.get_conn)):
     row = repository.get_item(conn, item_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Item not found")

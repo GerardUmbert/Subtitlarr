@@ -19,6 +19,7 @@ reset (see app.engine.language_check.run_language_check).
 import logging
 import sqlite3
 
+from app import state
 from app.bazarr.client import BazarrClient
 from app.db import repository
 
@@ -51,7 +52,8 @@ async def run_stale_audit(conn: sqlite3.Connection, client: BazarrClient) -> dic
     own record says "translated," but Bazarr shows nothing there now, so
     the record is simply wrong regardless of how it got that way.
     Returns {"checked": N, "stale": N, "ok": N, "inconclusive": N}."""
-    items = repository.get_done_items_for_stale_audit(conn)
+    with state.db_lock:
+        items = repository.get_done_items_for_stale_audit(conn)
     stale = 0
     ok = 0
     inconclusive = 0
@@ -69,7 +71,8 @@ async def run_stale_audit(conn: sqlite3.Connection, client: BazarrClient) -> dic
             "Bazarr despite status='done' — resetting to pending.",
             item["id"], item["title"], item["target_language"],
         )
-        repository.reset_item_for_stale_audit(conn, item["id"])
+        with state.db_lock:
+            repository.reset_item_for_stale_audit(conn, item["id"])
     return {
         "checked": len(items),
         "stale": stale,

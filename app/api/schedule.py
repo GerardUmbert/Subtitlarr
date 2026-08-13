@@ -23,7 +23,7 @@ class ScheduleConfig(BaseModel):
 
 
 @router.get("/config/schedule")
-async def get_schedule_config():
+def get_schedule_config():
     return {
         "cron_expression": settings.schedule_cron,
         "age_threshold_days": settings.age_threshold_days,
@@ -54,7 +54,7 @@ def _apply_sync_cron(scheduler, job_id: str, cron_expr: str, callback) -> None:
 
 
 @router.post("/config/schedule")
-async def set_schedule_config(
+def set_schedule_config(
     config: ScheduleConfig,
     scheduler=Depends(state.get_scheduler),
     conn=Depends(state.get_conn),
@@ -119,7 +119,7 @@ async def set_schedule_config(
 
 
 @router.get("/schedule/next-runs")
-async def next_runs(scheduler=Depends(state.get_scheduler)):
+def next_runs(scheduler=Depends(state.get_scheduler)):
     return {
         "next_run": _iso(scheduler.next_run_time()),
         "next_sync_media_run": _iso(scheduler.next_run_time("sync_media")),

@@ -6,6 +6,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable
 
+from app import state
 from app.bazarr.client import BazarrClient
 from app.config import Settings
 from app.db import engine_instances_repo, repository
@@ -105,9 +106,10 @@ class RunController:
         self, items: list[sqlite3.Row], triggered_by: str, enforce_daily_limit: bool = True
     ) -> RunProgress:
         client = self._get_client()
-        source_priority = repository.get_config(
-            self._conn, "source_lang_priority", default=[]
-        )
+        with state.db_lock:
+            source_priority = repository.get_config(
+                self._conn, "source_lang_priority", default=[]
+            )
 
         ready_items = await selector.resolve_and_gate(
             self._conn, client, items, source_priority
@@ -120,11 +122,13 @@ class RunController:
         # since that's an explicit one-off request, not bulk processing.
         daily_limit = self._settings.daily_translation_limit
         if enforce_daily_limit and daily_limit > 0:
-            already_done_today = repository.count_completed_today(self._conn)
+            with state.db_lock:
+                already_done_today = repository.count_completed_today(self._conn)
             remaining = max(0, daily_limit - already_done_today)
             ready_items = ready_items[:remaining]
 
-        run_id = repository.start_run(self._conn, triggered_by)
+        with state.db_lock:
+            run_id = repository.start_run(self._conn, triggered_by)
         progress = RunProgress(
             run_id=run_id,
             triggered_by=triggered_by,
@@ -165,7 +169,8 @@ class RunController:
         # subsequent item still tried it first and waited out the retry
         # before falling to Gemini Secondary.
         def _build_cascade():
-            cascade_instances = engine_instances_repo.get_cascade(self._conn)
+            with state.db_lock:
+                cascade_instances = engine_instances_repo.get_cascade(self._conn)
             if not cascade_instances:
                 return None
             cascade, name_to_instance_id = registry.build_cascade_providers(cascade_instances)
@@ -177,7 +182,8 @@ class RunController:
             return cascade, name_to_instance_id, batch_token_budget_override, concurrent_batch_window, num_ctx
 
         if _build_cascade() is None:
-            repository.finish_run(self._conn, run_id, 0, 0)
+            with state.db_lock:
+                repository.finish_run(self._conn, run_id, 0, 0)
             progress.active = False
             raise NoEngineConfiguredError(
                 "No enabled, non-rate-limited engine instance is configured — "
@@ -204,9 +210,11 @@ class RunController:
                 if instance_id is None:
                     return
                 if rate_limited:
-                    engine_instances_repo.record_rate_limited_failure(self._conn, instance_id)
+                    with state.db_lock:
+                        engine_instances_repo.record_rate_limited_failure(self._conn, instance_id)
                 else:
-                    engine_instances_repo.record_success(self._conn, instance_id)
+                    with state.db_lock:
+                        engine_instances_repo.record_success(self._conn, instance_id)
 
             return _on_call_result
 
@@ -289,7 +297,8 @@ class RunController:
                     await asyncio.sleep(pause_seconds)
         finally:
             progress.active = False
-            repository.finish_run(self._conn, run_id, progress.processed, progress.failed)
+            with state.db_lock:
+                repository.finish_run(self._conn, run_id, progress.processed, progress.failed)
             for provider in all_providers_built:
                 if hasattr(provider, "aclose"):
                     await provider.aclose()
@@ -323,7 +332,8 @@ class RunController:
         usable source for are marked skipped_no_source exactly as they
         would be during a real run."""
         client = self._get_client()
-        source_priority = repository.get_config(self._conn, "source_lang_priority", default=[])
+        with state.db_lock:
+            source_priority = repository.get_config(self._conn, "source_lang_priority", default=[])
         items = selector.get_full_translatable_queue(self._conn)
         ready_items = await selector.resolve_and_gate(self._conn, client, items, source_priority)
         cached_paths = await prefetch.prefetch_source_subtitles(
@@ -342,7 +352,8 @@ class RunController:
         return await self.run_batch(items, triggered_by="scheduled")
 
     async def run_single_item(self, item_id: int) -> RunProgress:
-        item = repository.get_item(self._conn, item_id)
+        with state.db_lock:
+            item = repository.get_item(self._conn, item_id)
         if item is None:
             raise ValueError(f"Item {item_id} not found")
         return await self.run_batch([item], triggered_by="manual_item", enforce_daily_limit=False)
@@ -358,10 +369,11 @@ class RunController:
         the whole batch over one bad id. Bypasses the daily limit, same
         as run_single_item — an explicit hand-picked list is exactly the
         kind of deliberate one-off the cap isn't meant to block."""
-        items = [
-            item for item_id in item_ids
-            if (item := repository.get_item(self._conn, item_id)) is not None
-        ]
+        with state.db_lock:
+            items = [
+                item for item_id in item_ids
+                if (item := repository.get_item(self._conn, item_id)) is not None
+            ]
         return await self.run_batch(items, triggered_by="manual_filtered", enforce_daily_limit=False)
 
     async def run_filtered(

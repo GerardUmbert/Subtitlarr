@@ -43,12 +43,12 @@ async def poll_now(runner=Depends(state.get_runner)):
 
 
 @router.get("/poll/status")
-async def poll_status():
+def poll_status():
     return dict(_poll_state)
 
 
 @router.get("/current")
-async def get_current(runner=Depends(state.get_runner)):
+def get_current(runner=Depends(state.get_runner)):
     progress = runner.current
     if progress is None:
         return {"active": False}
@@ -66,7 +66,7 @@ async def get_current(runner=Depends(state.get_runner)):
 
 
 @router.post("/cancel")
-async def cancel_current_run(runner=Depends(state.get_runner)):
+def cancel_current_run(runner=Depends(state.get_runner)):
     """Stops the active run after its in-flight item finishes — never
     mid-item, see RunController.cancel_current(). Remaining not-yet-
     started items are left untouched (still pending/queued), not marked
@@ -78,14 +78,14 @@ async def cancel_current_run(runner=Depends(state.get_runner)):
 
 
 @router.get("/events/latest_id")
-async def get_latest_event_id():
+def get_latest_event_id():
     """Lets a freshly loaded page seek to "now" before polling /events, so
     it doesn't replay the whole buffered backlog as toasts."""
     return {"id": run_events.latest_id()}
 
 
 @router.get("/events")
-async def get_run_events(since: int = 0):
+def get_run_events(since: int = 0):
     """Ephemeral per-batch events (retries, fallbacks, item failures) for
     live toast notifications — poll with `since` set to the highest `id`
     already seen; returns only newer events. In-memory only, lost on

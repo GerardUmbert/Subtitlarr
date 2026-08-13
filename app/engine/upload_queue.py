@@ -2,6 +2,7 @@ import logging
 import sqlite3
 from pathlib import Path
 
+from app import state
 from app.bazarr.client import BazarrClient
 from app.config import settings
 from app.db import repository
@@ -44,7 +45,8 @@ async def push_pending_uploads(
     discards the queued file and resets the item to 'pending' right when
     the check runs, rather than leaving a flagged item sitting here for a
     later push to skip."""
-    items = repository.get_items_by_status(conn, "translated_pending_upload")
+    with state.db_lock:
+        items = repository.get_items_by_status(conn, "translated_pending_upload")
 
     pushed = 0
     failed = 0
@@ -58,7 +60,8 @@ async def push_pending_uploads(
                 "resetting to pending for re-translation",
                 item_id, path,
             )
-            repository.update_item_status(conn, item_id, "pending")
+            with state.db_lock:
+                repository.update_item_status(conn, item_id, "pending")
             reset += 1
             continue
         try:
@@ -81,7 +84,8 @@ async def push_pending_uploads(
             # doesn't change WHEN the translation itself completed, so
             # mark_completed is deliberately omitted here to avoid
             # overwriting it with the (much later) push time.
-            repository.update_item_status(conn, item_id, "done")
+            with state.db_lock:
+                repository.update_item_status(conn, item_id, "done")
             path.unlink(missing_ok=True)
             pushed += 1
         except Exception:  # noqa: BLE001 - one bad upload must not abort the push

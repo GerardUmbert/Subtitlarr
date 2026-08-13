@@ -40,7 +40,7 @@ def _public_instance(instance: dict) -> dict:
 
 
 @router.get("")
-async def list_engine_instances(conn=Depends(state.get_conn)):
+def list_engine_instances(conn=Depends(state.get_conn)):
     instances = engine_instances_repo.list_instances(conn)
     return {"data": [_public_instance(i) for i in instances]}
 
@@ -62,7 +62,7 @@ def _validate_provider_type(provider_type: str) -> None:
 
 
 @router.post("")
-async def create_engine_instance(req: CreateInstanceRequest, conn=Depends(state.get_conn)):
+def create_engine_instance(req: CreateInstanceRequest, conn=Depends(state.get_conn)):
     _validate_provider_type(req.provider_type)
     if req.provider_type == engine_instances_repo.SEPARATOR_TYPE:
         config = {}
@@ -90,7 +90,7 @@ class UpdateInstanceRequest(BaseModel):
 
 
 @router.put("/{instance_id}")
-async def update_engine_instance(
+def update_engine_instance(
     instance_id: int, req: UpdateInstanceRequest, conn=Depends(state.get_conn)
 ):
     existing = engine_instances_repo.get_instance(conn, instance_id)
@@ -121,7 +121,7 @@ async def update_engine_instance(
 
 
 @router.delete("/{instance_id}")
-async def delete_engine_instance(instance_id: int, conn=Depends(state.get_conn)):
+def delete_engine_instance(instance_id: int, conn=Depends(state.get_conn)):
     existing = engine_instances_repo.get_instance(conn, instance_id)
     if existing is None:
         raise HTTPException(status_code=404, detail="Engine instance not found")
@@ -134,7 +134,7 @@ class ReorderRequest(BaseModel):
 
 
 @router.post("/reorder")
-async def reorder_engine_instances(req: ReorderRequest, conn=Depends(state.get_conn)):
+def reorder_engine_instances(req: ReorderRequest, conn=Depends(state.get_conn)):
     engine_instances_repo.reorder_instances(conn, req.ids)
     return {"data": [_public_instance(i) for i in engine_instances_repo.list_instances(conn)]}
 

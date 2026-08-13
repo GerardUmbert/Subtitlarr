@@ -29,7 +29,7 @@ class BazarrTestRequest(BaseModel):
 
 
 @router.get("")
-async def get_bazarr_config():
+def get_bazarr_config():
     return {
         "base_url": settings.bazarr_base_url,
         "api_key_masked": _mask(settings.bazarr_api_key),

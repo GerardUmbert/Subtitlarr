@@ -4,6 +4,7 @@ import sqlite3
 import time
 from pathlib import Path
 
+from app import state
 from app.bazarr.client import BazarrClient
 from app.db import repository
 from app.engine import run_events, upload_queue
@@ -747,16 +748,19 @@ async def translate_item(
                     "without uploading anything.",
                     item_id, target_lang,
                 )
-                repository.update_item_status(
-                    conn, item_id, "done", source_language=source_lang, mark_completed=True,
-                )
-                repository.log_item_attempt(
-                    conn, item_id, run_id, "done",
-                    engine_used=None, model_used=None, settings_snapshot=settings_snapshot,
-                )
+                with state.db_lock:
+                    repository.update_item_status(
+                        conn, item_id, "done", source_language=source_lang, mark_completed=True,
+                    )
+                with state.db_lock:
+                    repository.log_item_attempt(
+                        conn, item_id, run_id, "done",
+                        engine_used=None, model_used=None, settings_snapshot=settings_snapshot,
+                    )
                 return
 
-    repository.update_item_status(conn, item_id, "translating", mark_attempt=True)
+    with state.db_lock:
+        repository.update_item_status(conn, item_id, "translating", mark_attempt=True)
     item_started = time.monotonic()
 
     try:
@@ -780,8 +784,10 @@ async def translate_item(
             item_id, time.monotonic() - chunk_started, len(batches),
         )
 
-        catalan_vegeta_insults = repository.get_config(conn, "catalan_vegeta_insults", default=False)
-        language_variants = repository.get_config(conn, "language_variants", default={})
+        with state.db_lock:
+            catalan_vegeta_insults = repository.get_config(conn, "catalan_vegeta_insults", default=False)
+        with state.db_lock:
+            language_variants = repository.get_config(conn, "language_variants", default={})
         translate_started = time.monotonic()
         translated_subs, engine_used, model_used = await _translate_batches(
             batches, source_lang, target_lang, cascade, item_id,
@@ -818,11 +824,12 @@ async def translate_item(
             # duration column needs it to show real per-item translation
             # time instead of "—" for every queued item.
             upload_queue.save_pending_upload(upload_queue.DEFAULT_QUEUE_ROOT, item_id, srt_bytes)
-            repository.update_item_status(
-                conn, item_id, "translated_pending_upload",
-                source_language=source_lang, engine_used=engine_used, model_used=model_used,
-                mark_completed=True,
-            )
+            with state.db_lock:
+                repository.update_item_status(
+                    conn, item_id, "translated_pending_upload",
+                    source_language=source_lang, engine_used=engine_used, model_used=model_used,
+                    mark_completed=True,
+                )
         else:
             if item["item_type"] == "episode":
                 await client.upload_episode_subtitle(
@@ -838,15 +845,17 @@ async def translate_item(
                     srt_bytes=srt_bytes,
                 )
 
-            repository.update_item_status(
-                conn, item_id, "done",
-                source_language=source_lang, engine_used=engine_used, model_used=model_used,
-                mark_completed=True,
+            with state.db_lock:
+                repository.update_item_status(
+                    conn, item_id, "done",
+                    source_language=source_lang, engine_used=engine_used, model_used=model_used,
+                    mark_completed=True,
+                )
+        with state.db_lock:
+            repository.log_item_attempt(
+                conn, item_id, run_id, "done",
+                engine_used=engine_used, model_used=model_used, settings_snapshot=settings_snapshot,
             )
-        repository.log_item_attempt(
-            conn, item_id, run_id, "done",
-            engine_used=engine_used, model_used=model_used, settings_snapshot=settings_snapshot,
-        )
 
     except (
         ProviderError,
@@ -863,16 +872,18 @@ async def translate_item(
         # "primary_engine": null on the History page for any run that
         # failed outright (confirmed live: a run that failed on Groq showed
         # no engine at all on /history).
-        repository.update_item_status(
-            conn, item_id, "failed",
-            error_message=str(exc), error_detail=getattr(exc, "raw_detail", None),
-        )
-        repository.log_item_attempt(
-            conn, item_id, run_id, "failed",
-            engine_used=active_provider.name, model_used=active_provider.model,
-            error_message=str(exc), error_detail=getattr(exc, "raw_detail", None),
-            settings_snapshot=settings_snapshot,
-        )
+        with state.db_lock:
+            repository.update_item_status(
+                conn, item_id, "failed",
+                error_message=str(exc), error_detail=getattr(exc, "raw_detail", None),
+            )
+        with state.db_lock:
+            repository.log_item_attempt(
+                conn, item_id, run_id, "failed",
+                engine_used=active_provider.name, model_used=active_provider.model,
+                error_message=str(exc), error_detail=getattr(exc, "raw_detail", None),
+                settings_snapshot=settings_snapshot,
+            )
         if run_id is not None:
             run_events.emit(run_id, item_id, 0, 0, "item_failed", str(exc))
         raise
@@ -884,28 +895,32 @@ async def translate_item(
         # the Queue/History pages and is re-runnable exactly like any
         # other failure, but with a message that makes clear this was a
         # deliberate Stop, not a real translation problem.
-        repository.update_item_status(
-            conn, item_id, "failed", error_message=str(exc),
-        )
-        repository.log_item_attempt(
-            conn, item_id, run_id, "failed",
-            engine_used=active_provider.name, model_used=active_provider.model,
-            error_message=str(exc), settings_snapshot=settings_snapshot,
-        )
+        with state.db_lock:
+            repository.update_item_status(
+                conn, item_id, "failed", error_message=str(exc),
+            )
+        with state.db_lock:
+            repository.log_item_attempt(
+                conn, item_id, run_id, "failed",
+                engine_used=active_provider.name, model_used=active_provider.model,
+                error_message=str(exc), settings_snapshot=settings_snapshot,
+            )
         if run_id is not None:
             run_events.emit(run_id, item_id, 0, 0, "item_failed", str(exc))
         raise
     except Exception as exc:  # noqa: BLE001 - any unexpected failure must not crash the batch
-        repository.update_item_status(
-            conn, item_id, "failed",
-            error_message=str(exc), error_detail=getattr(exc, "raw_detail", None),
-        )
-        repository.log_item_attempt(
-            conn, item_id, run_id, "failed",
-            engine_used=active_provider.name, model_used=active_provider.model,
-            error_message=str(exc), error_detail=getattr(exc, "raw_detail", None),
-            settings_snapshot=settings_snapshot,
-        )
+        with state.db_lock:
+            repository.update_item_status(
+                conn, item_id, "failed",
+                error_message=str(exc), error_detail=getattr(exc, "raw_detail", None),
+            )
+        with state.db_lock:
+            repository.log_item_attempt(
+                conn, item_id, run_id, "failed",
+                engine_used=active_provider.name, model_used=active_provider.model,
+                error_message=str(exc), error_detail=getattr(exc, "raw_detail", None),
+                settings_snapshot=settings_snapshot,
+            )
         if run_id is not None:
             run_events.emit(run_id, item_id, 0, 0, "item_failed", str(exc))
         raise

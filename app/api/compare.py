@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/compare", tags=["compare"])
 
 
 @router.get("/languages")
-async def list_languages():
+def list_languages():
     """{code2: name} for every language Bazarr itself knows about (cached
     at startup via app.providers.languages.refresh_bazarr_names, same
     source translation prompts already use) — powers the compare tool's

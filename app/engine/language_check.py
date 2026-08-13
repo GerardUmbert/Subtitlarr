@@ -18,6 +18,7 @@ import random
 import re
 import sqlite3
 
+from app import state
 from app.bazarr.client import BazarrClient
 from app.db import engine_instances_repo, repository
 from app.engine import upload_queue
@@ -262,16 +263,19 @@ async def run_language_check(
     is auto-marked 'ok' and counted under matched/checked, not skipped
     — there's no real content to ever be wrong-language, and leaving it
     'unchecked' would just re-select it on every future sweep forever."""
-    instance_id = repository.get_config(conn, "language_check_instance_id", default=None)
+    with state.db_lock:
+        instance_id = repository.get_config(conn, "language_check_instance_id", default=None)
     if instance_id is None:
         raise LanguageCheckError(
             "No engine selected for the language check — pick one on the Settings page first."
         )
-    instance = engine_instances_repo.get_instance(conn, instance_id)
+    with state.db_lock:
+        instance = engine_instances_repo.get_instance(conn, instance_id)
     if instance is None:
         raise LanguageCheckError("The engine selected for the language check no longer exists.")
 
-    items = repository.get_items_for_language_check(conn, batch_size)
+    with state.db_lock:
+        items = repository.get_items_for_language_check(conn, batch_size)
     if not items:
         return {"checked": 0, "matched": 0, "mismatched": 0, "skipped": 0}
 
@@ -296,7 +300,8 @@ async def run_language_check(
             # this is permanent (not a transient fetch failure), so
             # leaving it 'unchecked' forever would just re-select it on
             # every future sweep for no reason — mark it 'ok' instead.
-            repository.set_language_check_ok(conn, item["id"])
+            with state.db_lock:
+                repository.set_language_check_ok(conn, item["id"])
             auto_ok += 1
             continue
         entries.append({
@@ -334,7 +339,8 @@ async def run_language_check(
         # demanding an exact string match.
         is_match = expected_name in detected_lang.lower()
         if is_match:
-            repository.set_language_check_ok(conn, item["id"])
+            with state.db_lock:
+                repository.set_language_check_ok(conn, item["id"])
             matched += 1
         else:
             detail = f"detected as {detected_lang}, expected {entry['target_lang_name']}"
@@ -345,12 +351,13 @@ async def run_language_check(
             # this there'd be no durable answer to "which items did we
             # already send to Bazarr with the wrong language" once the
             # item is (hopefully correctly) retranslated.
-            repository.log_language_mismatch(
-                conn, item_id=item["id"], item_title=item["title"], item_type=item["item_type"],
-                bazarr_id=item["bazarr_id"], target_language=item["target_language"],
-                detected_language=detected_lang, was_uploaded=(item["status"] == "done"),
-                series_title=item["series_title"], season_episode=item["season_episode"],
-            )
+            with state.db_lock:
+                repository.log_language_mismatch(
+                    conn, item_id=item["id"], item_title=item["title"], item_type=item["item_type"],
+                    bazarr_id=item["bazarr_id"], target_language=item["target_language"],
+                    detected_language=detected_lang, was_uploaded=(item["status"] == "done"),
+                    series_title=item["series_title"], season_episode=item["season_episode"],
+                )
             # A confirmed mismatch is treated like a real translation
             # failure, not a passive flag — the wrong-language output is
             # discarded (queued file removed, if any) and the item goes
@@ -359,7 +366,8 @@ async def run_language_check(
             # flag before the next push.
             if item["status"] == "translated_pending_upload":
                 (upload_queue.DEFAULT_QUEUE_ROOT / f"{item['id']}.srt").unlink(missing_ok=True)
-            repository.reset_item_for_language_mismatch(conn, item["id"], detail)
+            with state.db_lock:
+                repository.reset_item_for_language_mismatch(conn, item["id"], detail)
             mismatched += 1
             logger.warning(
                 "Language check: item %d (%s) expected %s, detected %s — reset to pending",
