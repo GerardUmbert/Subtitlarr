@@ -6,6 +6,23 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Fixed
+- Docs site: the header wasn't sticky on desktop, and `docs.html`'s
+  sidebar scrolled out of view instead of staying pinned. Root cause:
+  `overflow-x: hidden` on `html`/`body` (added earlier to stop
+  horizontal page overflow) creates a new scrolling context on ANY
+  explicit `overflow-x`/`-y` value other than `visible` — which
+  silently breaks `position: sticky` for every descendant, since sticky
+  only sticks relative to its nearest scrolling ancestor. Removed; the
+  actual overflow sources (flex sizing, wide tables, long headings) are
+  constrained directly instead of papering over the symptom at the
+  root and taking sticky positioning down with it.
+- Mobile nav toggle button rendered in the middle of the header instead
+  of pinned to the right edge — `justify-content: space-between` with
+  4 flex children (brand, toggle, nav, actions) distributes them
+  evenly rather than pinning the last group to the edge. Replaced with
+  `margin-left: auto` on whichever item should start the
+  right-hugging group (the nav on desktop, the toggle on mobile, since
+  the nav drops to its own row there and stops sharing the row).
 - Docs site: `.reveal-scroll` elements (screenshots, cards, most page
   content below the fold) could get stuck permanently invisible instead
   of animating in. `gsap.from(el, {opacity: 0, ...})` set every element
