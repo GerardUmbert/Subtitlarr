@@ -63,8 +63,9 @@
   .docs-content p { color: var(--ink-dim); }
 
   @media (max-width: 880px) {
-    .docs-layout { flex-direction: column; padding: 20px 16px 64px; gap: 8px; }
+    .docs-layout { flex-direction: column; align-items: stretch; padding: 20px 16px 64px; gap: 8px; }
     .docs-sidebar { position: static; width: 100%; max-height: none; }
+    .docs-content { width: 100%; max-width: 100%; }
   }
 
   .callout-warn { border-left-color: var(--warn); background: var(--warn-soft); }
