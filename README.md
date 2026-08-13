@@ -150,11 +150,13 @@ recoverable items sitting as permanent failures.
    a genuine content block with no non-Gemini fallback in reach — or any
    other failure — end up `failed` and stay there; leave them alone for
    now rather than immediately chasing each one down individually.
-3. **Once the queue is drained, run it again.** A second full pass often
-   clears a meaningful chunk of yesterday's failures on its own — a
-   Gemini rate limit expires, a transient error doesn't repeat, quota
-   resets overnight. Re-running costs nothing extra for items that are
-   already `done`.
+3. **Once the queue is drained, re-run just the failures.** On the Queue
+   page, filter to the `Failed` chip and run that filtered batch. A
+   second pass over just the failures often clears a meaningful chunk of
+   them on its own — a Gemini rate limit expires, a transient error
+   doesn't repeat, quota resets overnight. Targeting the Failed filter
+   specifically means only those items are touched, not a full re-run of
+   everything already `done`.
 4. **Only then, move your local engine (Ollama/llama.cpp) above the
    separator** (drag it up in the Translation Engine page) for whatever's
    still `failed`. This is deliberate, not automatic, for a reason: with a

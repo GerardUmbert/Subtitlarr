@@ -21,6 +21,13 @@ PAGE_HEAD = """<!doctype html>
 <title>Changelog — Subtitlarr</title>
 <link rel="icon" href="assets/icon.svg">
 <link rel="stylesheet" href="assets/site.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="assets/tailwind-config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
 </head>
 <body>
 
@@ -29,12 +36,16 @@ PAGE_HEAD = """<!doctype html>
     <span class="brand-mark">S</span>
     Subtitlarr
   </a>
-  <nav class="site-nav">
+  <button type="button" class="nav-toggle" id="nav-toggle" aria-expanded="false" aria-controls="site-nav" aria-label="Toggle navigation">
+    <span></span><span></span><span></span>
+  </button>
+  <nav class="site-nav" id="site-nav">
     <a href="index.html">Home</a>
     <a href="install.html">Install</a>
     <a href="api-keys.html">Engine Setup</a>
     <a href="features.html">Features</a>
     <a href="changelog.html" class="active">Changelog</a>
+    <a href="docs.html">Docs</a>
   </nav>
   <div class="site-actions">
     <a class="btn" href="https://github.com/GerardUmbert/Subtitlarr">GitHub</a>
@@ -42,8 +53,8 @@ PAGE_HEAD = """<!doctype html>
 </header>
 
 <main>
-  <h1>Changelog</h1>
-  <p class="lede">Generated from <a href="https://github.com/GerardUmbert/Subtitlarr/blob/master/CHANGELOG.md">CHANGELOG.md</a> — that file is the source of truth.</p>
+  <h1 class="reveal">Changelog</h1>
+  <p class="lede reveal">Generated from <a href="https://github.com/GerardUmbert/Subtitlarr/blob/master/CHANGELOG.md">CHANGELOG.md</a> — that file is the source of truth.</p>
 """
 
 PAGE_TAIL = """</main>
@@ -52,6 +63,7 @@ PAGE_TAIL = """</main>
   Subtitlarr is open source — <a href="https://github.com/GerardUmbert/Subtitlarr">source on GitHub</a>
 </footer>
 
+<script src="assets/site-motion.js"></script>
 </body>
 </html>
 """
@@ -98,7 +110,7 @@ def parse(md_text: str) -> str:
                 in_section = False
             if in_entry:
                 out.append("</div>")
-            out.append('<div class="changelog-entry">')
+            out.append('<div class="changelog-entry reveal-scroll">')
             out.append(f'<div class="changelog-version">{html.escape(version_match.group(1))}</div>')
             in_entry = True
             continue

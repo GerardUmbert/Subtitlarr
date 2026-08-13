@@ -6,6 +6,13 @@
 <title>Engine Setup — Subtitlarr</title>
 <link rel="icon" href="assets/icon.svg">
 <link rel="stylesheet" href="assets/site.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="assets/tailwind-config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
 </head>
 <body>
 
@@ -14,7 +21,10 @@
     <span class="brand-mark">S</span>
     Subtitlarr
   </a>
-  <nav class="site-nav">
+  <button type="button" class="nav-toggle" id="nav-toggle" aria-expanded="false" aria-controls="site-nav" aria-label="Toggle navigation">
+    <span></span><span></span><span></span>
+  </button>
+  <nav class="site-nav" id="site-nav">
     <a href="index.html">Home</a>
     <a href="install.html">Install</a>
     <a href="api-keys.html" class="active">Engine Setup</a>
@@ -28,10 +38,10 @@
 </header>
 
 <main>
-  <h1>Engine Setup</h1>
-  <p class="lede">Getting free-tier API keys for the cloud engines, and the token budgets confirmed to work well for each — so a fresh install doesn't have to rediscover them by trial and error. All of this is configured from the <strong>Translation Engine</strong> page.</p>
+  <h1 class="reveal">Engine Setup</h1>
+  <p class="lede reveal">Getting free-tier API keys for the cloud engines, and the token budgets confirmed to work well for each — so a fresh install doesn't have to rediscover them by trial and error. All of this is configured from the <strong>Translation Engine</strong> page.</p>
 
-  <div class="toc">
+  <div class="toc reveal">
     <a href="#gemini">Google Gemini</a>
     <a href="#nvidia">NVIDIA NIM</a>
     <a href="#ollama">Local Ollama</a>
@@ -39,7 +49,7 @@
     <a href="#workflow">Recommended workflow</a>
   </div>
 
-  <h2 id="gemini">Google Gemini</h2>
+  <h2 id="gemini" class="reveal-scroll">Google Gemini</h2>
   <div class="step">
     <div class="step-num">1</div>
     <div class="step-body"><p>Go to <a href="https://aistudio.google.com">aistudio.google.com</a> and sign in with a Google account.</p></div>
@@ -80,7 +90,7 @@
   <p>This is legitimate use of separate free tiers — each account's quota is used independently and entirely for that account's own usage.</p>
   <p>If you'd rather keep quality consistent across the whole cascade, skip both 3.1 instances and just use <strong>"Gemini Main"</strong> + <strong>"Gemini Secondary"</strong> (both <code>gemini-3.5-flash-lite</code>) for 1000/day — half the ceiling, but every item gets the better model.</p>
 
-  <h2 id="nvidia">NVIDIA NIM</h2>
+  <h2 id="nvidia" class="reveal-scroll">NVIDIA NIM</h2>
   <div class="step">
     <div class="step-num">1</div>
     <div class="step-body"><p>Go to <a href="https://build.nvidia.com">build.nvidia.com</a> and sign in / create an account.</p></div>
@@ -98,7 +108,7 @@
     <div class="step-body"><p>Batch token budget: <code>700</code>. Free tier is capped at roughly 40 requests/minute — no daily cap confirmed, unlike Gemini.</p></div>
   </div>
 
-  <h2 id="ollama">Local Ollama</h2>
+  <h2 id="ollama" class="reveal-scroll">Local Ollama</h2>
   <p>No API key needed — this is your own local (or LAN) inference server.</p>
   <div class="step">
     <div class="step-num">1</div>
@@ -113,25 +123,27 @@
     <div class="step-body"><p>Batch token budget: <code>400</code>. Small local models lose reliable output formatting well before they run out of raw context window — <code>400</code> is a safe starting point for modest/low-end GPUs, including with <code>translategemma:12b</code>. A more capable local GPU/model may support a higher budget.</p></div>
   </div>
 
-  <h2 id="cascade">Recommended cascade shape</h2>
+  <h2 id="cascade" class="reveal-scroll">Recommended cascade shape</h2>
   <p>Put your free-tier Gemini instance(s) at the top of the cascade, then a <strong>separator</strong>, then your local engine(s) below it. This stops a run from silently falling back to slow local inference for hours just because Gemini hit a temporary rate limit, while still leaving local engines available for a deliberate manual run.</p>
 
   <p>This is what the <strong>Translation Engine</strong> page should look like, top to bottom, once everything above is set up (max-throughput version, 2000/day):</p>
-  <table>
-    <thead><tr><th>Order</th><th>Instance name</th><th>Provider · Model</th><th>Batch budget</th></tr></thead>
-    <tbody>
-      <tr><td>1</td><td>Gemini Main</td><td>Gemini · <code>gemini-3.5-flash-lite</code></td><td><code>4000</code></td></tr>
-      <tr><td>2</td><td>Gemini Secondary</td><td>Gemini · <code>gemini-3.5-flash-lite</code></td><td><code>4000</code></td></tr>
-      <tr><td>3</td><td>Gemini Main gemini-3.1-flash-lite <em>(optional — see quality note above)</em></td><td>Gemini · <code>gemini-3.1-flash-lite</code></td><td><code>4000</code></td></tr>
-      <tr><td>4</td><td>Gemini Secondary gemini-3.1-flash-lite <em>(optional)</em></td><td>Gemini · <code>gemini-3.1-flash-lite</code></td><td><code>4000</code></td></tr>
-      <tr><td>—</td><td colspan="3"><em>— cascade stops here — anything below is never tried as a fallback —</em></td></tr>
-      <tr><td>5</td><td>Ollama</td><td>Ollama · <code>translategemma:12b</code></td><td><code>400</code></td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll reveal-scroll">
+    <table>
+      <thead><tr><th>Order</th><th>Instance name</th><th>Provider · Model</th><th>Batch budget</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Gemini Main</td><td>Gemini · <code>gemini-3.5-flash-lite</code></td><td><code>4000</code></td></tr>
+        <tr><td>2</td><td>Gemini Secondary</td><td>Gemini · <code>gemini-3.5-flash-lite</code></td><td><code>4000</code></td></tr>
+        <tr><td>3</td><td>Gemini Main gemini-3.1-flash-lite <em>(optional — see quality note above)</em></td><td>Gemini · <code>gemini-3.1-flash-lite</code></td><td><code>4000</code></td></tr>
+        <tr><td>4</td><td>Gemini Secondary gemini-3.1-flash-lite <em>(optional)</em></td><td>Gemini · <code>gemini-3.1-flash-lite</code></td><td><code>4000</code></td></tr>
+        <tr><td>—</td><td colspan="3"><em>— cascade stops here — anything below is never tried as a fallback —</em></td></tr>
+        <tr><td>5</td><td>Ollama</td><td>Ollama · <code>translategemma:12b</code></td><td><code>400</code></td></tr>
+      </tbody>
+    </table>
+  </div>
   <p>Drop rows 3 and 4 for the quality-first version instead (1000/day, every item on <code>gemini-3.5-flash-lite</code>).</p>
   <p>Optionally add an NVIDIA instance (<code>deepseek-ai/deepseek-v4-flash</code>, budget <code>700</code>) either above the separator as a 5th cloud fallback, or below it alongside Ollama, depending on whether you want it tried automatically or reserved for manual runs.</p>
 
-  <h2 id="workflow">Recommended workflow</h2>
+  <h2 id="workflow" class="reveal-scroll">Recommended workflow</h2>
   <p>Getting a library fully translated efficiently is a multi-pass process:</p>
   <div class="step">
     <div class="step-num">1</div>
@@ -148,7 +160,7 @@
   </div>
   <div class="step">
     <div class="step-num">3</div>
-    <div class="step-body"><p>Run it again once the queue is drained. A second pass often clears a meaningful chunk of failures on its own (rate limits expiring, quota resets) — re-running costs nothing extra for items already <code>done</code>.</p></div>
+    <div class="step-body"><p>Once the queue is drained, re-run just the failures. Filter the Queue page to the <strong>Failed</strong> chip and run that filtered batch. A second pass over just the failures often clears a meaningful chunk of them on its own (rate limits expiring, quota resets).</p></div>
   </div>
   <div class="step">
     <div class="step-num">4</div>
@@ -164,5 +176,6 @@
   Subtitlarr is open source — <a href="https://github.com/GerardUmbert/Subtitlarr">source on GitHub</a>
 </footer>
 
+<script src="assets/site-motion.js"></script>
 </body>
 </html>

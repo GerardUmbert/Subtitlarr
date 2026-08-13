@@ -49,6 +49,18 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   `QUEUE_UPLOADS_ENABLED`, and a troubleshooting section. Linked as
   "Docs", the last item, in every page's nav.
 
+### Changed
+- Docs site: fixed a real mobile-layout bug (nav overflowing/wrapping
+  badly on narrow viewports, caused by `.site-nav`'s flex item not
+  being allowed to shrink below its unwrapped content width) with a
+  proper collapsing hamburger menu below 720px. Also added Tailwind
+  CDN + GSAP scroll-reveal entrance animations across all six pages,
+  IBM Plex Mono now actually loads (previously referenced in CSS but
+  never linked, silently falling back to system monospace), and wide
+  tables get their own horizontal scroller instead of the page
+  scrolling sideways. `docs/assets/build_changelog.py`'s template
+  updated to match, so future regenerations keep the current nav/head.
+
 ## [0.11.2]
 
 ### Fixed

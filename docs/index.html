@@ -7,6 +7,13 @@
 <meta name="description" content="Fills gaps in your Bazarr subtitle library by translating subtitles you already have into languages you're missing, using a local or cloud LLM cascade.">
 <link rel="icon" href="assets/icon.svg">
 <link rel="stylesheet" href="assets/site.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="assets/tailwind-config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
 </head>
 <body>
 
@@ -15,7 +22,10 @@
     <span class="brand-mark">S</span>
     Subtitlarr
   </a>
-  <nav class="site-nav">
+  <button type="button" class="nav-toggle" id="nav-toggle" aria-expanded="false" aria-controls="site-nav" aria-label="Toggle navigation">
+    <span></span><span></span><span></span>
+  </button>
+  <nav class="site-nav" id="site-nav">
     <a href="index.html" class="active">Home</a>
     <a href="install.html">Install</a>
     <a href="api-keys.html">Engine Setup</a>
@@ -30,14 +40,14 @@
 
 <main>
   <div class="hero">
-    <span class="brand-mark" style="width:56px; height:56px; border-radius:14px; font-size:26px; margin-bottom:18px;">S</span>
-    <h1>Fill the gaps in your Bazarr subtitle library</h1>
-    <p class="lede">Subtitlarr translates subtitles you already have — English, say — into the languages you're missing, using a local or cloud LLM. Bazarr stays the only thing that ever touches your media files.</p>
-    <div class="hero-actions">
+    <span class="brand-mark reveal" style="width:56px; height:56px; border-radius:14px; font-size:26px; margin-bottom:18px;">S</span>
+    <h1 class="reveal">Fill the gaps in your Bazarr subtitle library</h1>
+    <p class="lede reveal">Subtitlarr translates subtitles you already have — English, say — into the languages you're missing, using a local or cloud LLM. Bazarr stays the only thing that ever touches your media files.</p>
+    <div class="hero-actions reveal">
       <a class="btn btn-primary" href="install.html">Get started</a>
       <a class="btn" href="https://github.com/GerardUmbert/Subtitlarr">View on GitHub</a>
     </div>
-    <div class="badge-row">
+    <div class="badge-row reveal">
       <span class="badge">Docker</span>
       <span class="badge">Unraid</span>
       <span class="badge">Ollama</span>
@@ -48,33 +58,33 @@
     </div>
   </div>
 
-  <div class="screenshot-frame">
+  <div class="screenshot-frame reveal-scroll">
     <img src="assets/screenshots/dashboard.png" alt="Subtitlarr dashboard showing a translation run in progress">
   </div>
 
-  <h2>How it works</h2>
-  <div class="step">
+  <h2 class="reveal-scroll">How it works</h2>
+  <div class="step reveal-scroll">
     <div class="step-num">1</div>
     <div class="step-body">
       <h3>Polls Bazarr's wanted list</h3>
       <p>On a schedule you control, Subtitlarr checks Bazarr for subtitles it's still missing.</p>
     </div>
   </div>
-  <div class="step">
+  <div class="step reveal-scroll">
     <div class="step-num">2</div>
     <div class="step-body">
       <h3>Finds an existing source language</h3>
       <p>If the item already has a subtitle in one of your preferred languages (e.g. English), that becomes the translation source — read entirely through Bazarr's own API.</p>
     </div>
   </div>
-  <div class="step">
+  <div class="step reveal-scroll">
     <div class="step-num">3</div>
     <div class="step-body">
       <h3>Translates with your engine cascade</h3>
       <p>Walks an ordered list of engines you configure — local (Ollama, llama.cpp) or cloud (Gemini, NVIDIA, OpenRouter, Groq) — falling back automatically on rate limits or failures.</p>
     </div>
   </div>
-  <div class="step">
+  <div class="step reveal-scroll">
     <div class="step-num">4</div>
     <div class="step-body">
       <h3>Reattaches original timing and uploads</h3>
@@ -82,53 +92,55 @@
     </div>
   </div>
 
-  <h2>Why it's built this way</h2>
+  <h2 class="reveal-scroll">Why it's built this way</h2>
   <div class="feature-grid">
-    <div class="feature-card">
+    <div class="feature-card reveal-scroll">
       <h3>No media access</h3>
       <p>Subtitlarr never mounts your media library. All reading and writing goes through Bazarr's own REST API — Bazarr stays the only thing with filesystem access.</p>
     </div>
-    <div class="feature-card">
+    <div class="feature-card reveal-scroll">
       <h3>Multi-engine cascade</h3>
       <p>Mix any number of local and cloud engines in one ordered fallback list, with automatic rate-limit cooldowns and per-item model tracking.</p>
     </div>
-    <div class="feature-card">
+    <div class="feature-card reveal-scroll">
       <h3>Regional language variants</h3>
       <p>Spanish, Portuguese, English, French, and Chinese each get explicit regional-standard control — no more guessing which dialect a bare language code means.</p>
     </div>
-    <div class="feature-card">
+    <div class="feature-card reveal-scroll">
       <h3>Runs anywhere Docker does</h3>
       <p>Ships as a container with a published GHCR image, a Docker Compose example, and a ready-to-use Unraid Community Applications template.</p>
     </div>
   </div>
 
-  <h2>How this compares to Lingarr</h2>
-  <p class="lede" style="max-width:100%;">Lingarr is another subtitle-translation tool worth knowing about — the two take different approaches, and which fits depends on your setup.</p>
-  <table>
-    <thead>
-      <tr><th></th><th>Subtitlarr</th><th>Lingarr</th></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>Media/filesystem access</td>
-        <td>None — reads and writes subtitles entirely through Bazarr's own API</td>
-        <td>Requires mounting your media library directly (e.g. <code>/movies</code>, <code>/tv</code>) and writes subtitle files to disk itself</td>
-      </tr>
-      <tr>
-        <td>When it triggers</td>
-        <td>After Bazarr's own subtitle search has had a chance to find a real, existing translation — age-gated by default, so Bazarr's providers get first shot</td>
-        <td>Fires as soon as Radarr/Sonarr detects new media, ahead of Bazarr ever getting a chance to find a legitimate subtitle</td>
-      </tr>
-      <tr>
-        <td>Setup surface</td>
-        <td>One container, one connection (Bazarr's URL + API key) — everything else (engines, languages, schedule) is configured from its own web UI afterward</td>
-        <td>Connects separately to Radarr, Sonarr, and needs media volumes mapped correctly for every library</td>
-      </tr>
-    </tbody>
-  </table>
+  <h2 class="reveal-scroll">How this compares to Lingarr</h2>
+  <p class="lede reveal-scroll" style="max-width:100%;">Lingarr is another subtitle-translation tool worth knowing about — the two take different approaches, and which fits depends on your setup.</p>
+  <div class="table-scroll reveal-scroll">
+    <table>
+      <thead>
+        <tr><th></th><th>Subtitlarr</th><th>Lingarr</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Media/filesystem access</td>
+          <td>None — reads and writes subtitles entirely through Bazarr's own API</td>
+          <td>Requires mounting your media library directly (e.g. <code>/movies</code>, <code>/tv</code>) and writes subtitle files to disk itself</td>
+        </tr>
+        <tr>
+          <td>When it triggers</td>
+          <td>After Bazarr's own subtitle search has had a chance to find a real, existing translation — age-gated by default, so Bazarr's providers get first shot</td>
+          <td>Fires as soon as Radarr/Sonarr detects new media, ahead of Bazarr ever getting a chance to find a legitimate subtitle</td>
+        </tr>
+        <tr>
+          <td>Setup surface</td>
+          <td>One container, one connection (Bazarr's URL + API key) — everything else (engines, languages, schedule) is configured from its own web UI afterward</td>
+          <td>Connects separately to Radarr, Sonarr, and needs media volumes mapped correctly for every library</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
   <p style="font-size:12.5px; color:var(--ink-faint);">Comparison based on Lingarr's own public documentation as of this writing — worth double-checking their current docs if something here looks out of date.</p>
 
-  <div class="callout">
+  <div class="callout reveal-scroll">
     Ready to try it? Head to <a href="install.html">Install</a> for Docker/Unraid setup, then <a href="api-keys.html">Engine Setup</a> for getting free-tier API keys and the recommended engine cascade.
   </div>
 </main>
@@ -137,5 +149,6 @@
   Subtitlarr is open source — <a href="https://github.com/GerardUmbert/Subtitlarr">source on GitHub</a>
 </footer>
 
+<script src="assets/site-motion.js"></script>
 </body>
 </html>

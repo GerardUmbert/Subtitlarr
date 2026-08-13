@@ -6,6 +6,13 @@
 <title>Features — Subtitlarr</title>
 <link rel="icon" href="assets/icon.svg">
 <link rel="stylesheet" href="assets/site.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="assets/tailwind-config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
 </head>
 <body>
 
@@ -14,7 +21,10 @@
     <span class="brand-mark">S</span>
     Subtitlarr
   </a>
-  <nav class="site-nav">
+  <button type="button" class="nav-toggle" id="nav-toggle" aria-expanded="false" aria-controls="site-nav" aria-label="Toggle navigation">
+    <span></span><span></span><span></span>
+  </button>
+  <nav class="site-nav" id="site-nav">
     <a href="index.html">Home</a>
     <a href="install.html">Install</a>
     <a href="api-keys.html">Engine Setup</a>
@@ -28,69 +38,69 @@
 </header>
 
 <main class="wide">
-  <h1>Features</h1>
-  <p class="lede">A tour of the actual UI — what each page does and why it's built that way.</p>
+  <h1 class="reveal">Features</h1>
+  <p class="lede reveal">A tour of the actual UI — what each page does and why it's built that way.</p>
 
-  <h2>Dashboard</h2>
+  <h2 class="reveal-scroll">Dashboard</h2>
   <p>At-a-glance view of the current run (if any), recent activity, and quick stats. The place to check "is anything happening right now."</p>
-  <div class="screenshot-frame">
+  <div class="screenshot-frame reveal-scroll">
     <img src="assets/screenshots/dashboard.png" alt="Subtitlarr dashboard showing a translation run in progress">
   </div>
 
-  <h2>Queue</h2>
+  <h2 class="reveal-scroll">Queue</h2>
   <p>Every item Subtitlarr has tracked and what happened to it — filterable by status, type, and search. Any row, including already-done ones, can be re-run individually. On the Done/Pending-upload tabs, the Error column becomes a Model column instead, since those items have no error — letting you find and bulk re-run everything a specific (e.g. weaker fallback) model translated.</p>
-  <div class="screenshot-frame">
+  <div class="screenshot-frame reveal-scroll">
     <img src="assets/screenshots/queue.png" alt="Subtitlarr Queue page showing filterable status/type chips and per-item run status">
   </div>
 
-  <h2>Translation Engine</h2>
+  <h2 class="reveal-scroll">Translation Engine</h2>
   <p>Build an ordered cascade of any mix of engines — Ollama, llama.cpp, Gemini, NVIDIA NIM, OpenRouter, Groq. Drag to reorder, insert a separator to fence off a group from automatic fallback, and each instance gets its own independent rate-limit cooldown.</p>
-  <div class="screenshot-frame">
+  <div class="screenshot-frame reveal-scroll">
     <img src="assets/screenshots/engines.png" alt="Subtitlarr Translation Engines page showing an ordered cascade with separators">
   </div>
 
-  <h2>Language Rules</h2>
+  <h2 class="reveal-scroll">Language Rules</h2>
   <p>Source-language priority for picking which existing subtitle to translate from when an item has several, plus per-language regional-variant control — Spanish (Spain/Mexican/Argentine/Latin American), Portuguese (Portugal/Brazil), English (American/British), French (France/Québécois/Belgian/Swiss), and Chinese (Simplified/Traditional).</p>
-  <div class="screenshot-frame">
+  <div class="screenshot-frame reveal-scroll">
     <img src="assets/screenshots/language-rules.png" alt="Subtitlarr Language Rules page showing regional variant dropdowns for Spanish, Portuguese, English, French, and Chinese">
   </div>
 
-  <h2>History</h2>
+  <h2 class="reveal-scroll">History</h2>
   <p>Every past run with a full per-item breakdown, plus a live structured event log (rate limits, fallbacks, content blocks) and aggregate stats across all runs.</p>
-  <div class="screenshot-frame">
+  <div class="screenshot-frame reveal-scroll">
     <img src="assets/screenshots/history.png" alt="Subtitlarr History page showing past runs with per-run stats">
   </div>
 
-  <h2>Jobs</h2>
+  <h2 class="reveal-scroll">Jobs</h2>
   <p>Manually trigger the scheduled translation job, sync jobs, or reset local queue/run data if it's gotten out of sync with Bazarr — without waiting for the next cron fire.</p>
-  <div class="screenshot-frame">
+  <div class="screenshot-frame reveal-scroll">
     <img src="assets/screenshots/jobs.png" alt="Subtitlarr Jobs page with manual triggers for scheduled and sync jobs">
   </div>
 
-  <h2>Compare Engines</h2>
+  <h2 class="reveal-scroll">Compare Engines</h2>
   <p>Linked from the top of the Translation Engine page. Run the same source subtitle through two engine instances side by side — or one instance against an uploaded reference translation — to judge speed, reliability, and actual output quality before committing an instance to your real cascade. Source can be searched from Bazarr's whole library or uploaded directly. Nothing here touches your real queue or Bazarr; output is sandboxed and cleared on restart.</p>
-  <div class="screenshot-frame">
+  <div class="screenshot-frame reveal-scroll">
     <img src="assets/screenshots/compare.png" alt="Subtitlarr Compare Engines page showing source selection and two engine instances configured side by side">
   </div>
-  <div class="screenshot-frame">
+  <div class="screenshot-frame reveal-scroll">
     <img src="assets/screenshots/compare-diff.png" alt="Subtitlarr Compare Engines side-by-side diff view highlighting differing cues between two engines' output">
   </div>
 
-  <h2>At a glance</h2>
+  <h2 class="reveal-scroll">At a glance</h2>
   <div class="feature-grid">
-    <div class="feature-card">
+    <div class="feature-card reveal-scroll">
       <h3>Automatic rate-limit cooldown</h3>
       <p>3 consecutive failures against an engine instance trip a 24h cooldown, skipped without a live round-trip — clearable early via a Test Connection or the Jobs page's manual "clear all rate limits."</p>
     </div>
-    <div class="feature-card">
+    <div class="feature-card reveal-scroll">
       <h3>Per-item model tracking</h3>
       <p>Every translated item records the exact model that produced it, separate from the instance's display name — filterable and bulk-re-runnable from the Queue page.</p>
     </div>
-    <div class="feature-card">
+    <div class="feature-card reveal-scroll">
       <h3>Stop a running batch</h3>
       <p>An in-app way to cancel a run cleanly after the in-flight item finishes, without killing the whole server process.</p>
     </div>
-    <div class="feature-card">
+    <div class="feature-card reveal-scroll">
       <h3>Queue uploads for a batch push</h3>
       <p>Hold translated subtitles locally and push them all to Bazarr in one burst later — useful if uploading wakes a sleeping NAS.</p>
     </div>
@@ -101,5 +111,6 @@
   Subtitlarr is open source — <a href="https://github.com/GerardUmbert/Subtitlarr">source on GitHub</a>
 </footer>
 
+<script src="assets/site-motion.js"></script>
 </body>
 </html>

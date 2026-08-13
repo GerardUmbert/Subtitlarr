@@ -152,9 +152,10 @@ Getting a library fully translated efficiently is a multi-pass process:
 2. **Run the cascade with local engines fenced off behind a separator**
    and let it translate everything it can. Leave failures as `failed` for
    now rather than chasing each one down individually.
-3. **Run it again once the queue is drained.** A second pass often clears
-   a meaningful chunk of failures on its own (rate limits expiring, quota
-   resets) — re-running costs nothing extra for items already `done`.
+3. **Once the queue is drained, re-run just the failures.** Filter the
+   Queue page to the `Failed` chip and run that filtered batch. A second
+   pass over just the failures often clears a meaningful chunk of them on
+   its own (rate limits expiring, quota resets).
 4. **Only then, drag your local engine above the separator** for whatever
    remains `failed`. With a non-Gemini engine actually in reach, a
    content-blocked batch gets *bisected* instead of failing outright —

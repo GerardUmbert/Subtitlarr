@@ -6,6 +6,13 @@
 <title>Changelog — Subtitlarr</title>
 <link rel="icon" href="assets/icon.svg">
 <link rel="stylesheet" href="assets/site.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="assets/tailwind-config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
 </head>
 <body>
 
@@ -14,7 +21,10 @@
     <span class="brand-mark">S</span>
     Subtitlarr
   </a>
-  <nav class="site-nav">
+  <button type="button" class="nav-toggle" id="nav-toggle" aria-expanded="false" aria-controls="site-nav" aria-label="Toggle navigation">
+    <span></span><span></span><span></span>
+  </button>
+  <nav class="site-nav" id="site-nav">
     <a href="index.html">Home</a>
     <a href="install.html">Install</a>
     <a href="api-keys.html">Engine Setup</a>
@@ -28,9 +38,9 @@
 </header>
 
 <main>
-  <h1>Changelog</h1>
-  <p class="lede">Generated from <a href="https://github.com/GerardUmbert/Subtitlarr/blob/master/CHANGELOG.md">CHANGELOG.md</a> — that file is the source of truth.</p>
-<div class="changelog-entry">
+  <h1 class="reveal">Changelog</h1>
+  <p class="lede reveal">Generated from <a href="https://github.com/GerardUmbert/Subtitlarr/blob/master/CHANGELOG.md">CHANGELOG.md</a> — that file is the source of truth.</p>
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">Unreleased</div>
 <div class="changelog-section-title">Changed</div>
 <ul>
@@ -49,22 +59,30 @@
 <ul>
 <li><code>docs/index.html</code>&#x27;s Lingarr comparison table: dropped the &quot;Multiple library roots&quot; row — it speculated about a Lingarr limitation based on documentation silence, but Lingarr may just write subtitle files next to whatever media file it&#x27;s given regardless of root, making the concern unverified and not fair to claim.</li>
 </ul>
+<div class="changelog-section-title">Added</div>
+<ul>
+<li>New <code>docs/docs.html</code> page: a single-page deep reference with a sticky sidebar that tracks scroll position (same pattern as the Garage Opener project&#x27;s docs page, adapted to Subtitlarr&#x27;s own site design instead of copying its visual theme) — the full env var table, the recommended multi-pass workflow, how the engine cascade and content-block bisection actually work, an explanation of <code>QUEUE_UPLOADS_ENABLED</code>, and a troubleshooting section. Linked as &quot;Docs&quot;, the last item, in every page&#x27;s nav.</li>
+</ul>
+<div class="changelog-section-title">Changed</div>
+<ul>
+<li>Docs site: fixed a real mobile-layout bug (nav overflowing/wrapping badly on narrow viewports, caused by <code>.site-nav</code>&#x27;s flex item not being allowed to shrink below its unwrapped content width) with a proper collapsing hamburger menu below 720px. Also added Tailwind CDN + GSAP scroll-reveal entrance animations across all six pages, IBM Plex Mono now actually loads (previously referenced in CSS but never linked, silently falling back to system monospace), and wide tables get their own horizontal scroller instead of the page scrolling sideways. <code>docs/assets/build_changelog.py</code>&#x27;s template updated to match, so future regenerations keep the current nav/head.</li>
+</ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.11.2</div>
 <div class="changelog-section-title">Fixed</div>
 <ul>
 <li>The UI could still lock up on 0.11.1 during a *sustained* streak of identical run-event toasts — not just an occasional burst. Confirmed live: a cascade with no active non-Gemini fallback (e.g. Ollama present but fenced off past a separator, or otherwise unavailable) makes every content-blocked item in a run fail immediately with no bisection/retry, one after another, ~1-2s apart, for as long as the streak lasts — each failure still spawned a brand-new toast element even with 0.11.1&#x27;s cleanup fix, so a long streak (dozens of episodes) meant continuous DOM work for the whole run. Toasts now collapse: an identical message repeating within 4s updates the existing toast&#x27;s count (&quot;×12&quot;) instead of creating a new one, and a distinct new message arriving faster than every 500ms is dropped rather than queued (the same status is always visible live on the Queue/ Dashboard/History pages regardless).</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.11.1</div>
 <div class="changelog-section-title">Fixed</div>
 <ul>
 <li>The UI could still freeze solid (tab fully unresponsive) even after 0.11.0&#x27;s server-side fix, on a long-running session with several bursts of run events (batch retries/fallbacks/content-block recoveries) — confirmed live via NAS server logs showing every request answered in milliseconds throughout, ruling out the server, while the browser tab itself was locked. Root cause: a toast evicted from view before its own fade-in animation frame had run never received the CSS class its removal depended on, so the <code>transitionend</code> event it was waiting for to actually delete the DOM node never fired — the toast was invisible but never cleaned up. Frequent event bursts (common with Gemini content-block bisection and cascade fallbacks) accumulated enough orphaned nodes and listeners over time to eventually lock up the tab. Toasts are now removed on a fixed timer instead of waiting on a transition event that isn&#x27;t guaranteed to fire.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.11.0</div>
 <div class="changelog-section-title">Changed</div>
 <ul>
@@ -78,14 +96,14 @@
 <li>The UI (Queue, Dashboard, History, Jobs — any page left open) would freeze/hang and requests would time out, worsening the longer the app ran. Root cause: every DB-backed API route was declared <code>async def</code>, so FastAPI ran it directly on the single-threaded event loop instead of a worker thread — each blocking SQLite call stalled the entire server for its duration, including every other open tab&#x27;s poll request. With 5-6 pages independently polling every 2-5 seconds, this was enough to make the app feel unresponsive within minutes. Fixed by allowing the shared SQLite connection to be used across threads (guarded by a single lock held only around each individual query, never across an <code>await</code>) and converting the actual polling routes (queue/dashboard/history list &amp; stats endpoints, and a handful of other pure-DB routes) to synchronous handlers, which FastAPI runs in a worker thread instead of the event loop.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.10.5</div>
 <div class="changelog-section-title">Fixed</div>
 <ul>
 <li><code>push_uploads_cron</code> was never installed on app startup — only the Settings page&#x27;s save handler registered it, in-memory only, so any restart after saving silently dropped the job and queued uploads stopped being pushed on schedule.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.10.4</div>
 <div class="changelog-section-title">Added</div>
 <ul>
@@ -102,14 +120,14 @@
 <li>The History page&#x27;s Events tab (and its live-toast polling, which fires every 2 seconds on any open page) read the ENTIRE server log file on every request — confirmed live: with the log grown to several megabytes, this made the tab intermittently hang. Both now only scan a bounded recent window of the file instead of the whole thing, regardless of how large the log grows.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.10.3</div>
 <div class="changelog-section-title">Fixed</div>
 <ul>
 <li>A rate limit (429) hitting the SAME Gemini instance mid-bisection (see 0.10.2&#x27;s content-block handling) propagated uncaught and failed the whole item outright, discarding everything bisection had already recovered — confirmed live: a real item hit this after several rapid-fire bisection retries against one instance tripped its rate limit partway through. The bisection retry loop now treats a rate limit the same way it treats a content block: falls back through the same budget/floor logic instead of letting the item fail.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.10.2</div>
 <div class="changelog-section-title">Added</div>
 <ul>
@@ -120,21 +138,21 @@
 <li>Run-event toast notifications (batch retry/fallback/failure messages) had no width cap or line-wrapping, so a long message rendered as one unbroken full-width line, and a burst of events (e.g. many batches failing in quick succession) stacked an unbounded number of these across the screen. Toasts now wrap within a fixed max width and are capped at 4 visible at once, with the oldest dismissed first.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.10.1</div>
 <div class="changelog-section-title">Fixed</div>
 <ul>
 <li>The Engines page&#x27;s drag handle still didn&#x27;t work on phones even after 0.10.0&#x27;s Pointer Events rewrite — its actual touch target was only about 17px (a 15px glyph plus 2px padding), well under the ~44px minimum a fingertip can reliably hit, so most real-phone taps missed the handle and landed on the card&#x27;s own expand-on-click area instead, never reaching the drag logic at all. Enlarged the handle&#x27;s hit area with padding (offset by a matching negative margin so its visual position and the card&#x27;s layout are unchanged).</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.10.0</div>
 <div class="changelog-section-title">Changed</div>
 <ul>
 <li>Rewrote the Engines page&#x27;s cascade-reorder drag from native HTML5 drag-and-drop to Pointer Events — the old approach is mouse-only with no touch equivalent at all, confirmed live as the reason dragging didn&#x27;t work in the mobile PWA. The dragged card now tracks the pointer/finger directly and other cards animate out of the way live as it crosses their slot, instead of only reordering on drop.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.9.13</div>
 <div class="changelog-section-title">Fixed</div>
 <ul>
@@ -142,14 +160,14 @@
 <li>A completed item whose translated file had no real dialogue to sample (only the AI-disclaimer cue, itself excluded from sampling) — e.g. &quot;Paperman&quot;, a 1-cue file — stayed &#x27;unchecked&#x27; forever and got re-selected on every future language-check sweep with nothing to show for it. Such items are now auto-marked &#x27;ok&#x27; instead, since there&#x27;s no content left that could ever be wrong-language.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.9.12</div>
 <div class="changelog-section-title">Changed</div>
 <ul>
 <li>Un-hid the &quot;Pull model&quot; button on the Engines page (hidden in 0.9.11) — it already had a &quot;type a custom model name instead&quot; toggle next to the dropdown for pulling a model not yet installed; it just wasn&#x27;t obvious enough at a glance.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.9.11</div>
 <div class="changelog-section-title">Fixed</div>
 <ul>
@@ -161,21 +179,21 @@
 <li>Hid the &quot;Pull model&quot; button on the Engines page for now — the model-name field&#x27;s &quot;type a custom model name instead&quot; toggle wasn&#x27;t discoverable. Pull a model directly on the Ollama host in the meantime.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.9.10</div>
 <div class="changelog-section-title">Fixed</div>
 <ul>
 <li>Language-check and stale-audit resets could get silently deleted by the very next Bazarr poll — confirmed live: three flagged items vanished entirely, gone from the Queue AND from a fresh Bazarr pull. Both resets set an item back to pending so the next run retries it, but the routine &quot;purge unsynced items&quot; cleanup treats any pending item as safe to wipe, and Bazarr never re-reports a reset item as missing (the flagged-wrong or pre-existing file is still sitting in that slot). Reset items are now exempted from that purge until they actually complete again.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.9.9</div>
 <div class="changelog-section-title">Fixed</div>
 <ul>
 <li>The 0.9.8 same-language guard checked existence only, not content, so it broke every language-check mismatch reset outright — a reset item went back to pending to get retranslated, but Bazarr still had the just-flagged-WRONG file in that slot, and the guard saw that file, concluded &quot;already there,&quot; and silently marked the item done again without ever fixing it. Confirmed live: flagged items vanished from the Queue instead of reappearing as pending. Now checks the existing file&#x27;s content for the Subtitlarr disclaimer before skipping — only a genuinely untouched file skips translation.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.9.8</div>
 <div class="changelog-section-title">Added</div>
 <ul>
@@ -187,7 +205,7 @@
 <li>Fixed CI failing on every push since the last release — the test suite&#x27;s fake translation-provider stand-ins were missing the <code>ask()</code> method added alongside the Compare Engines tool, so every test that instantiated one failed outright.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.9.7</div>
 <div class="changelog-section-title">Added</div>
 <ul>
@@ -200,7 +218,7 @@
 <li>The sidebar&#x27;s version label was hardcoded and had gone stale across several releases (still read v0.9.2) — corrected, and will be kept in sync with every future release going forward.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.9.6</div>
 <div class="changelog-section-title">Added</div>
 <ul>
@@ -213,7 +231,7 @@
 <li>A weak local model was found to occasionally echo the literal <code>&lt;translated text&gt;</code> placeholder from the system prompt&#x27;s own format description back as part of its output, prefixing otherwise-correct translated lines with that literal string instead of substituting real content — the same class of bug as the earlier <code>&lt;index&gt;</code> tag leak, now stripped the same way during reassembly.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.9.5</div>
 <div class="changelog-section-title">Added</div>
 <ul>
@@ -225,7 +243,7 @@
 <li>Strengthened the system prompt&#x27;s anti-merge instruction: models were observed occasionally combining two consecutive cues that read as one continuous sentence into a single output block despite the existing &quot;do not merge&quot; wording — the instruction now explicitly names this exact temptation and requires one output block per input index, always.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.9.4</div>
 <div class="changelog-section-title">Added</div>
 <ul>
@@ -243,7 +261,7 @@
 <li><code>llamacpp_provider.py</code> only caught <code>httpx.TimeoutException</code>/ <code>ConnectError</code> as retryable — a dropped connection mid-response (<code>httpx.ReadError</code>, seen live against a remote instance) propagated as a raw, unhandled exception with an empty message, showing as a blank failure with no explanation. Now caught alongside the others as a retryable <code>ProviderRateLimitedError</code>, with a fallback to the exception&#x27;s class name whenever <code>str(exc)</code> itself is empty (which <code>httpcore</code> errors like this commonly are).</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.9.3</div>
 <div class="changelog-section-title">Added</div>
 <ul>
@@ -255,21 +273,21 @@
 <li>The running web app itself had no favicon — <code>docs/assets/icon.svg</code> (the public site&#x27;s icon) was never wired into <code>app/templates/base.html</code>. Copied to <code>app/static/icon.svg</code> and linked so the app&#x27;s own browser tab now shows it too.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.9.2</div>
 <div class="changelog-section-title">Fixed</div>
 <ul>
 <li><strong>Bulk-running the Queue page&#x27;s &quot;Pending upload&quot; filter did nothing</strong> — <code>translated_pending_upload</code> (an item that finished translating but hasn&#x27;t been pushed to Bazarr yet) was missing from the set of re- runnable statuses, even though the Queue page&#x27;s own &quot;Pending upload&quot; status filter is a real, selectable option and treats that status the same as &quot;Done&quot; everywhere else. Filtering to it and clicking &quot;Run all N matching&quot; silently returned zero items instead of re-running them.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.9.1</div>
 <div class="changelog-section-title">Added</div>
 <ul>
 <li>The AI-translation disclaimer cue prepended to every subtitle is now itself translated into the target language instead of always being in English — e.g. a Spanish subtitle gets a Spanish disclaimer, not an English one at the top of a Spanish file. Covers all ~187 languages Bazarr recognizes (<code>app/subtitles/disclaimer_translations.json</code>, generated once via Gemini, committed as a static file — no extra AI call at translation time). The template fills in the actual source/ target language names (e.g. &quot;Subtitlarr used AI to translate this from English into Spanish...&quot;); falls back to the English template for any language code not in the file.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.9.0</div>
 <div class="changelog-section-title">Fixed</div>
 <ul>
@@ -277,21 +295,21 @@
 <li>A push against an item whose queued file is genuinely missing (e.g. ones queued before this fix) is unrecoverable by retrying — the translated text is gone. Those items are now reset to <code>pending</code> instead of being left permanently stuck in <code>translated_pending_upload</code>, so the next translation run regenerates them. The Jobs page&#x27;s push-result line now reports this as &quot;reset N for re-translation&quot; instead of lumping it into &quot;failed&quot;.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.8.8</div>
 <div class="changelog-section-title">Added</div>
 <ul>
 <li>Language names used in LLM translation prompts now prefer Bazarr&#x27;s own <code>GET /api/system/languages</code> list — fetched at startup and again whenever the Bazarr connection is saved, best-effort. This correctly covers Bazarr-specific non-standard codes (e.g. <code>pb</code> for Brazilian Portuguese, <code>ea</code> for Latin American Spanish) that ISO 639-1 doesn&#x27;t define, without hardcoding guesses at those codes&#x27; meanings. Falls back to the bare uppercased code, same as any unrecognized code, until a Bazarr connection has been configured and reached at least once.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.8.7</div>
 <div class="changelog-section-title">Added</div>
 <ul>
 <li><strong>Mobile/narrow-viewport layout</strong>, across most pages — confirmed live on a real phone via DevTools: - Dashboard&#x27;s stat-card grid, page header, Current-run title/Stop- button row, and Rate/Failed/ETA row now wrap or drop to fewer columns at real phone widths instead of squeezing 4 cards or a fixed-width row into ~375-430px. - Mobile&#x27;s responsive <code>.stats</code>/<code>.shell</code>/<code>main</code>/<code>.grid-2</code> overrides were living in <code>base.css</code>, which loads BEFORE <code>components.css</code> in <code>base.html</code> — with equal selector specificity, the later-loading stylesheet always wins regardless of which file&#x27;s media query actually matched, so <code>components.css</code>&#x27;s unconditional 4-column <code>.stats</code> rule silently beat every mobile override at every width. Moved into <code>components.css</code> instead, alongside the sidebar&#x27;s existing same-reasoning fix. - <code>.shell</code>&#x27;s <code>min-height: 100vh</code> (needed on desktop) left a large empty gap between the mobile top bar and page content on short pages — confirmed via DevTools that <code>main</code>&#x27;s own box was stretched far taller than its content, a side effect of CSS Grid&#x27;s default row-stretch behavior once <code>.shell</code> collapses to a single column. - The mobile top bar is now <code>position: sticky</code> (was <code>static</code> — scrolled away with the page). - Any table wrapped in <code>.table-scroll</code> (Queue, History, Events) now actually scrolls horizontally instead of squeezing every column to fit and wrapping cell text mid-word — <code>table</code> needed <code>width: max-content</code>, not <code>width: 100%</code>/<code>min-width: 100%</code>, since <code>table-layout: auto</code> still shrinks columns to fit a percentage-based width before ever considering real overflow. - Engines page: each cascade row&#x27;s name/badges/status/expand-arrow no longer squeeze onto one unbreakable line — badges wrap as whole units (previously wrapped mid-word, e.g. &quot;recommend/ed&quot;), and the drag handle sits at a predictable position by the instance name instead of centering against the row&#x27;s full (and inconsistent) wrapped height. - History&#x27;s collapsed run cards: a long dynamically-built engine- summary badge (e.g. &quot;Gemini Main gemini-3.1-flash-lite (+1 via Gemini Secondary gemini-3.1-flash-lite)&quot;) overflowed underneath the files/ok/failed stats instead of wrapping, visually overlapping them — now wraps normally, and the stats block drops to its own row below the title when there isn&#x27;t room for both on one line.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.8.6</div>
 <div class="changelog-section-title">Changed</div>
 <ul>
@@ -302,7 +320,7 @@
 <li><strong><code>.srt</code>-only source subtitle filtering</strong>: <code>app/subtitles/srt_io.py</code>&#x27;s parser only understands <code>.srt</code> structure, but <code>build_source_map()</code> previously accepted any subtitle path Bazarr returned regardless of extension. Confirmed live: Bazarr&#x27;s own <code>/api/subtitles/contents</code> endpoint 500&#x27;d trying to serve an <code>.ass</code> file&#x27;s content. Non-<code>.srt</code> source candidates (<code>.ass</code>, <code>.ssa</code>, <code>.vtt</code>, <code>.sub</code>, etc.) are now filtered out before ever being attempted as a translation source, falling back to another available language&#x27;s <code>.srt</code> track if one exists instead of failing the item outright.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.8.5</div>
 <div class="changelog-section-title">Fixed</div>
 <ul>
@@ -313,7 +331,7 @@
 <li>A public docs/landing site under <code>docs/</code> (index, install, engine setup, features with real screenshots, and an auto-generated changelog page via <code>docs/assets/build_changelog.py</code>), plus a <code>docs-pages.yml</code> GitHub Actions workflow to deploy it to GitHub Pages on every push touching <code>docs/</code>. Not yet live — GitHub Pages requires the repo to be public first, and Pages itself has no private option on the Free plan, so this stays dormant until that&#x27;s a deliberate choice.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.8.4</div>
 <div class="changelog-section-title">Added</div>
 <ul>
@@ -329,7 +347,7 @@
 <li><code>.engine-config</code> (the Engines page&#x27;s per-instance config-reveal panel) changed from a solid <code>--surface-2</code> fill to a <code>--surface-2</code>-colored outline instead.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.8.3</div>
 <div class="changelog-section-title">Changed</div>
 <ul>
@@ -337,7 +355,7 @@
 <li><code>.env.example</code>&#x27;s <code>PORT</code> value, <code>docker-compose.yml</code>&#x27;s port mapping, and <code>app/config.py</code>&#x27;s <code>port</code> default all updated to <code>7777</code> to match.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.8.2</div>
 <div class="changelog-section-title">Fixed</div>
 <ul>
@@ -350,7 +368,7 @@
 <li>Bazarr Base URL/API Key are no longer marked required in the Unraid form — they can be set from the Bazarr Connection page after first start instead, same as every other setting.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.8.1</div>
 <div class="changelog-section-title">Added</div>
 <ul>
@@ -368,7 +386,7 @@
 <li><code>plans/</code> and <code>TODO.md</code> are no longer tracked in git (internal working docs with no value to someone pulling the published image) — gitignored going forward, still present locally.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.8.0</div>
 <div class="changelog-section-title">Added</div>
 <ul>
@@ -393,7 +411,7 @@
 <li><code>active_engine</code>/<code>fallback_engine</code> and all per-provider-type Settings fields (<code>ollama_base_url</code>, <code>gemini_api_key</code>, <code>nvidia_batch_token_budget</code>, etc.) — engine configuration lives entirely in the <code>engine_instances</code> DB table now. No migration path from the old settings was written (pre-release software, no installs to preserve) — a fresh install starts with an empty engine list and instances are added through the Engines page.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.7.0</div>
 <div class="changelog-section-title">Added</div>
 <ul>
@@ -416,7 +434,7 @@
 <li><strong>Events tab toolbar was misaligned, and its engine filter required an exact match.</strong> Added <code>align-items: center</code> to the wrapping toolbar; engine filtering is now a case-insensitive substring match against both the primary and fallback engine, not an exact match.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.6.0</div>
 <div class="changelog-section-title">Added</div>
 <ul>
@@ -437,7 +455,7 @@
 <li>OpenRouter/NVIDIA/Groq/Gemini&#x27;s per-engine batch-token-budget and concurrency settings are now selected via a single lookup table in <code>runner.py</code> instead of a growing if/elif chain, so a newly added cloud provider can no longer silently inherit Ollama&#x27;s small GPU-safe default by omission (the exact gap that caused the Groq/Gemini batch- size bugs above).</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.5.0</div>
 <div class="changelog-section-title">Added</div>
 <ul>
@@ -461,7 +479,7 @@
 <li><strong><code>app.bazarr.client.get_subtitle_contents()</code> now raises a clear <code>BazarrError</code></strong> (including a snippet of the actual response body) instead of crashing on a bare <code>JSONDecodeError</code> when Bazarr returns a 200 OK with a non-JSON body — seen live (empty body for one real source file; a separate live report also saw an HTML page returned instead of JSON, still under investigation).</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.4.0</div>
 <div class="changelog-section-title">Added</div>
 <ul>
@@ -480,7 +498,7 @@
 <li><strong>Unraid Community Applications template</strong> (<code>unraid/subtitlarr.xml</code>) documenting every environment variable as a proper UI field, plus README guidance on building/pushing your own image and picking a Docker network type that can reach Bazarr/Ollama.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.3.0</div>
 <div class="changelog-section-title">Added</div>
 <ul>
@@ -507,7 +525,7 @@
 <li><strong>Response truncation on verbose/dense subtitle content</strong> (e.g. anime cues with duplicated original-language text, heavy <code>&lt;I&gt;</code> formatting): raised the default context window headroom so a batch that fits the token budget doesn&#x27;t get cut off mid-response before finishing.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.2.0</div>
 <div class="changelog-section-title">Added</div>
 <ul>
@@ -530,7 +548,7 @@
 <li><strong>Page width inconsistency</strong>: several pages used <code>max-width</code> (shrink-to- fit) instead of a fixed <code>width</code>, causing visible layout jitter across pages and screen sizes.</li>
 </ul>
 </div>
-<div class="changelog-entry">
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.1.0</div>
 </div></main>
 
@@ -538,5 +556,6 @@
   Subtitlarr is open source — <a href="https://github.com/GerardUmbert/Subtitlarr">source on GitHub</a>
 </footer>
 
+<script src="assets/site-motion.js"></script>
 </body>
 </html>

@@ -6,6 +6,13 @@
 <title>Install — Subtitlarr</title>
 <link rel="icon" href="assets/icon.svg">
 <link rel="stylesheet" href="assets/site.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="assets/tailwind-config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
 </head>
 <body>
 
@@ -14,7 +21,10 @@
     <span class="brand-mark">S</span>
     Subtitlarr
   </a>
-  <nav class="site-nav">
+  <button type="button" class="nav-toggle" id="nav-toggle" aria-expanded="false" aria-controls="site-nav" aria-label="Toggle navigation">
+    <span></span><span></span><span></span>
+  </button>
+  <nav class="site-nav" id="site-nav">
     <a href="index.html">Home</a>
     <a href="install.html" class="active">Install</a>
     <a href="api-keys.html">Engine Setup</a>
@@ -28,19 +38,19 @@
 </header>
 
 <main>
-  <h1>Install</h1>
-  <p class="lede">Three ways to run Subtitlarr, depending on your setup. No media folder is ever mounted — only a small SQLite database.</p>
+  <h1 class="reveal">Install</h1>
+  <p class="lede reveal">Three ways to run Subtitlarr, depending on your setup. No media folder is ever mounted — only a small SQLite database.</p>
 
-  <div class="toc">
+  <div class="toc reveal">
     <a href="#docker">Docker (published image)</a>
     <a href="#compose">Docker Compose</a>
     <a href="#unraid">Unraid</a>
     <a href="#config">Configuration</a>
   </div>
 
-  <h2 id="docker">Docker (published image)</h2>
-  <p>The fastest path if you already run other containers by hand:</p>
-  <pre><code>docker run -d \
+  <h2 id="docker" class="reveal-scroll">Docker (published image)</h2>
+  <p class="reveal-scroll">The fastest path if you already run other containers by hand:</p>
+  <pre class="reveal-scroll"><code>docker run -d \
   --name subtitlarr \
   -p 7777:7777 \
   -v ./data:/data \
@@ -49,14 +59,14 @@
   ghcr.io/gerardumbert/subtitlarr:latest</code></pre>
   <p>Open <code>http://localhost:7777</code>, then add at least one engine instance from the <strong>Translation Engine</strong> page before running a translation.</p>
 
-  <h2 id="compose">Docker Compose</h2>
-  <p>Good for local dev, or if you don't already run Ollama:</p>
-  <pre><code>cp .env.example .env   # fill in BAZARR_BASE_URL, BAZARR_API_KEY, etc.
+  <h2 id="compose" class="reveal-scroll">Docker Compose</h2>
+  <p class="reveal-scroll">Good for local dev, or if you don't already run Ollama:</p>
+  <pre class="reveal-scroll"><code>cp .env.example .env   # fill in BAZARR_BASE_URL, BAZARR_API_KEY, etc.
 docker compose up -d</code></pre>
   <p>The example compose file also starts an Ollama container — add an Ollama engine instance pointing at <code>http://ollama:11434</code>.</p>
 
-  <h2 id="unraid">Unraid</h2>
-  <div class="panel">
+  <h2 id="unraid" class="reveal-scroll">Unraid</h2>
+  <div class="panel reveal-scroll">
     <p><strong>Community Applications template</strong> — use <a href="https://github.com/GerardUmbert/Subtitlarr/blob/master/unraid/subtitlarr.xml">unraid/subtitlarr.xml</a> as a starting point in Unraid's Docker tab (Add Container → Template). It points at the published <code>ghcr.io/gerardumbert/subtitlarr</code> image and only exposes the fields that genuinely can't be configured from the web UI afterward: <strong>WebUI Port</strong>, <strong>Data</strong> path, and <strong>PUID</strong>/<strong>PGID</strong>. Everything else — Bazarr connection, engines, scheduling — is set from the app's own UI once it's running, not from the container form.</p>
   </div>
   <p>Manual container setup:</p>
@@ -67,31 +77,34 @@ docker compose up -d</code></pre>
     <li><strong>Network type</strong>: <code>bridge</code> works for most setups</li>
     <li>Everything else (Bazarr URL/key, engines, scheduling) — set it from the web UI after first start</li>
   </ul>
-  <div class="callout">
+  <div class="callout reveal-scroll">
     Using Unraid's built-in Tailscale integration? Keep the host port mapping identical to the container's internal port (e.g. <code>7777:7777</code>, not <code>7777:8000</code>) — Unraid's Tailscale Serve hook proxies to the host-mapped port number, so a mismatch silently breaks the Tailscale hostname URL even though LAN access still works fine.
   </div>
 
-  <h2 id="config">Configuration</h2>
-  <p>None of this needs to be touched at container start — click through the form doing nothing and configure every one of these from the web UI afterward instead. This table is a reference for what each setting does and its default, not a setup requirement.</p>
-  <table>
-    <thead><tr><th>Variable</th><th>Purpose</th><th>Default</th></tr></thead>
-    <tbody>
-      <tr><td><code>BAZARR_BASE_URL</code></td><td>Bazarr root URL</td><td><em>set from the UI</em></td></tr>
-      <tr><td><code>BAZARR_API_KEY</code></td><td>Bazarr API key</td><td><em>set from the UI</em></td></tr>
-      <tr><td><code>SCHEDULE_CRON</code></td><td>Cron expression for the main translation job</td><td><code>10 3 * * *</code></td></tr>
-      <tr><td><code>AGE_THRESHOLD_DAYS</code></td><td>Days missing before a scheduled run translates it</td><td><code>14</code></td></tr>
-      <tr><td><code>DAILY_TRANSLATION_LIMIT</code></td><td>Max items/day for scheduled runs (0 = unlimited)</td><td><code>100</code></td></tr>
-      <tr><td><code>PAUSE_BETWEEN_ITEMS_SECONDS</code></td><td>Rest between translations</td><td><code>30</code></td></tr>
-      <tr><td><code>QUEUE_UPLOADS_ENABLED</code></td><td>Hold uploads for a manual batch push instead of immediate</td><td><code>false</code></td></tr>
-      <tr><td><code>BACKUP_CRON</code></td><td>Daily database snapshot to <code>/data/backups/</code>; blank disables it</td><td><code>30 2 * * *</code></td></tr>
-    </tbody>
-  </table>
-  <p>See the <a href="https://github.com/GerardUmbert/Subtitlarr#configuration">full README</a> for the complete list.</p>
+  <h2 id="config" class="reveal-scroll">Configuration</h2>
+  <p class="reveal-scroll">None of this needs to be touched at container start — click through the form doing nothing and configure every one of these from the web UI afterward instead. This table is a reference for what each setting does and its default, not a setup requirement.</p>
+  <div class="table-scroll reveal-scroll">
+    <table>
+      <thead><tr><th>Variable</th><th>Purpose</th><th>Default</th></tr></thead>
+      <tbody>
+        <tr><td><code>BAZARR_BASE_URL</code></td><td>Bazarr root URL</td><td><em>set from the UI</em></td></tr>
+        <tr><td><code>BAZARR_API_KEY</code></td><td>Bazarr API key</td><td><em>set from the UI</em></td></tr>
+        <tr><td><code>SCHEDULE_CRON</code></td><td>Cron expression for the main translation job</td><td><code>10 3 * * *</code></td></tr>
+        <tr><td><code>AGE_THRESHOLD_DAYS</code></td><td>Days missing before a scheduled run translates it</td><td><code>14</code></td></tr>
+        <tr><td><code>DAILY_TRANSLATION_LIMIT</code></td><td>Max items/day for scheduled runs (0 = unlimited)</td><td><code>100</code></td></tr>
+        <tr><td><code>PAUSE_BETWEEN_ITEMS_SECONDS</code></td><td>Rest between translations</td><td><code>30</code></td></tr>
+        <tr><td><code>QUEUE_UPLOADS_ENABLED</code></td><td>Hold uploads for a manual batch push instead of immediate</td><td><code>false</code></td></tr>
+        <tr><td><code>BACKUP_CRON</code></td><td>Daily database snapshot to <code>/data/backups/</code>; blank disables it</td><td><code>30 2 * * *</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>See the <a href="https://github.com/GerardUmbert/Subtitlarr#configuration">full README</a> or <a href="docs.html#env-vars">the full Docs reference</a> for the complete list.</p>
 </main>
 
 <footer class="site-footer">
   Subtitlarr is open source — <a href="https://github.com/GerardUmbert/Subtitlarr">source on GitHub</a>
 </footer>
 
+<script src="assets/site-motion.js"></script>
 </body>
 </html>
