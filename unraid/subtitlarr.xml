@@ -13,7 +13,7 @@
   <Category>MediaApp:Other Tools:</Category>
   <WebUI>http://[IP]:[PORT:7777]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/GerardUmbert/Subtitlarr/master/unraid/subtitlarr.xml</TemplateURL>
-  <Icon>https://raw.githubusercontent.com/GerardUmbert/Subtitlarr/master/unraid/icon.svg</Icon>
+  <Icon>https://raw.githubusercontent.com/GerardUmbert/Subtitlarr/master/unraid/icon.png</Icon>
   <ExtraParams>--memory=2g --memory-swap=2g --restart=unless-stopped --log-opt max-size=10m --log-opt max-file=3</ExtraParams>
   <PostArgs/>
   <CPUset/>
