@@ -155,9 +155,12 @@ createApp({
         this.sourceMode === "library"
           ? !!this.selectedItem && this.selectedSourceLang && this.selectedTargetLang.trim()
           : !!this.uploadFile && this.uploadSourceLang.trim() && this.uploadTargetLang.trim();
+      // instanceIdA === instanceIdB is allowed — temperature/insults
+      // overrides travel independently per side, so comparing the same
+      // engine against itself under different settings is a real use case.
       const enginesReady = this.useReference
         ? !!this.instanceIdA
-        : this.instanceIdA && this.instanceIdB && this.instanceIdA !== this.instanceIdB;
+        : this.instanceIdA && this.instanceIdB;
       const referenceReady = !this.useReference || (this.referenceText && !this.loadingReference);
       return sourceReady && enginesReady && referenceReady && !this.running;
     },
@@ -166,7 +169,7 @@ createApp({
     // upload — the rest of the UI doesn't need to know which.
     sideA() {
       if (!this.result) return null;
-      return this.result.results[0];
+      return this._labelSide(this.result.results[0]);
     },
     sideB() {
       if (this.useReference) {
@@ -174,7 +177,7 @@ createApp({
           ? { instance_name: "Reference upload", ok: true, subtitle_text: this.referenceText }
           : null;
       }
-      return this.result ? this.result.results[1] : null;
+      return this.result ? this._labelSide(this.result.results[1]) : null;
     },
     // When only one side succeeded there's nothing to diff against, but
     // the translation that DID come back is still worth showing rather
@@ -215,6 +218,17 @@ createApp({
     },
   },
   methods: {
+    // Comparing an instance against itself (different temperature/insults
+    // overrides) means both sides share the same instance_id and thus the
+    // same instance_name — append the temperature so the diff headers and
+    // downloaded filenames stay distinguishable instead of showing the
+    // same label twice.
+    _labelSide(side) {
+      if (!side) return side;
+      const other = side === this.result?.results?.[0] ? this.result?.results?.[1] : this.result?.results?.[0];
+      if (!other || other.instance_id !== side.instance_id || side.temperature == null) return side;
+      return { ...side, instance_name: `${side.instance_name} (temp ${side.temperature})` };
+    },
     downloadSide(side) {
       const blob = new Blob([side.subtitle_text], { type: "text/plain;charset=utf-8" });
       const url = URL.createObjectURL(blob);

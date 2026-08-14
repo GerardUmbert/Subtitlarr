@@ -40,6 +40,17 @@
   <h1 class="reveal">Changelog</h1>
   <p class="lede reveal">Generated from <a href="https://github.com/GerardUmbert/Subtitlarr/blob/master/CHANGELOG.md">CHANGELOG.md</a> — that file is the source of truth.</p>
 <div class="changelog-entry reveal-scroll">
+<div class="changelog-version">0.11.8</div>
+<div class="changelog-section-title">Added</div>
+<ul>
+<li>Language Rules: a &quot;Target language allowlist&quot; — restrict which of Bazarr&#x27;s wanted languages Subtitlarr will actually create a translation job for. Lets a Bazarr profile keep wanting a language purely as a fallback translation source (e.g. English) without Subtitlarr ever translating into it. Picked from Bazarr&#x27;s own known languages, same searchable list Compare Engines already uses, so non-standard codes (e.g. &quot;pb&quot; for Brazilian Portuguese) show their real name instead of requiring a guessed code.</li>
+</ul>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li>Compare Engines required picking two different engine instances, blocking the case of comparing the same engine against itself under different temperature/insults overrides — a real use case the page&#x27;s own per-side override fields already supported.</li>
+</ul>
+</div>
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.11.7</div>
 <div class="changelog-section-title">Fixed</div>
 <ul>

@@ -110,9 +110,12 @@ async def compare(
     """Source is an item picked from the full Bazarr library search (see
     GET /library) — an EXPLICITLY chosen source AND target language, not
     inherited from any existing Subtitlarr items row. See compare_uploaded
-    below for the "upload your own .srt" source mode."""
-    if req.instance_id_b is not None and req.instance_id_a == req.instance_id_b:
-        raise HTTPException(status_code=400, detail="Pick two different engine instances to compare")
+    below for the "upload your own .srt" source mode.
+
+    instance_id_a == instance_id_b is allowed on purpose — temperature_a/b
+    and catalan_vegeta_insults_a/b travel fully independently per side, so
+    comparing the same engine instance against itself under two different
+    overrides (e.g. temperature 0.2 vs 0.8) is a legitimate use case."""
     try:
         registry.validate_temperature(req.temperature_a)
         registry.validate_temperature(req.temperature_b)
@@ -155,9 +158,10 @@ async def compare_uploaded(
     """Source is a user-uploaded .srt file instead of a Bazarr item —
     never touches Bazarr, never requires the item to already be tracked
     in Subtitlarr's queue. source_lang/target_lang are supplied directly
-    since there's no Bazarr item to infer them from."""
-    if instance_id_b is not None and instance_id_a == instance_id_b:
-        raise HTTPException(status_code=400, detail="Pick two different engine instances to compare")
+    since there's no Bazarr item to infer them from.
+
+    instance_id_a == instance_id_b is allowed on purpose — see compare()
+    above for why."""
     try:
         registry.validate_temperature(temperature_a)
         registry.validate_temperature(temperature_b)

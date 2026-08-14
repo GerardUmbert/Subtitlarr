@@ -38,6 +38,44 @@ class FakeClientWithEnglishSource:
         return None
 
 
+class FakeClientWantingTwoLanguages:
+    """A movie is wanted in both English and Portuguese, with an existing
+    English subtitle as the only source — used to verify the target
+    allowlist filters out unwanted target languages before an item row is
+    ever created for them."""
+
+    async def iter_all_wanted_episodes(self):
+        return
+        yield  # pragma: no cover
+
+    async def iter_all_wanted_movies(self):
+        yield WantedMovie(
+            title="Two Targets",
+            missing_subtitles=[
+                LanguageInfo(name="English", code2="en", code3="eng"),
+                LanguageInfo(name="Portuguese", code2="pt", code3="por"),
+            ],
+            radarrId=7,
+        )
+
+    async def get_movie_detail(self, radarr_id: int):
+        return MovieDetail(
+            audio_language=None, missing_subtitles=[], monitored=True,
+            path="/movies/Two/Two.mkv", radarrId=radarr_id,
+            subtitles=[
+                SubtitleInfo(
+                    name="Spanish", code2="es", code3="spa", forced=False, hi=False,
+                    path="/movies/Two/Two.es.srt", file_size=1000,
+                    embedded_track_id=None,
+                )
+            ],
+            title="Two Targets", sceneName=None,
+        )
+
+    async def get_episode_detail(self, sonarr_episode_id: int):
+        return None
+
+
 class FakeClientWithNoSource:
     """A movie is wanted in Spanish and Bazarr has NO other-language
     subtitle at all — should be marked skipped_no_source immediately."""
@@ -116,3 +154,40 @@ async def test_preview_does_not_overwrite_an_already_done_items_source(conn):
     row = conn.execute("SELECT * FROM items WHERE id = ?", (row["id"],)).fetchone()
     assert row["status"] == "done"
     assert row["source_language"] == "fr"  # untouched, not overwritten to 'en'
+
+
+@pytest.mark.asyncio
+async def test_target_allowlist_filters_unwanted_target_languages(conn):
+    """Bazarr's profile can want a language purely as a fallback SOURCE
+    (e.g. EN, to guarantee a translatable file exists) without Subtitlarr
+    ever creating a job to translate INTO it — the allowlist restricts
+    which of Bazarr's wanted targets actually become item rows."""
+    repository.set_config(conn, "target_lang_allowlist", ["pt"])
+
+    await poller.poll_once(conn, FakeClientWantingTwoLanguages())
+
+    en_row = conn.execute(
+        "SELECT * FROM items WHERE bazarr_id = 7 AND target_language = 'en'"
+    ).fetchone()
+    assert en_row is None  # never created — 'en' isn't in the allowlist
+
+    pt_row = conn.execute(
+        "SELECT * FROM items WHERE bazarr_id = 7 AND target_language = 'pt'"
+    ).fetchone()
+    assert pt_row is not None
+    assert pt_row["status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_empty_target_allowlist_restricts_nothing(conn):
+    """No config set (or an empty list) is the default 'no restriction'
+    state — matches source_priority's existing empty-means-unrestricted
+    convention, so upgrading users see no behavior change until they
+    explicitly opt in."""
+    await poller.poll_once(conn, FakeClientWantingTwoLanguages())
+
+    for lang in ("en", "pt"):
+        row = conn.execute(
+            "SELECT * FROM items WHERE bazarr_id = 7 AND target_language = ?", (lang,)
+        ).fetchone()
+        assert row is not None

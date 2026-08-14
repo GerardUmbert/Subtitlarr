@@ -40,6 +40,34 @@
 
   <div class="panel" style="margin-top:16px;">
     <div class="panel-body">
+    <div class="panel-title">Target language allowlist</div>
+    <div class="panel-title-sub">
+      Optional: restrict which of Bazarr's wanted languages Subtitlarr will actually translate into.
+      Leave empty to translate into everything Bazarr's profile asks for. Useful when Bazarr's profile
+      wants a language (e.g. English) only to guarantee a source subtitle is available to translate
+      FROM — add your real target(s) here (e.g. Portuguese) and Subtitlarr will never create a
+      translation job for the others, even though Bazarr still fetches them.
+    </div>
+
+    <div class="tag-input-list">
+      <span class="tag-chip" v-for="(lang, i) in targetAllowlist" :key="lang">
+        {% raw %}{{ targetLangLabel(lang) }} ({{ lang.toUpperCase() }}){% endraw %}
+        <span class="remove" @click="removeTarget(i)">×</span>
+      </span>
+    </div>
+    <div class="field-row" style="margin-top:0;">
+      <input v-model="newTargetLang" placeholder="type to search…" list="target-allowlist-lang-list"
+             class="inline-input" style="max-width:220px;" @keyup.enter="addTarget" />
+      <button class="btn" @click="addTarget">Add</button>
+    </div>
+    <datalist id="target-allowlist-lang-list">
+      <option v-for="lang in bazarrLanguages" :key="lang.code2" :value="lang.code2">{% raw %}{{ lang.name }}{% endraw %}</option>
+    </datalist>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px;">
+    <div class="panel-body">
     <div class="panel-title" style="margin-bottom:4px;">Regional variants</div>
     <p class="field-hint" style="margin-top:0;">A bare language code (e.g. "es") is ambiguous whenever a language has more than one widely-used regional standard — Bazarr's own language codes don't distinguish es-ES from es-MX, for example. Each row below picks which standard to explicitly request when translating into that language. Only languages with a small number of clearly dominant standards are covered; every other language is left alone.</p>
     <div v-for="code in variantLanguageCodes" :key="code" class="field" style="max-width:320px;">

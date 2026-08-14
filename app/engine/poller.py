@@ -61,9 +61,18 @@ async def poll_once(conn: sqlite3.Connection, client: BazarrClient) -> dict:
     movies_seen = 0
     with state.db_lock:
         source_priority = repository.get_config(conn, "source_lang_priority", default=[])
+        target_allowlist = set(repository.get_config(conn, "target_lang_allowlist", default=[]))
 
     async for wanted in client.iter_all_wanted_episodes():
         for lang in wanted.missing_subtitles:
+            # Empty allowlist = no restriction. A non-empty one lets Bazarr's
+            # profile keep wanting a language purely as a fallback TRANSLATION
+            # SOURCE (e.g. EN) without Subtitlarr ever creating a job to
+            # translate INTO it — Bazarr's wanted-list is otherwise the only
+            # thing that decides targets, so this is a deliberate opt-in filter
+            # on top of it, not a replacement for it.
+            if target_allowlist and lang.code2 not in target_allowlist:
+                continue
             with state.db_lock:
                 repository.upsert_item_seen(
                     conn,
@@ -82,6 +91,8 @@ async def poll_once(conn: sqlite3.Connection, client: BazarrClient) -> dict:
 
     async for wanted in client.iter_all_wanted_movies():
         for lang in wanted.missing_subtitles:
+            if target_allowlist and lang.code2 not in target_allowlist:
+                continue
             with state.db_lock:
                 repository.upsert_item_seen(
                     conn,

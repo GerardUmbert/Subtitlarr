@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.11.8]
+
+### Added
+- Language Rules: a "Target language allowlist" — restrict which of
+  Bazarr's wanted languages Subtitlarr will actually create a
+  translation job for. Lets a Bazarr profile keep wanting a language
+  purely as a fallback translation source (e.g. English) without
+  Subtitlarr ever translating into it. Picked from Bazarr's own known
+  languages, same searchable list Compare Engines already uses, so
+  non-standard codes (e.g. "pb" for Brazilian Portuguese) show their
+  real name instead of requiring a guessed code.
+
+### Fixed
+- Compare Engines required picking two different engine instances,
+  blocking the case of comparing the same engine against itself under
+  different temperature/insults overrides — a real use case the page's
+  own per-side override fields already supported.
+
 ## [0.11.7]
 
 ### Fixed
