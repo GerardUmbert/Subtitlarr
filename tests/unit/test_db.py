@@ -139,13 +139,50 @@ def test_purge_unsynced_items_deletes_orphaned_run_log(conn):
         title="Ep", series_title="Show", season_episode="1x1",
         target_language="es",
     )
-    failed_item = conn.execute("SELECT id FROM items WHERE bazarr_id = 99").fetchone()
-    repository.update_item_status(conn, failed_item["id"], "failed")
-    repository.log_item_attempt(conn, failed_item["id"], None, "failed")
+    # left as 'pending' (upsert_item_seen's default) — not purge_exempt,
+    # so it's actually eligible for this purge, unlike a 'failed' item
+    pending_item = conn.execute("SELECT id FROM items WHERE bazarr_id = 99").fetchone()
+    repository.log_item_attempt(conn, pending_item["id"], None, "failed")
 
     repository.purge_unsynced_items(conn)
 
     assert conn.execute("SELECT COUNT(*) FROM item_run_log").fetchone()[0] == 0
+
+
+def test_purge_unsynced_items_spares_failed_items(conn):
+    """Regression test: confirmed live that a 'failed' item (e.g. an
+    engine hitting its rate/quota limit, or any other translation
+    failure) got wiped by the very next sync_media poll the same way
+    language-check/stale-audit resets did before purge_exempt existed for
+    them (see test_purge_unsynced_items_spares_language_check_reset).
+    Bazarr never re-reports a failed item as newly "missing", so once
+    purged it silently vanished from the Queue with no record of the
+    failure, and would only reappear by being rediscovered and
+    reprocessed from scratch. update_item_status must mark 'failed' items
+    purge_exempt so they survive until they actually succeed."""
+    repository.upsert_item_seen(
+        conn, item_type="episode", bazarr_id=99, series_id=2,
+        title="Ep", series_title="Show", season_episode="1x1",
+        target_language="es",
+    )
+    item = conn.execute("SELECT id FROM items WHERE bazarr_id = 99").fetchone()
+
+    repository.update_item_status(conn, item["id"], "failed", error_message="quota exceeded")
+    row = conn.execute("SELECT status, purge_exempt FROM items WHERE id = ?", (item["id"],)).fetchone()
+    assert row["status"] == "failed"
+    assert row["purge_exempt"] == 1
+
+    purged = repository.purge_unsynced_items(conn)
+
+    assert purged == 0
+    survivor = conn.execute("SELECT bazarr_id FROM items WHERE id = ?", (item["id"],)).fetchone()
+    assert survivor is not None  # still here — this is the exact bug that made it vanish
+
+    # Once genuinely retranslated, the exemption lifts — a LATER failure
+    # would purge normally again unless the same protection re-applies.
+    repository.update_item_status(conn, item["id"], "done", mark_completed=True)
+    row = conn.execute("SELECT purge_exempt FROM items WHERE id = ?", (item["id"],)).fetchone()
+    assert row["purge_exempt"] == 0
 
 
 def test_stats_counts_by_status(conn):

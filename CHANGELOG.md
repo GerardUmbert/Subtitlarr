@@ -3,6 +3,16 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.11.7]
+
+### Fixed
+- Items with status `failed` (e.g. an engine hitting its rate/quota
+  limit, or any other translation failure) were silently wiped from the
+  Queue by the next scheduled `sync_media` poll, since Bazarr never
+  re-reports a failed item as newly "missing". They now survive until
+  actually retranslated, the same protection already given to
+  language-check/stale-audit resets.
+
 ## [0.11.6]
 
 ### Added

@@ -40,6 +40,13 @@
   <h1 class="reveal">Changelog</h1>
   <p class="lede reveal">Generated from <a href="https://github.com/GerardUmbert/Subtitlarr/blob/master/CHANGELOG.md">CHANGELOG.md</a> — that file is the source of truth.</p>
 <div class="changelog-entry reveal-scroll">
+<div class="changelog-version">0.11.7</div>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li>Items with status <code>failed</code> (e.g. an engine hitting its rate/quota limit, or any other translation failure) were silently wiped from the Queue by the next scheduled <code>sync_media</code> poll, since Bazarr never re-reports a failed item as newly &quot;missing&quot;. They now survive until actually retranslated, the same protection already given to language-check/stale-audit resets.</li>
+</ul>
+</div>
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.11.6</div>
 <div class="changelog-section-title">Added</div>
 <ul>

@@ -301,6 +301,13 @@ def update_item_status(
         # re-enter regular purge eligibility if it ever goes back to
         # 'pending' some other way in the future.
         fields.append("purge_exempt = 0")
+    elif status == "failed":
+        # Without this, purge_unsynced_items wipes every 'failed' item on
+        # the very next sync_media poll (default nightly) since Bazarr
+        # never re-reports it as newly "missing" — the item just vanishes
+        # from the Queue with no record of why, and gets rediscovered and
+        # reprocessed from scratch as if it were new.
+        fields.append("purge_exempt = 1")
     if mark_completed:
         fields.append("completed_at = ?")
         values.append(now)
