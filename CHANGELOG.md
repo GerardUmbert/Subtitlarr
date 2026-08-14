@@ -3,6 +3,18 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.11.6]
+
+### Added
+- Compare Engines: a "Download .srt" button on each side that produced
+  a translation, regardless of whether the other side succeeded.
+
+### Fixed
+- Compare Engines showed "Both sides need a successful translation to
+  compare" and discarded the result even when one side DID succeed —
+  now shows that side's translated cues instead, noting there's
+  nothing to diff it against.
+
 ## [0.11.5]
 
 ### Fixed

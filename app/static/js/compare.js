@@ -176,6 +176,20 @@ createApp({
       }
       return this.result ? this.result.results[1] : null;
     },
+    // When only one side succeeded there's nothing to diff against, but
+    // the translation that DID come back is still worth showing rather
+    // than throwing it away behind an empty state.
+    soloSide() {
+      const a = this.sideA, b = this.sideB;
+      if (!a || !b) return null;
+      if (a.ok && !b.ok) return a;
+      if (b.ok && !a.ok) return b;
+      return null;
+    },
+    soloRows() {
+      const side = this.soloSide;
+      return side ? parseSrtBlocks(side.subtitle_text) : [];
+    },
     diffRows() {
       const a = this.sideA, b = this.sideB;
       if (!a || !b || !a.ok || !b.ok) return [];
@@ -201,6 +215,15 @@ createApp({
     },
   },
   methods: {
+    downloadSide(side) {
+      const blob = new Blob([side.subtitle_text], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${side.instance_name.replace(/[^a-z0-9]+/gi, "_")}.srt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    },
     async loadInstances() {
       const res = await Api.listEngineInstances();
       this.instances = (res.data || []).filter((i) => i.provider_type !== "separator");

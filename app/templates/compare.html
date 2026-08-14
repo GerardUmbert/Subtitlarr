@@ -173,6 +173,8 @@
         </div>
         <div class="stat-hint" v-else-if="side && !side.ok">{% raw %}{{ side.error }}{% endraw %}</div>
         <div class="stat-hint" v-else-if="side">reference upload — not timed</div>
+        <button v-if="side && side.ok && side.subtitle_text" class="btn" style="margin-top:10px;"
+                @click="downloadSide(side)">Download .srt</button>
       </div>
     </div>
 
@@ -183,8 +185,29 @@
           {% raw %}{{ identicalCount }}{% endraw %} / {% raw %}{{ diffRows.length }}{% endraw %} cues identical
         </div>
       </div>
-      <div v-if="!sideA || !sideA.ok || !sideB || !sideB.ok" class="empty-state" style="padding:30px 20px;">
-        Both sides need a successful translation to compare.
+      <div v-if="soloSide" class="panel-title-sub" style="padding:10px 16px 0;">
+        {% raw %}{{ soloSide.instance_name }}{% endraw %} was the only side that succeeded — showing its translation, nothing to diff it against.
+      </div>
+      <table v-if="soloSide" class="events-table diff-table">
+        <colgroup>
+          <col style="width:50px;" />
+          <col style="width:calc(100% - 50px);" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>{% raw %}{{ soloSide.instance_name }}{% endraw %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="row in soloRows" :key="row.index">
+            <td class="row-time">{% raw %}{{ row.index }}{% endraw %}</td>
+            <td>{% raw %}{{ row.content }}{% endraw %}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div v-else-if="!sideA || !sideA.ok || !sideB || !sideB.ok" class="empty-state" style="padding:30px 20px;">
+        Both sides failed — nothing to show.
       </div>
       <div v-else>
         <table class="events-table diff-table">
