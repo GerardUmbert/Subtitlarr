@@ -23,9 +23,9 @@ const PROVIDER_TYPES = {
     badges: ["free tier", "recommended"],
     fields: [
       { key: "model", label: "Model", placeholder: "gemini-3.5-flash-lite", hint:
-        "Not every Gemini model name actually has free-tier quota on your account — confirmed live: gemini-2.0-flash (an old default) had 0 RPM/TPM/RPD, every request 429'd instantly. Check aistudio.google.com/rate-limit for your account's real per-model numbers. gemini-3.5-flash-lite (the default) had the best confirmed free-tier quota at time of writing: 15 RPM, 250K TPM, 500 RPD." },
+        'Not every Gemini model name actually has free-tier quota on your account — confirmed live: gemini-2.0-flash (an old default) had 0 RPM/TPM/RPD, every request 429\'d instantly. Check <a href="https://aistudio.google.com/rate-limit" target="_blank" rel="noopener noreferrer">aistudio.google.com/rate-limit</a> for your account\'s real per-model numbers. gemini-3.5-flash-lite (the default) had the best confirmed free-tier quota at time of writing: 15 RPM, 250K TPM, 500 RPD.' },
       { key: "api_key", label: "API key", type: "password", secret: true, hint:
-        "Get a free key at aistudio.google.com/apikey — no billing setup required for the free tier." },
+        'Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">aistudio.google.com/apikey</a> — no billing setup required for the free tier.' },
       { key: "batch_token_budget", label: "Batch size (dialogue tokens)", type: "number", min: 1, step: 100, hint:
         "A real-quota model has 250K TPM — enormous headroom, so this can stay high. Lower it only if translations come back with a low \"recovered N/M cues\" count, not in response to 429s." },
       { key: "concurrent_batch_window", label: "Concurrent batches", type: "number", min: 1, step: 1, hint:
@@ -66,7 +66,8 @@ const PROVIDER_TYPES = {
     fields: [
       { key: "model", label: "Model", placeholder: "deepseek-ai/deepseek-v4-flash", hint:
         "Must be a real instructable chat model. NVIDIA also hosts translation-only models (e.g. Riva Translate) which are not compatible here." },
-      { key: "api_key", label: "API key", type: "password", secret: true, hint: "Get a free key at build.nvidia.com." },
+      { key: "api_key", label: "API key", type: "password", secret: true, hint:
+        'Get a free key at <a href="https://build.nvidia.com" target="_blank" rel="noopener noreferrer">build.nvidia.com</a>.' },
       { key: "batch_token_budget", label: "Batch size (dialogue tokens)", type: "number", min: 1, step: 100, hint:
         "700 (default) is confirmed reliable — same per-cue speed as 400, at roughly half the request count — while 900 has reproducibly failed on real content." },
       { key: "concurrent_batch_window", label: "Concurrent batches", type: "number", min: 1, step: 1, hint:
@@ -79,8 +80,9 @@ const PROVIDER_TYPES = {
     badges: ["API key"],
     fields: [
       { key: "model", label: "Model", placeholder: "google/gemma-4-26b-a4b-it:free", hint:
-        "OpenRouter routes to many underlying providers under one API — see openrouter.ai/models for the full lineup." },
-      { key: "api_key", label: "API key", type: "password", secret: true, hint: "Get a key at openrouter.ai/keys." },
+        'OpenRouter routes to many underlying providers under one API — see <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer">openrouter.ai/models</a> for the full lineup.' },
+      { key: "api_key", label: "API key", type: "password", secret: true, hint:
+        'Get a key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">openrouter.ai/keys</a>.' },
       { key: "batch_token_budget", label: "Batch size (dialogue tokens)", type: "number", min: 1, step: 100, hint:
         "Free \":free\" models are capped at 50 requests/DAY on top of 20/minute — keep this high so one file doesn't burn a large chunk of the day's quota." },
       { key: "concurrent_batch_window", label: "Concurrent batches", type: "number", min: 1, step: 1 },
@@ -92,8 +94,9 @@ const PROVIDER_TYPES = {
     badges: ["free tier"],
     fields: [
       { key: "model", label: "Model", placeholder: "llama-3.1-8b-instant", hint:
-        "Groq serves a fixed lineup on its own LPU hardware — see console.groq.com/docs/models." },
-      { key: "api_key", label: "API key", type: "password", secret: true, hint: "Get a free key at console.groq.com/keys." },
+        'Groq serves a fixed lineup on its own LPU hardware — see <a href="https://console.groq.com/docs/models" target="_blank" rel="noopener noreferrer">console.groq.com/docs/models</a>.' },
+      { key: "api_key", label: "API key", type: "password", secret: true, hint:
+        'Get a free key at <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer">console.groq.com/keys</a>.' },
       { key: "batch_token_budget", label: "Batch size (dialogue tokens)", type: "number", min: 1, step: 100, hint:
         "Groq also enforces a 6000 TPM cap for this model on top of request-count limits — 1800 keeps the full round-trip safely under that ceiling." },
       { key: "concurrent_batch_window", label: "Concurrent batches", type: "number", min: 1, step: 1, hint:
@@ -108,6 +111,7 @@ const NUM_CTX_OPTIONS = [4096, 8192, 16384, 32768, 65536, 131072, 262144];
 function formatNumCtx(value) {
   return value >= 1024 ? `${value / 1024}k` : String(value);
 }
+
 
 createApp({
   data() {

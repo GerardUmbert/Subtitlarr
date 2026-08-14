@@ -3,6 +3,13 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.11.5]
+
+### Fixed
+- Engine config hints that pointed to a docs/dashboard URL (e.g. "Get a
+  free key at aistudio.google.com/apikey") rendered as plain text
+  instead of a clickable link.
+
 ## [0.11.4]
 
 ### Fixed
