@@ -1,3 +1,4 @@
+import functools
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -75,19 +76,19 @@ async def lifespan(app: FastAPI):
     if settings.sync_media_cron:
         state.cron_scheduler.install(
             settings.sync_media_cron,
-            lambda: jobs.cron_sync_media(state.run_controller),
+            functools.partial(jobs.cron_sync_media, state.run_controller),
             job_id="sync_media",
         )
     if settings.sync_subs_cron:
         state.cron_scheduler.install(
             settings.sync_subs_cron,
-            lambda: jobs.cron_sync_subs(state.run_controller),
+            functools.partial(jobs.cron_sync_subs, state.run_controller),
             job_id="sync_subs",
         )
     if settings.language_check_cron:
         state.cron_scheduler.install(
             settings.language_check_cron,
-            lambda: jobs.cron_language_check(state.run_controller),
+            functools.partial(jobs.cron_language_check, state.run_controller),
             job_id="language_check",
         )
     if settings.push_uploads_cron:

@@ -8,6 +8,23 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed
 - The Docs page's sidebar was highlighting the wrong section while
   scrolling past some subsections.
+- The site nav wasn't centered in the header and could overflow on the
+  Docs page on mobile.
+- The mobile hamburger menu didn't sit flush right and wasn't aligned
+  with the GitHub button.
+- The `sync_media`, `sync_subs`, and `language_check` scheduled jobs
+  never actually ran on their own — only on-demand via the Jobs page.
+  Each was wired up with a lambda that just returns a coroutine
+  (`lambda: cron_sync_media(runner)`) so it could be pre-bound with the
+  run controller; APScheduler decides whether to await a job based on
+  whether the callable itself is a coroutine function, and a lambda
+  never qualifies, so it ran the lambda synchronously, got back an
+  unawaited coroutine, and discarded it without ever entering the job
+  body. `push_uploads` and `backup` take no arguments and were passed
+  directly, so they were unaffected and ran on schedule as normal — the
+  fix wires the other three through `functools.partial` instead, which
+  APScheduler correctly recognizes and awaits like a native coroutine
+  function.
 
 ## [0.11.3]
 

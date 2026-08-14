@@ -1,3 +1,5 @@
+import functools
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -74,15 +76,15 @@ def set_schedule_config(
     try:
         _apply_sync_cron(
             scheduler, "sync_media", config.sync_media_cron,
-            lambda: jobs_api.cron_sync_media(runner),
+            functools.partial(jobs_api.cron_sync_media, runner),
         )
         _apply_sync_cron(
             scheduler, "sync_subs", config.sync_subs_cron,
-            lambda: jobs_api.cron_sync_subs(runner),
+            functools.partial(jobs_api.cron_sync_subs, runner),
         )
         _apply_sync_cron(
             scheduler, "language_check", config.language_check_cron,
-            lambda: jobs_api.cron_language_check(runner),
+            functools.partial(jobs_api.cron_language_check, runner),
         )
         _apply_sync_cron(
             scheduler, "push_uploads", config.push_uploads_cron,

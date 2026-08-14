@@ -44,6 +44,9 @@
 <div class="changelog-section-title">Fixed</div>
 <ul>
 <li>The Docs page&#x27;s sidebar was highlighting the wrong section while scrolling past some subsections.</li>
+<li>The site nav wasn&#x27;t centered in the header and could overflow on the Docs page on mobile.</li>
+<li>The mobile hamburger menu didn&#x27;t sit flush right and wasn&#x27;t aligned with the GitHub button.</li>
+<li>The <code>sync_media</code>, <code>sync_subs</code>, and <code>language_check</code> scheduled jobs never actually ran on their own — only on-demand via the Jobs page. Each was wired up with a lambda that just returns a coroutine (<code>lambda: cron_sync_media(runner)</code>) so it could be pre-bound with the run controller; APScheduler decides whether to await a job based on whether the callable itself is a coroutine function, and a lambda never qualifies, so it ran the lambda synchronously, got back an unawaited coroutine, and discarded it without ever entering the job body. <code>push_uploads</code> and <code>backup</code> take no arguments and were passed directly, so they were unaffected and ran on schedule as normal — the fix wires the other three through <code>functools.partial</code> instead, which APScheduler correctly recognizes and awaits like a native coroutine function.</li>
 </ul>
 </div>
 <div class="changelog-entry reveal-scroll">
