@@ -2,12 +2,16 @@
 the API routers via FastAPI dependency functions."""
 from __future__ import annotations
 
+import asyncio
+import logging
 import sqlite3
 import threading
-from typing import TYPE_CHECKING
+from typing import Coroutine, TYPE_CHECKING
 
 from app.bazarr.client import BazarrClient
 from app.scheduler.cron import CronScheduler
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     # Import-time only — runner.py itself imports `app.state` (for
@@ -55,3 +59,32 @@ def get_scheduler() -> CronScheduler:
     if cron_scheduler is None:
         raise RuntimeError("Scheduler not initialized")
     return cron_scheduler
+
+
+def spawn_background_task(coro: Coroutine, *, description: str) -> asyncio.Task:
+    """asyncio.create_task(coro) plus a done-callback that logs any
+    exception the task raised. Every API endpoint that fires a run/job as
+    fire-and-forget (returning 200 immediately, e.g. run-filtered,
+    sync-media, backup) MUST go through this instead of calling
+    asyncio.create_task directly.
+
+    Without this, an uncaught exception in a fire-and-forget task is only
+    ever reported by asyncio's default handler as a bare "Task exception
+    was never retrieved" warning — outside the app's own logging setup,
+    and only fired whenever the Task object happens to be garbage
+    collected, which can be arbitrarily delayed. Confirmed live: a
+    filtered translation run crashed partway through resolving items
+    (one bad Bazarr response), silently killing the whole run with
+    nothing in the container's logs and no error surfaced to the UI —
+    the run just looked like it had done nothing, with no explanation."""
+    task = asyncio.create_task(coro)
+
+    def _log_if_failed(t: asyncio.Task) -> None:
+        if t.cancelled():
+            return
+        exc = t.exception()
+        if exc is not None:
+            logger.exception("Background task failed: %s", description, exc_info=exc)
+
+    task.add_done_callback(_log_if_failed)
+    return task

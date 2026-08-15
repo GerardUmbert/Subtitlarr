@@ -138,6 +138,51 @@ async def test_daily_limit_zero_means_unlimited(conn, monkeypatch):
     assert progress.total == 5
 
 
+def test_daily_limit_remaining_reflects_todays_completions(conn):
+    for i in range(2):
+        repository.upsert_item_seen(
+            conn, item_type="movie", bazarr_id=200 + i, series_id=None,
+            title=f"Done {i}", series_title=None, season_episode=None,
+            target_language="it",
+        )
+    for row in conn.execute("SELECT id FROM items WHERE bazarr_id IN (200, 201)").fetchall():
+        repository.update_item_status(conn, row["id"], "done", mark_completed=True)
+
+    settings = Settings(daily_translation_limit=5, pause_between_items_seconds=0)
+    controller = RunController(conn, lambda: object(), settings)
+
+    assert controller.daily_limit_remaining() == 3
+
+
+def test_daily_limit_remaining_never_negative_when_over_cap(conn):
+    """Regression test: 'Run all N matching' on the Queue page returned a
+    false {"started": True} and silently processed zero items once the
+    day's completions exceeded the cap (125 done against a limit of 100)
+    — the API pre-check needs a value it can compare against 0 to refuse
+    the request honestly instead of run_batch()'s own internal
+    ready_items[:remaining] slice quietly producing an empty batch."""
+    for i in range(5):
+        repository.upsert_item_seen(
+            conn, item_type="movie", bazarr_id=300 + i, series_id=None,
+            title=f"Done {i}", series_title=None, season_episode=None,
+            target_language="it",
+        )
+    for row in conn.execute("SELECT id FROM items WHERE bazarr_id BETWEEN 300 AND 304").fetchall():
+        repository.update_item_status(conn, row["id"], "done", mark_completed=True)
+
+    settings = Settings(daily_translation_limit=3, pause_between_items_seconds=0)
+    controller = RunController(conn, lambda: object(), settings)
+
+    assert controller.daily_limit_remaining() == 0  # not -2
+
+
+def test_daily_limit_remaining_is_none_when_unlimited(conn):
+    settings = Settings(daily_translation_limit=0, pause_between_items_seconds=0)
+    controller = RunController(conn, lambda: object(), settings)
+
+    assert controller.daily_limit_remaining() is None
+
+
 @pytest.mark.asyncio
 async def test_per_item_manual_run_bypasses_daily_limit(conn, monkeypatch):
     """A forced per-item re-run is an explicit one-off request and must

@@ -52,6 +52,12 @@
 <li>Compare Engines: when both sides share the same engine instance, the diff headers and downloaded filenames now show the temperature so the two results stay distinguishable.</li>
 <li>Raised the local (Ollama/llama.cpp) watchdog timeout from 300s to 600s, and the outer request timeout from 600s to 1200s, so the watchdog still has room to catch a stuck request and retry before the whole attempt times out.</li>
 </ul>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li>A &quot;Run all N matching&quot; / filtered bulk run silently did nothing — with no error anywhere — once the day&#x27;s completions already exceeded <code>daily_translation_limit</code>. The API returned a false <code>started: true</code> before the cap check (which only lived inside the background task) ever ran, so the click looked successful but translated zero items. Run-filtered and run-now/scheduled now check the cap up front and refuse honestly with a real reason, the same way an already-active run is refused.</li>
+<li>A single bad Bazarr response for ONE item in a filtered/bulk run could silently kill the ENTIRE run with no error logged anywhere — confirmed live: a 5-item batch processed zero items because one item&#x27;s Bazarr detail call threw, and that exception escaped before the run&#x27;s own error handling even started. A failing item is now marked <code>failed</code> with a real reason and the rest of the batch continues unaffected.</li>
+<li>Every fire-and-forget background task (translation runs, Bazarr syncs, backups, language checks, model pulls) now logs an uncaught exception immediately instead of relying on asyncio&#x27;s default handler, which only ever reported it as a bare, easy-to-miss &quot;Task exception was never retrieved&quot; warning outside the app&#x27;s own logging — and only whenever the Task object happened to be garbage collected.</li>
+</ul>
 </div>
 <div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.11.8</div>

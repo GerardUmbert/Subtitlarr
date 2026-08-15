@@ -32,6 +32,29 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   watchdog still has room to catch a stuck request and retry before the
   whole attempt times out.
 
+### Fixed
+- A "Run all N matching" / filtered bulk run silently did nothing —
+  with no error anywhere — once the day's completions already exceeded
+  `daily_translation_limit`. The API returned a false `started: true`
+  before the cap check (which only lived inside the background task)
+  ever ran, so the click looked successful but translated zero items.
+  Run-filtered and run-now/scheduled now check the cap up front and
+  refuse honestly with a real reason, the same way an already-active
+  run is refused.
+- A single bad Bazarr response for ONE item in a filtered/bulk run
+  could silently kill the ENTIRE run with no error logged anywhere —
+  confirmed live: a 5-item batch processed zero items because one
+  item's Bazarr detail call threw, and that exception escaped before
+  the run's own error handling even started. A failing item is now
+  marked `failed` with a real reason and the rest of the batch
+  continues unaffected.
+- Every fire-and-forget background task (translation runs, Bazarr
+  syncs, backups, language checks, model pulls) now logs an uncaught
+  exception immediately instead of relying on asyncio's default
+  handler, which only ever reported it as a bare, easy-to-miss "Task
+  exception was never retrieved" warning outside the app's own logging
+  — and only whenever the Task object happened to be garbage collected.
+
 ## [0.11.8]
 
 ### Added

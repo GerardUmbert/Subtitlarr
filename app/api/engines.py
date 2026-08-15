@@ -1,8 +1,7 @@
-import asyncio
-
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app import state
 from app.providers import pull_state
 from app.providers.llamacpp_provider import LlamaCppProvider
 from app.providers.ollama_provider import OllamaProvider
@@ -72,7 +71,7 @@ async def pull_ollama_model(req: PullModelRequest):
         finally:
             await provider.aclose()
 
-    asyncio.create_task(_run())
+    state.spawn_background_task(_run(), description=f"ollama-pull({req.model})")
     return {"started": True, "model": req.model}
 
 

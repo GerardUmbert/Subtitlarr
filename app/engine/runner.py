@@ -102,6 +102,30 @@ class RunController:
         self._settings = settings
         self.current: RunProgress | None = None
 
+    def daily_limit_remaining(self) -> int | None:
+        """None means unlimited (daily_translation_limit <= 0). Otherwise
+        the number of items a NEW enforce_daily_limit=True run is still
+        allowed to process today — can be 0.
+
+        Exists so callers (the run-filtered/run-by-ids API endpoints) can
+        refuse to even START a run that the cap would immediately reduce
+        to zero, instead of returning {"started": True} and then silently
+        processing nothing inside run_batch()'s own ready_items[:remaining]
+        slice. Confirmed live: a filtered run already over the daily cap
+        returned a false "started" response, ran its background task to
+        completion in ~10ms having translated nothing, and gave the user
+        no indication anything had gone differently than a normal run —
+        no error, no toast, nothing in the UI to explain the no-op."""
+        if self._settings.daily_translation_limit <= 0:
+            return None
+        with state.db_lock:
+            already_done_today = repository.count_completed_today(self._conn)
+        return max(0, self._settings.daily_translation_limit - already_done_today)
+
+    @property
+    def daily_translation_limit(self) -> int:
+        return self._settings.daily_translation_limit
+
     async def run_batch(
         self, items: list[sqlite3.Row], triggered_by: str, enforce_daily_limit: bool = True
     ) -> RunProgress:

@@ -1,5 +1,3 @@
-import asyncio
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -37,7 +35,14 @@ async def run_scheduled_job_now(runner=Depends(state.get_runner)):
     lets you trigger it immediately without waiting for the next tick."""
     if runner.current is not None and runner.current.active:
         return {"started": False, "reason": "A run is already in progress"}
-    asyncio.create_task(runner.run_scheduled())
+    remaining = runner.daily_limit_remaining()
+    if remaining is not None and remaining <= 0:
+        return {
+            "started": False,
+            "reason": f"Daily translation limit reached ({runner.daily_translation_limit}/day) "
+            "— resets at UTC midnight, or raise the limit in Settings.",
+        }
+    state.spawn_background_task(runner.run_scheduled(), description="run-scheduled")
     return {"started": True}
 
 
@@ -84,7 +89,9 @@ async def sync_media(runner=Depends(state.get_runner)):
         return {"started": False, "reason": "A media sync is already in progress"}
     if runner.current is not None and runner.current.active:
         return {"started": False, "reason": "A run is already in progress"}
-    asyncio.create_task(_run_sync_media(runner, triggered_by="manual"))
+    state.spawn_background_task(
+        _run_sync_media(runner, triggered_by="manual"), description="sync-media"
+    )
     return {"started": True}
 
 
@@ -131,7 +138,9 @@ async def sync_subs(runner=Depends(state.get_runner)):
         return {"started": False, "reason": "A subtitle sync is already in progress"}
     if runner.current is not None and runner.current.active:
         return {"started": False, "reason": "A run is already in progress"}
-    asyncio.create_task(_run_sync_subs(runner, triggered_by="manual"))
+    state.spawn_background_task(
+        _run_sync_subs(runner, triggered_by="manual"), description="sync-subs"
+    )
     return {"started": True}
 
 
@@ -188,7 +197,9 @@ async def push_uploads(conn=Depends(state.get_conn), client=Depends(state.get_cl
     mid-progress, so there's no real conflict to guard against."""
     if _push_uploads_state["active"]:
         return {"started": False, "reason": "A push is already in progress"}
-    asyncio.create_task(_run_push_uploads(conn, client, triggered_by="manual"))
+    state.spawn_background_task(
+        _run_push_uploads(conn, client, triggered_by="manual"), description="push-uploads"
+    )
     return {"started": True}
 
 
@@ -290,7 +301,9 @@ async def run_language_check_now(
     if runner.current is not None and runner.current.active:
         return {"started": False, "reason": "A translation run is already in progress"}
 
-    asyncio.create_task(_run_language_check(conn, client, triggered_by="manual"))
+    state.spawn_background_task(
+        _run_language_check(conn, client, triggered_by="manual"), description="language-check"
+    )
     return {"started": True}
 
 
@@ -358,7 +371,7 @@ async def run_backup_now(conn=Depends(state.get_conn)):
     migration. Safe to run anytime, including mid-translation-run."""
     if _backup_state["active"]:
         return {"started": False, "reason": "A backup is already in progress"}
-    asyncio.create_task(_run_backup(conn, triggered_by="manual"))
+    state.spawn_background_task(_run_backup(conn, triggered_by="manual"), description="backup")
     return {"started": True}
 
 
@@ -463,7 +476,7 @@ async def run_stale_audit_now(
         finally:
             _stale_audit_state["active"] = False
 
-    asyncio.create_task(_run())
+    state.spawn_background_task(_run(), description="stale-audit")
     return {"started": True}
 
 

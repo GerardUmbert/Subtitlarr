@@ -1,3 +1,9 @@
+import httpx
+import pytest
+
+from app.bazarr.client import BazarrError
+from app.db import database, repository
+from app.engine import selector
 from app.engine.selector import SourceCandidate, pick_source_language
 
 
@@ -84,3 +90,89 @@ def test_any_language_non_hi_beats_any_language_hi_when_nothing_on_priority_list
         "fr": SourceCandidate(path="/path/fr.srt", hi=False),
     }
     assert pick_source_language(source_map, target_lang="it", source_priority=[]) == "fr"
+
+
+@pytest.fixture
+def conn(tmp_path):
+    db_path = str(tmp_path / "test.db")
+    c = database.connect(db_path)
+    database.apply_migrations(c)
+    yield c
+    c.close()
+
+
+class _FailsOnceClient:
+    """Raises for one specific bazarr_id, succeeds (with a usable EN
+    source) for every other — reproduces a batch where exactly one item's
+    Bazarr detail call fails."""
+
+    def __init__(self, failing_bazarr_id: int, exc: Exception):
+        self._failing_bazarr_id = failing_bazarr_id
+        self._exc = exc
+        self.calls: list[int] = []
+
+    async def get_episode_detail(self, bazarr_id: int):
+        self.calls.append(bazarr_id)
+        if bazarr_id == self._failing_bazarr_id:
+            raise self._exc
+        from app.bazarr.schemas import EpisodeDetail, SubtitleInfo
+
+        return EpisodeDetail(
+            audio_language=None, episode=1, missing_subtitles=[], monitored=True,
+            path=f"/tv/Show/{bazarr_id}.mkv", season=1, sonarrEpisodeId=bazarr_id,
+            sonarrSeriesId=1,
+            subtitles=[
+                SubtitleInfo(
+                    name="English", code2="en", code3="eng", forced=False, hi=False,
+                    path=f"/tv/Show/{bazarr_id}.en.srt", file_size=100, embedded_track_id=None,
+                )
+            ],
+            title=f"Episode {bazarr_id}", sceneName=None,
+        )
+
+    async def get_movie_detail(self, radarr_id: int):
+        return None
+
+
+def _seed_items(conn, count: int, target_language="es") -> list:
+    for i in range(count):
+        repository.upsert_item_seen(
+            conn, item_type="episode", bazarr_id=100 + i, series_id=1,
+            title=f"Episode {i}", series_title="Show", season_episode=f"1x{i + 1}",
+            target_language=target_language,
+        )
+    return conn.execute("SELECT * FROM items ORDER BY bazarr_id ASC").fetchall()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "exc",
+    [
+        httpx.HTTPStatusError("500", request=httpx.Request("GET", "http://x"), response=httpx.Response(500)),
+        httpx.ConnectError("connection refused"),
+        BazarrError("bad response shape"),
+    ],
+)
+async def test_resolve_and_gate_isolates_a_single_bad_item_instead_of_killing_the_batch(conn, exc):
+    """Regression test: a real live filtered run over 5 items silently
+    processed ZERO of them, with no error anywhere in the app's logs and
+    no indication in the UI, because ONE item's Bazarr detail call threw
+    and resolve_and_gate's unguarded loop let that exception kill the
+    whole batch before run_batch's own try/finally (which only protects
+    the translation loop, not item resolution) ever started. A bad item
+    must be marked 'failed' and skipped — the other healthy items in the
+    same batch must still resolve and come back ready."""
+    items = _seed_items(conn, 5)
+    failing_id = items[2]["bazarr_id"]  # the middle item fails
+    client = _FailsOnceClient(failing_bazarr_id=failing_id, exc=exc)
+
+    ready = await selector.resolve_and_gate(conn, client, items, source_priority=["en"])
+
+    assert len(ready) == 4  # 4 healthy items still made it through
+    assert client.calls == [item["bazarr_id"] for item in items]  # every item was still attempted
+
+    failed_item = conn.execute(
+        "SELECT status, error_message FROM items WHERE bazarr_id = ?", (failing_id,)
+    ).fetchone()
+    assert failed_item["status"] == "failed"
+    assert failed_item["error_message"] is not None

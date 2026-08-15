@@ -1,9 +1,14 @@
+import logging
 import sqlite3
 from dataclasses import dataclass
 
+import httpx
+
 from app import state
-from app.bazarr.client import BazarrClient
+from app.bazarr.client import BazarrClient, BazarrError
 from app.db import repository
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -95,10 +100,32 @@ async def resolve_and_gate(
     Items with no usable source (no existing subtitle in any language other
     than the target itself) are marked skipped_no_source and excluded.
     Returns a list of dicts ready for the translator: item row + resolved
-    source_lang/source_path."""
+    source_lang/source_path.
+
+    A per-item Bazarr failure (timeout, connection error, 5xx, malformed
+    response) is caught and marks JUST that one item 'failed' rather than
+    aborting the whole batch — confirmed live: an unguarded call here let
+    one bad Bazarr response for one item in a 5-item filtered run silently
+    kill resolve_and_gate entirely, which (since this runs before
+    run_batch's own try/finally) killed the whole fire-and-forget run_batch
+    task with no error ever reaching the app's logs or the UI. The other
+    4 healthy items in that batch never even got a chance to run."""
     ready = []
     for item in items:
-        source_map = await build_source_map(client, item["item_type"], item["bazarr_id"])
+        try:
+            source_map = await build_source_map(client, item["item_type"], item["bazarr_id"])
+        except (httpx.HTTPError, BazarrError) as exc:
+            logger.error(
+                "resolve_and_gate: Bazarr call failed for item %d (%s); marking failed, "
+                "continuing with the rest of the batch",
+                item["id"], exc,
+            )
+            with state.db_lock:
+                repository.update_item_status(
+                    conn, item["id"], "failed",
+                    error_message=f"Could not resolve source from Bazarr: {exc}",
+                )
+            continue
         matched_lang = pick_source_language(source_map, item["target_language"], source_priority)
         if matched_lang is None:
             with state.db_lock:

@@ -78,3 +78,31 @@ def test_run_filtered_refuses_when_a_run_is_already_active(client):
     assert "already in progress" in body["reason"]
 
     state.run_controller.current = None  # cleanup
+
+
+def test_run_filtered_refuses_honestly_when_daily_limit_already_reached(client, monkeypatch):
+    """Regression test: with the daily cap already exhausted, run-filtered
+    previously returned {"started": True} unconditionally (the check only
+    lived inside run_batch's fire-and-forget background task, which then
+    silently sliced ready_items down to nothing) — the click looked
+    successful but translated zero items with no error anywhere. The API
+    must check the cap BEFORE scheduling the background task and refuse
+    honestly, the same way it already refuses for an active run."""
+    from app import state
+    from app.engine.runner import RunController
+
+    monkeypatch.setattr(RunController, "daily_limit_remaining", lambda self: 0)
+
+    called = {"run_filtered": False}
+
+    async def fake_run_filtered(self, status, item_type, search, model=None):
+        called["run_filtered"] = True
+
+    monkeypatch.setattr(RunController, "run_filtered", fake_run_filtered)
+
+    resp = client.post("/api/queue/run-filtered")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["started"] is False
+    assert "limit" in body["reason"].lower()
+    assert called["run_filtered"] is False  # never even scheduled

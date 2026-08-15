@@ -1,5 +1,3 @@
-import asyncio
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -86,7 +84,16 @@ async def run_filtered(
     Respects the normal daily cap/age gate, same as a scheduled run."""
     if runner.current is not None and runner.current.active:
         return {"started": False, "reason": "A run is already in progress"}
-    asyncio.create_task(runner.run_filtered(status, item_type, search, model))
+    remaining = runner.daily_limit_remaining()
+    if remaining is not None and remaining <= 0:
+        return {
+            "started": False,
+            "reason": f"Daily translation limit reached ({runner.daily_translation_limit}/day) "
+            "— resets at UTC midnight, or raise the limit in Settings.",
+        }
+    state.spawn_background_task(
+        runner.run_filtered(status, item_type, search, model), description="run-filtered"
+    )
     return {"started": True}
 
 
@@ -106,7 +113,7 @@ async def run_by_ids(req: RunByIdsRequest, runner=Depends(state.get_runner)):
         return {"started": False, "reason": "A run is already in progress"}
     if not req.item_ids:
         return {"started": False, "reason": "No item ids given"}
-    asyncio.create_task(runner.run_by_ids(req.item_ids))
+    state.spawn_background_task(runner.run_by_ids(req.item_ids), description="run-by-ids")
     return {"started": True, "count": len(req.item_ids)}
 
 
@@ -157,5 +164,7 @@ async def run_item(
         source_map, row["target_language"], source_priority
     )
 
-    asyncio.create_task(runner.run_single_item(item_id))
+    state.spawn_background_task(
+        runner.run_single_item(item_id), description=f"run-single-item({item_id})"
+    )
     return {"started": True, "source_language": resolved_source}

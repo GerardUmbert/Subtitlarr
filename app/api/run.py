@@ -1,5 +1,3 @@
-import asyncio
-
 from fastapi import APIRouter, Depends
 
 from app import state
@@ -12,7 +10,14 @@ router = APIRouter(prefix="/api/run", tags=["run"])
 async def run_now(runner=Depends(state.get_runner)):
     if runner.current is not None and runner.current.active:
         return {"started": False, "reason": "A run is already in progress"}
-    asyncio.create_task(runner.run_now())
+    remaining = runner.daily_limit_remaining()
+    if remaining is not None and remaining <= 0:
+        return {
+            "started": False,
+            "reason": f"Daily translation limit reached ({runner.daily_translation_limit}/day) "
+            "— resets at UTC midnight, or raise the limit in Settings.",
+        }
+    state.spawn_background_task(runner.run_now(), description="run-now")
     return {"started": True}
 
 
@@ -38,7 +43,7 @@ async def poll_now(runner=Depends(state.get_runner)):
         finally:
             _poll_state["active"] = False
 
-    asyncio.create_task(_run())
+    state.spawn_background_task(_run(), description="poll")
     return {"started": True}
 
 
