@@ -49,6 +49,9 @@
   </div>
 
   <h2 id="gemini" class="reveal-scroll">Google Gemini</h2>
+  <div class="callout">
+    <strong>Use a Google account dedicated to this app — not your main personal one.</strong> Automated translation traffic can occasionally trip Google's automated abuse/ToS review systems (e.g. a burst of retries after a batch of failures), and a flagged account's API access can be suspended with little warning. If that account is also your main Gmail/Drive/Photos account, the fallout isn't limited to this app. Create a fresh Google account with nothing else tied to it and use that one here — a handful of free accounts is normal for this setup anyway (see "Doubling again with a second account" below), so this doesn't cost anything extra.
+  </div>
   <div class="step">
     <div class="step-num">1</div>
     <div class="step-body"><p>Go to <a href="https://aistudio.google.com">aistudio.google.com</a> and sign in with a Google account.</p></div>
@@ -81,7 +84,7 @@
   <h3>Doubling again with a second account</h3>
   <p>The same 2-models-per-key trick works again with a second Google account and its own key, for <strong>4 Gemini instances total</strong> and 2000 requests/day combined:</p>
   <ol>
-    <li>Repeat the steps above with a second Google account (a second free Gmail account works fine).</li>
+    <li>Repeat the steps above with a second Google account — again, a fresh account with nothing else tied to it, not your main one.</li>
     <li>Add it as <strong>"Gemini Secondary"</strong>, model <code>gemini-3.5-flash-lite</code>, batch token budget <code>4000</code>.</li>
     <li>Optional — add <strong>"Gemini Secondary gemini-3.1-flash-lite"</strong>, same key, model <code>gemini-3.1-flash-lite</code>, budget <code>4000</code>.</li>
     <li>Order the cascade Main → Secondary → Main (3.1) → Secondary (3.1), so BOTH accounts' stronger model is tried before either account's weaker fallback model.</li>

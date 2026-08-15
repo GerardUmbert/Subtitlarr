@@ -40,6 +40,20 @@ class ProviderContentBlockedError(ProviderError):
     configured, since ProviderError normally isn't retried at all."""
 
 
+class ProviderAuthError(ProviderError):
+    """The provider rejected the request as unauthenticated/unauthorized
+    (401, or 403 for a disabled/revoked key) — the credential itself is
+    bad, not a transient condition. Unlike ProviderRateLimitedError, this
+    will NEVER self-resolve by retrying or waiting: the same request
+    against the same instance will keep failing until the key is fixed.
+    No same-instance retry (see translator._call_provider) — falls
+    straight to the next cascade entry instead, and feeds its own
+    consecutive-failure counter (engine_instances_repo.record_auth_failure)
+    distinct from the rate-limit one, since 3 consecutive 401s mean a
+    dead key, not exhausted quota, and should never be mislabeled as
+    "rate limited" in the UI."""
+
+
 class ProviderRateLimitedError(Exception):
     """Raised for retryable failures (429, timeout, transient 5xx server
     errors) — the runner retries the same provider once before falling

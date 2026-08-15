@@ -360,6 +360,112 @@ async def test_content_blocked_reraises_when_no_fallback_configured():
         await _translate_batches(_batches(1), "en", "es", _cascade(AlwaysBlocksProvider()), item_id=1)
 
 
+@pytest.mark.asyncio
+async def test_auth_error_falls_back_immediately_without_same_provider_retry():
+    """Regression test: a 401 (e.g. Gemini's disabled/deleted service
+    account — ACCOUNT_STATE_INVALID) previously had NO fallback path at
+    all, same gap as the content-block case — a bare ProviderError isn't
+    retried or fallen back from anywhere. ProviderAuthError must go
+    straight to the fallback provider WITHOUT retrying the same provider
+    first — a bad/revoked key produces the exact same 401 on an immediate
+    retry, so retrying would just waste a request."""
+    from app.providers.base import ProviderAuthError
+
+    class AlwaysUnauthorizedProvider(TranslationProvider):
+        name = "gemini"
+        provider_type = "gemini"
+        model = "test-model"
+
+        def __init__(self):
+            self.attempts: list[int] = []
+
+        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, language_variants=None):
+            index = int(dialogue_text.split("\n", 1)[0])
+            self.attempts.append(index)
+            raise ProviderAuthError("Gemini request failed (401): ACCOUNT_STATE_INVALID")
+
+        async def ask(self, prompt: str) -> str:
+            return ""
+
+        async def test_connection(self):
+            return ProviderStatus(ok=True)
+
+    provider = AlwaysUnauthorizedProvider()
+    fallback = TrackingProvider("nvidia")
+    batches = _batches(1)
+
+    translated_subs, engine_used, model_used = await _translate_batches(
+        batches, "en", "es", _cascade(provider, fallback), item_id=1
+    )
+
+    assert len(translated_subs) == 1
+    assert provider.attempts == [1]  # exactly ONE attempt — no same-provider retry
+    assert fallback.call_order == [1]  # fallback was actually used
+    assert engine_used == "nvidia"
+
+
+@pytest.mark.asyncio
+async def test_auth_error_reraises_when_no_fallback_configured():
+    """Without a fallback provider, an auth failure must still surface as
+    a real failure, same as any other unrecoverable ProviderError."""
+    from app.providers.base import ProviderAuthError
+
+    class AlwaysUnauthorizedProvider(TranslationProvider):
+        name = "gemini"
+        provider_type = "gemini"
+        model = "test-model"
+
+        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, language_variants=None):
+            raise ProviderAuthError("Gemini request failed (401): ACCOUNT_STATE_INVALID")
+
+        async def ask(self, prompt: str) -> str:
+            return ""
+
+        async def test_connection(self):
+            return ProviderStatus(ok=True)
+
+    with pytest.raises(ProviderAuthError):
+        await _translate_batches(_batches(1), "en", "es", _cascade(AlwaysUnauthorizedProvider()), item_id=1)
+
+
+@pytest.mark.asyncio
+async def test_auth_error_reports_auth_failed_via_on_call_result():
+    """on_call_result must distinguish an auth failure from a rate limit
+    (outcome="auth_failed" vs "rate_limited") — the runner routes these to
+    SEPARATE cooldown counters (engine_instances_repo.record_auth_failure
+    vs record_rate_limited_failure), since a bad key won't self-resolve
+    the way a rate limit does and must not be mislabeled as one."""
+    from app.providers.base import ProviderAuthError
+
+    class AlwaysUnauthorizedProvider(TranslationProvider):
+        name = "gemini"
+        provider_type = "gemini"
+        model = "test-model"
+
+        async def translate(self, dialogue_text, source_lang, target_lang, catalan_vegeta_insults=False, language_variants=None):
+            raise ProviderAuthError("Gemini request failed (401): ACCOUNT_STATE_INVALID")
+
+        async def ask(self, prompt: str) -> str:
+            return ""
+
+        async def test_connection(self):
+            return ProviderStatus(ok=True)
+
+    results: list[tuple[str, str]] = []
+
+    def on_call_result(provider, outcome: str) -> None:
+        results.append((provider.name, outcome))
+
+    fallback = TrackingProvider("nvidia")
+    await _translate_batches(
+        _batches(1), "en", "es", _cascade(AlwaysUnauthorizedProvider(), fallback), item_id=1,
+        on_call_result=on_call_result,
+    )
+
+    assert ("gemini", "auth_failed") in results
+    assert ("nvidia", "ok") in results
+
+
 def _repetition_loop_batch() -> list[list[srt.Subtitle]]:
     """12 cues with distinct source content, all in ONE batch — enough to
     trip MAX_CONSECUTIVE_REPEATS (10) once a provider echoes the same

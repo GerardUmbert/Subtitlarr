@@ -15,10 +15,10 @@ logger = logging.getLogger(__name__)
 
 # Same reasoning as Ollama's DEFAULT_OLLAMA_TIMEOUT_SECONDS: a real local
 # translation request can legitimately take minutes for a large batch on
-# consumer hardware, so this needs real margin over normal-case latency
-# without ballooning into a many-minutes ceiling that masks a genuinely
-# stuck request.
-DEFAULT_LLAMACPP_TIMEOUT_SECONDS = 600.0
+# consumer hardware. Set well above WATCHDOG_TIMEOUT_SECONDS (below) so the
+# watchdog always gets a chance to cancel and retry a stuck request BEFORE
+# this outer timeout would otherwise cut the whole attempt short.
+DEFAULT_LLAMACPP_TIMEOUT_SECONDS = 1200.0
 
 # Watchdog, same role as Ollama's WATCHDOG_TIMEOUT_SECONDS: llama.cpp's
 # server has no equivalent to Ollama's keep_alive=0 force-unload (there is
@@ -26,7 +26,7 @@ DEFAULT_LLAMACPP_TIMEOUT_SECONDS = 600.0
 # via CLI args, not per-request), so a wedged request here can only be
 # broken by cancelling client-side and retrying against the same
 # already-running server — there's nothing to force-unload.
-WATCHDOG_TIMEOUT_SECONDS = 300.0
+WATCHDOG_TIMEOUT_SECONDS = 600.0
 
 
 class LlamaCppProvider(TranslationProvider):

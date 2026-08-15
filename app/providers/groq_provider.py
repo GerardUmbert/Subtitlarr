@@ -4,6 +4,7 @@ import time
 import httpx
 
 from app.providers.base import (
+    ProviderAuthError,
     ProviderError,
     ProviderRateLimitedError,
     ProviderStatus,
@@ -131,6 +132,10 @@ class GroqProvider(TranslationProvider):
             # Transient server-side failure — retryable, same as a rate
             # limit, rather than a hard failure.
             raise ProviderRateLimitedError(f"Groq server error ({resp.status_code}): {resp.text}")
+        if resp.status_code in (401, 403):
+            # A bad/revoked key will never self-resolve by retrying —
+            # see ProviderAuthError's docstring.
+            raise ProviderAuthError(f"Groq request failed ({resp.status_code}): {resp.text}")
         if resp.status_code != 200:
             raise ProviderError(f"Groq request failed ({resp.status_code}): {resp.text}")
 

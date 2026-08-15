@@ -6,9 +6,12 @@ def test_default_timeout_is_generous_but_bounded():
     batch sizes grew (from raising num_ctx). The default must be higher
     than that old value, but grounded in what was actually observed
     (~3 min real translations on the user's hardware) rather than an
-    unbounded scale-with-context formula that could balloon to 17+ minutes."""
-    assert DEFAULT_OLLAMA_TIMEOUT_SECONDS > 300.0
-    assert DEFAULT_OLLAMA_TIMEOUT_SECONDS <= 900.0  # ~15 min hard ceiling, not open-ended
+    unbounded scale-with-context formula that could balloon indefinitely.
+    Must also stay comfortably above WATCHDOG_TIMEOUT_SECONDS (600s) —
+    otherwise httpx's own timeout could fire before the watchdog gets a
+    chance to cancel, force-unload, and retry a stuck request."""
+    assert DEFAULT_OLLAMA_TIMEOUT_SECONDS > 600.0
+    assert DEFAULT_OLLAMA_TIMEOUT_SECONDS <= 1800.0  # ~30 min hard ceiling, not open-ended
 
 
 def test_timeout_is_flat_regardless_of_context_size():

@@ -6,6 +6,7 @@ import time
 import httpx
 
 from app.providers.base import (
+    ProviderAuthError,
     ProviderContentBlockedError,
     ProviderError,
     ProviderRateLimitedError,
@@ -180,6 +181,14 @@ class GeminiProvider(TranslationProvider):
             raise ProviderRateLimitedError(
                 f"Gemini server error ({resp.status_code}): {resp.text}"
             )
+        if resp.status_code in (401, 403):
+            # Confirmed live: a disabled/deleted Google Cloud service
+            # account returns 401 ACCOUNT_STATE_INVALID — this will never
+            # self-resolve by retrying (unlike a 429), so it must NOT be
+            # treated as the generic ProviderError below, which the
+            # runner never retries OR falls back from at all. See
+            # ProviderAuthError's docstring.
+            raise ProviderAuthError(f"Gemini request failed ({resp.status_code}): {resp.text}")
         if resp.status_code != 200:
             raise ProviderError(f"Gemini request failed ({resp.status_code}): {resp.text}")
 

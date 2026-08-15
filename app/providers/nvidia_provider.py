@@ -4,6 +4,7 @@ import time
 import httpx
 
 from app.providers.base import (
+    ProviderAuthError,
     ProviderError,
     ProviderRateLimitedError,
     ProviderStatus,
@@ -161,6 +162,10 @@ class NvidiaProvider(TranslationProvider):
             raise ProviderRateLimitedError(
                 f"NVIDIA server error ({resp.status_code}): {resp.text}"
             )
+        if resp.status_code in (401, 403):
+            # A bad/revoked key will never self-resolve by retrying —
+            # see ProviderAuthError's docstring.
+            raise ProviderAuthError(f"NVIDIA request failed ({resp.status_code}): {resp.text}")
         if resp.status_code != 200:
             raise ProviderError(f"NVIDIA request failed ({resp.status_code}): {resp.text}")
 

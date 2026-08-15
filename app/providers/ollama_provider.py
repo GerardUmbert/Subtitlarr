@@ -18,19 +18,22 @@ logger = logging.getLogger(__name__)
 # A flat, generous-but-bounded request timeout. A real live request timed
 # out at a fixed 300s once num_ctx (and therefore batch size) was raised —
 # actual translation time on this hardware runs ~3 minutes even for large
-# batches, so 600s gives real margin (~3x normal) without ballooning into
-# a many-minutes ceiling that would mask a genuinely stuck request.
-DEFAULT_OLLAMA_TIMEOUT_SECONDS = 600.0
+# batches. Set well above WATCHDOG_TIMEOUT_SECONDS (below) so the watchdog
+# always gets a chance to catch a stuck request, force-unload, and retry
+# BEFORE this outer timeout would otherwise cut the whole attempt short —
+# if the two were equal, httpx's own TimeoutException could fire first and
+# skip the unload+retry recovery step entirely.
+DEFAULT_OLLAMA_TIMEOUT_SECONDS = 1200.0
 
 # Watchdog: if a single translate request runs longer than this with no
 # response, something is likely wedged (observed live: GPU compute/VRAM not
 # maxed during a 5+ minute "stuck-looking" request). Rather than just wait
-# out the full 600s httpx timeout, cancel at this shorter threshold, force
+# out the full outer httpx timeout, cancel at this shorter threshold, force
 # the model out of Ollama's memory (keep_alive=0 — there is no HTTP endpoint
 # to abort an in-progress generation directly), and retry exactly once. If
 # the retry also exceeds the threshold, give up — surface a real failure
 # rather than looping forever.
-WATCHDOG_TIMEOUT_SECONDS = 300.0
+WATCHDOG_TIMEOUT_SECONDS = 600.0
 
 
 def _default_timeout_for_context(num_ctx: int) -> float:

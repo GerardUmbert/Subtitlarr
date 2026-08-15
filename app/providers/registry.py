@@ -1,3 +1,4 @@
+from app.providers.anthropic_provider import AnthropicProvider
 from app.providers.base import TranslationProvider
 from app.providers.gemini_provider import GeminiProvider
 from app.providers.groq_provider import GroqProvider
@@ -6,17 +7,17 @@ from app.providers.nvidia_provider import NvidiaProvider
 from app.providers.ollama_provider import OllamaProvider
 from app.providers.openrouter_provider import OpenRouterProvider
 
-# Only Ollama, Gemini, NVIDIA, OpenRouter, Groq, and llama.cpp are
-# instantiable in v1. OpenAI/Anthropic/Grok exist as stub classes (see
-# their modules) proving the interface needs no rework to add them later
-# — they're intentionally left out of this factory map.
-_FACTORIES = {"ollama", "gemini", "nvidia", "openrouter", "groq", "llamacpp"}
+# Ollama, Gemini, NVIDIA, OpenRouter, Groq, llama.cpp, and Anthropic are
+# instantiable. OpenAI/Grok still exist as stub classes (see their
+# modules) proving the interface needs no rework to add them later —
+# they're intentionally left out of this factory map.
+_FACTORIES = {"ollama", "gemini", "nvidia", "openrouter", "groq", "llamacpp", "anthropic"}
 
 # Cloud providers get windowed concurrency (see translator._CONCURRENT_
 # PROVIDERS, which mirrors this same set) — local providers (Ollama,
 # llama.cpp) don't, since concurrent requests would just serialize
 # against the same GPU/model instance anyway.
-CONCURRENT_PROVIDER_TYPES = {"nvidia", "openrouter", "groq", "gemini"}
+CONCURRENT_PROVIDER_TYPES = {"nvidia", "openrouter", "groq", "gemini", "anthropic"}
 
 # Each provider_type's config dict defaults — used both to fill in a
 # freshly-created instance's config and to validate/coerce what's read
@@ -79,6 +80,13 @@ DEFAULT_CONFIG_BY_TYPE: dict[str, dict] = {
         "concurrent_batch_window": 1,
         "temperature": DEFAULT_TEMPERATURE,
     },
+    "anthropic": {
+        "api_key": "",
+        "model": "claude-haiku-4-5-20251001",
+        "batch_token_budget": 4000,
+        "concurrent_batch_window": 3,
+        "temperature": DEFAULT_TEMPERATURE,
+    },
 }
 
 
@@ -138,6 +146,11 @@ def build_provider(
         )
     elif provider_type == "groq":
         provider = GroqProvider(
+            api_key=config["api_key"], model=config["model"], temperature=temperature,
+            instance_name=instance_name,
+        )
+    elif provider_type == "anthropic":
+        provider = AnthropicProvider(
             api_key=config["api_key"], model=config["model"], temperature=temperature,
             instance_name=instance_name,
         )

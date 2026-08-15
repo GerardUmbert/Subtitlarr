@@ -12,6 +12,7 @@ _SECRET_FIELDS_BY_TYPE = {
     "nvidia": ["api_key"],
     "openrouter": ["api_key"],
     "groq": ["api_key"],
+    "anthropic": ["api_key"],
     "llamacpp": ["api_key"],  # optional — llama.cpp itself has no built-in auth
     "ollama": [],
 }

@@ -67,6 +67,9 @@
           <div v-if="instance.rate_limited_until" class="engine-status off" title="Rate-limited — 3+ consecutive failures. Clears automatically after 24h, or immediately on a successful Test connection.">
             <span class="dot"></span>rate-limited
           </div>
+          <div v-if="instance.auth_disabled_until" class="engine-status off" title="Auth failed — 3+ consecutive 401 (invalid/revoked API key) responses. This will not self-resolve by waiting — fix the key, then use Test connection to clear it immediately, or wait 24h.">
+            <span class="dot"></span>auth failed
+          </div>
           <span class="expand-arrow" :class="{ open: expandedId === instance.id }">▾</span>
         </div>
 

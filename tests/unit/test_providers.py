@@ -2,7 +2,7 @@ import httpx
 import pytest
 import respx
 
-from app.providers.base import ProviderError, ProviderRateLimitedError
+from app.providers.base import ProviderAuthError, ProviderError, ProviderRateLimitedError
 from app.providers.gemini_provider import GeminiProvider
 from app.providers.ollama_provider import OllamaProvider
 from app.providers.registry import build_cascade_providers, build_provider
@@ -197,6 +197,30 @@ async def test_gemini_response_level_safety_block_raises_clear_error():
 
 @pytest.mark.asyncio
 @respx.mock
+@pytest.mark.parametrize("status_code", [401, 403])
+async def test_gemini_auth_failure_raises_provider_auth_error(status_code):
+    """Regression test: a disabled/deleted Google Cloud service account
+    returns 401 ACCOUNT_STATE_INVALID — this must raise ProviderAuthError
+    specifically, not the generic ProviderError every other non-200/5xx
+    status falls into, since translator.py routes ProviderAuthError to an
+    immediate no-retry cascade fallback and a SEPARATE cooldown counter
+    from rate limits (a bad key won't self-resolve by waiting)."""
+    respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+    ).mock(
+        return_value=httpx.Response(
+            status_code,
+            json={"error": {"code": status_code, "status": "UNAUTHENTICATED"}},
+        )
+    )
+    provider = GeminiProvider(api_key="testkey", model="gemini-1.5-flash")
+    with pytest.raises(ProviderAuthError):
+        await provider.translate("1\nHello.", "en", "es")
+    await provider.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_gemini_unmapped_response_shape_still_raises_with_raw_detail():
     """A response shape that matches none of the known block/finish
     reasons must still raise cleanly (not crash with an uncaught
@@ -262,3 +286,10 @@ def test_registry_builds_groq():
 def test_registry_builds_llamacpp():
     provider = build_provider("llamacpp", {"base_url": "http://localhost:8080"})
     assert provider.provider_type == "llamacpp"
+
+
+def test_registry_builds_anthropic():
+    provider = build_provider(
+        "anthropic", {"api_key": "testkey", "model": "claude-haiku-4-5-20251001"}
+    )
+    assert provider.provider_type == "anthropic"

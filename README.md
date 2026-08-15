@@ -64,7 +64,12 @@ automatically):
   another name for it — no web UI, no model-switching endpoint; the server
   is started with one fixed model already loaded via its own CLI flags.
 - **Gemini** — Google's cloud API, usable free tier. Get a key at
-  [Google AI Studio](https://aistudio.google.com).
+  [Google AI Studio](https://aistudio.google.com). **Use a Google account
+  dedicated to this app, not your main personal one** — automated
+  translation traffic can occasionally trip Google's automated abuse/ToS
+  review and get that account's API access suspended with little warning,
+  and you don't want that tied to your primary Gmail/Drive account. See
+  [`docs/api-keys-setup.md`](docs/api-keys-setup.md) for details.
 - **NVIDIA NIM** — free tier, up to 40 requests/minute. Get a key at
   [build.nvidia.com](https://build.nvidia.com). Must be pointed at a real
   instructable chat model (defaults to DeepSeek V4 Flash) — NVIDIA also
@@ -91,9 +96,10 @@ quota, and that quota is tied to the API key (i.e. the Google account), not
 to Subtitlarr — and those two things (2 models × 2 accounts) stack. Two
 consequences worth using deliberately:
 
-- Two Gemini API keys from two different Google accounts, each added as
-  **two** instances (one per fast free-tier model), for **4 instances
-  total** — 2000 requests/day combined instead of 500:
+- Two Gemini API keys from two different Google accounts — both dedicated
+  to this app, not your main one (see above) — each added as **two**
+  instances (one per fast free-tier model), for **4 instances total** —
+  2000 requests/day combined instead of 500:
   1. **"Gemini Main"** — key from account A, model **`gemini-3.5-flash-lite`**
   2. **"Gemini Secondary"** — key from account B, model
      **`gemini-3.5-flash-lite`**

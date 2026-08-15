@@ -205,13 +205,16 @@ class RunController:
         all_providers_built: list = []
 
         def _on_call_result_for(name_to_instance_id: dict) -> Callable:
-            def _on_call_result(provider, rate_limited: bool) -> None:
+            def _on_call_result(provider, outcome: str) -> None:
                 instance_id = name_to_instance_id.get(provider.name)
                 if instance_id is None:
                     return
-                if rate_limited:
+                if outcome == "rate_limited":
                     with state.db_lock:
                         engine_instances_repo.record_rate_limited_failure(self._conn, instance_id)
+                elif outcome == "auth_failed":
+                    with state.db_lock:
+                        engine_instances_repo.record_auth_failure(self._conn, instance_id)
                 else:
                     with state.db_lock:
                         engine_instances_repo.record_success(self._conn, instance_id)

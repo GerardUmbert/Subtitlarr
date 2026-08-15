@@ -70,7 +70,7 @@ async def test_run_batch_records_rate_limited_failure_against_the_real_instance_
         # Simulate translator.py calling back with a rate-limited failure
         # against the primary cascade instance, same shape _call_provider
         # actually uses.
-        kwargs["on_call_result"](cascade[0], True)
+        kwargs["on_call_result"](cascade[0], "rate_limited")
         raise RuntimeError("simulated failure so the item doesn't count as done")
 
     monkeypatch.setattr(runner_module.translator, "translate_item", fake_translate_item)
@@ -95,7 +95,7 @@ async def test_run_batch_trips_cooldown_after_threshold_consecutive_failures(con
     monkeypatch.setattr(runner_module.selector, "resolve_and_gate", _fake_resolve_and_gate)
 
     async def fake_translate_item(conn, client, item, source_lang, source_path, cascade, run_id, **kwargs):
-        kwargs["on_call_result"](cascade[0], True)
+        kwargs["on_call_result"](cascade[0], "rate_limited")
         raise RuntimeError("simulated failure")
 
     monkeypatch.setattr(runner_module.translator, "translate_item", fake_translate_item)
@@ -126,7 +126,7 @@ async def test_run_batch_records_success_and_resets_counter(conn, monkeypatch):
     monkeypatch.setattr(runner_module.selector, "resolve_and_gate", _fake_resolve_and_gate)
 
     async def fake_translate_item(conn, client, item, source_lang, source_path, cascade, run_id, **kwargs):
-        kwargs["on_call_result"](cascade[0], False)  # success
+        kwargs["on_call_result"](cascade[0], "ok")  # success
 
     monkeypatch.setattr(runner_module.translator, "translate_item", fake_translate_item)
 
@@ -193,7 +193,7 @@ async def test_cascade_is_rebuilt_per_item_so_a_mid_run_trip_is_seen_immediately
             # test_run_batch_trips_cooldown_after_threshold_consecutive_
             # failures does across separate run_batch() calls.
             _expire_burst_debounce(conn, primary["id"])
-            kwargs["on_call_result"](cascade[0], True)  # simulate a 429 against primary
+            kwargs["on_call_result"](cascade[0], "rate_limited")  # simulate a 429 against primary
             raise RuntimeError("simulated rate limit")
         # secondary succeeds — nothing else to do
 
@@ -229,7 +229,7 @@ async def test_run_batch_stops_cleanly_when_every_instance_trips_mid_run(conn, m
 
     async def fake_translate_item(conn, client, item, source_lang, source_path, cascade, run_id, **kwargs):
         _expire_burst_debounce(conn, only["id"])
-        kwargs["on_call_result"](cascade[0], True)
+        kwargs["on_call_result"](cascade[0], "rate_limited")
         raise RuntimeError("simulated rate limit")
 
     monkeypatch.setattr(runner_module.translator, "translate_item", fake_translate_item)

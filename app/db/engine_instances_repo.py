@@ -21,6 +21,18 @@ SEPARATOR_TYPE = "separator"
 RATE_LIMIT_FAILURE_THRESHOLD = 3
 RATE_LIMIT_COOLDOWN_HOURS = 24
 
+# Consecutive ProviderAuthError (401) failures against the SAME instance
+# before it's marked auth-disabled for AUTH_COOLDOWN_HOURS. Tracked
+# separately from the rate-limit counters above — a bad/revoked/disabled
+# API key will never self-resolve by waiting out a cooldown the way a
+# rate limit does, so mislabeling it as "rate limited" would be actively
+# misleading in the UI. Same threshold/shape as the rate-limit ones
+# (including BURST_DEBOUNCE_SECONDS below) since a concurrent batch
+# window can just as easily fire several 401s from the same dead key
+# within milliseconds of each other.
+AUTH_FAILURE_THRESHOLD = 3
+AUTH_COOLDOWN_HOURS = 24
+
 # Confirmed live: a healthy Gemini account (2/15 RPM, well under quota on
 # AI Studio's own dashboard) still tripped the 3-strike cooldown within
 # one item's concurrent batch window — several batches fired within
@@ -161,11 +173,12 @@ def reorder_instances(conn: sqlite3.Connection, ordered_ids: list[int]) -> None:
 
 def get_cascade(conn: sqlite3.Connection) -> list[dict]:
     """The ordered list of instances actually usable in a translation
-    run: enabled, not currently rate-limited, walked in sort_order and
-    stopping at the first separator (a separator's own row is excluded
-    from the result — it's a boundary marker, not a usable instance).
-    Empty list means nothing is configured/available at all — caller
-    must handle that (today: the run can't start)."""
+    run: enabled, not currently rate-limited, not currently auth-disabled,
+    walked in sort_order and stopping at the first separator (a
+    separator's own row is excluded from the result — it's a boundary
+    marker, not a usable instance). Empty list means nothing is
+    configured/available at all — caller must handle that (today: the
+    run can't start)."""
     rows = conn.execute(
         "SELECT * FROM engine_instances ORDER BY sort_order"
     ).fetchall()
@@ -178,20 +191,25 @@ def get_cascade(conn: sqlite3.Connection) -> list[dict]:
             continue
         if row["rate_limited_until"] and row["rate_limited_until"] > now:
             continue
+        if row["auth_disabled_until"] and row["auth_disabled_until"] > now:
+            continue
         cascade.append(_row_to_dict(row))
     return cascade
 
 
 def record_success(conn: sqlite3.Connection, instance_id: int) -> None:
-    """Resets the consecutive-failure counter — a successful call proves
-    the instance is healthy again, regardless of how many failures
-    preceded it. Also clears last_failure_at, so a later new failure
-    isn't wrongly debounced against a burst that's long since resolved."""
+    """Resets both the rate-limit and auth-failure consecutive counters —
+    a successful call proves the instance is healthy again, regardless of
+    how many failures of either kind preceded it. Also clears
+    last_failure_at/last_auth_failure_at, so a later new failure isn't
+    wrongly debounced against a burst that's long since resolved."""
     with conn:
         conn.execute(
             """
             UPDATE engine_instances
-            SET consecutive_failures = 0, last_failure_at = NULL, updated_at = ?
+            SET consecutive_failures = 0, last_failure_at = NULL,
+                consecutive_auth_failures = 0, last_auth_failure_at = NULL,
+                updated_at = ?
             WHERE id = ?
             """,
             (_now(), instance_id),
@@ -247,17 +265,71 @@ def record_rate_limited_failure(conn: sqlite3.Connection, instance_id: int) -> b
         return False
 
 
+def record_auth_failure(conn: sqlite3.Connection, instance_id: int) -> bool:
+    """Increments the consecutive-auth-failure counter; once it reaches
+    AUTH_FAILURE_THRESHOLD, sets auth_disabled_until 24h out and resets
+    the counter. Returns True if this call tripped the cooldown.
+
+    Same shape as record_rate_limited_failure — see its docstring for the
+    BURST_DEBOUNCE_SECONDS reasoning, which applies identically here (a
+    concurrent batch window can fire several 401s from the same dead key
+    within milliseconds of each other). Kept as a fully separate counter/
+    column pair rather than reusing the rate-limit ones: a bad/revoked/
+    disabled API key will never self-resolve by waiting out a cooldown
+    the way an actual rate limit does, so conflating the two would
+    mislabel a dead key as merely "rate limited" in the UI."""
+    with conn:
+        row = conn.execute(
+            "SELECT consecutive_auth_failures, last_auth_failure_at FROM engine_instances WHERE id = ?",
+            (instance_id,),
+        ).fetchone()
+        if row is None:
+            return False
+        now = datetime.now(timezone.utc)
+        if row["last_auth_failure_at"] is not None:
+            last_failure = datetime.fromisoformat(row["last_auth_failure_at"])
+            if (now - last_failure).total_seconds() < BURST_DEBOUNCE_SECONDS:
+                return False
+        new_count = row["consecutive_auth_failures"] + 1
+        if new_count >= AUTH_FAILURE_THRESHOLD:
+            cooldown_until = (now + timedelta(hours=AUTH_COOLDOWN_HOURS)).isoformat()
+            conn.execute(
+                """
+                UPDATE engine_instances
+                SET consecutive_auth_failures = 0, auth_disabled_until = ?,
+                    last_auth_failure_at = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (cooldown_until, now.isoformat(), _now(), instance_id),
+            )
+            return True
+        conn.execute(
+            """
+            UPDATE engine_instances
+            SET consecutive_auth_failures = ?, last_auth_failure_at = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (new_count, now.isoformat(), _now(), instance_id),
+        )
+        return False
+
+
 def clear_rate_limit(conn: sqlite3.Connection, instance_id: int) -> None:
-    """Clears an early cooldown — called after a manually-triggered
-    'test connection' succeeds, so a user who's fixed the underlying
-    issue (rotated key, restarted local server) doesn't have to wait out
-    the full 24h."""
+    """Clears an early cooldown of EITHER kind (rate-limit or auth) —
+    called after a manually-triggered 'test connection' succeeds, so a
+    user who's fixed the underlying issue (rotated key, restarted local
+    server) doesn't have to wait out the full 24h. A successful test
+    proves the key/connection is good again regardless of which cooldown
+    was active, so both are cleared together rather than requiring the
+    caller to know which one applies."""
     with conn:
         conn.execute(
             """
             UPDATE engine_instances
             SET rate_limited_until = NULL, consecutive_failures = 0,
-                last_failure_at = NULL, updated_at = ?
+                last_failure_at = NULL,
+                auth_disabled_until = NULL, consecutive_auth_failures = 0,
+                last_auth_failure_at = NULL, updated_at = ?
             WHERE id = ?
             """,
             (_now(), instance_id),
@@ -265,20 +337,23 @@ def clear_rate_limit(conn: sqlite3.Connection, instance_id: int) -> None:
 
 
 def clear_all_rate_limits(conn: sqlite3.Connection) -> int:
-    """Manually clears the cooldown on EVERY currently rate-limited
-    instance at once — e.g. after confirming (via the provider's own
-    dashboard) that a trip was a false positive, or that whatever caused
-    it has since been fixed, without waiting per-instance for a
-    successful Test Connection or the full 24h. Returns how many
-    instances were actually cleared. No cron — deliberately manual-only,
-    triggered from the Jobs page."""
+    """Manually clears the cooldown on EVERY currently rate-limited OR
+    auth-disabled instance at once — e.g. after confirming (via the
+    provider's own dashboard) that a trip was a false positive, or that
+    whatever caused it has since been fixed (rotated key, restarted local
+    server), without waiting per-instance for a successful Test
+    Connection or the full 24h. Returns how many instances were actually
+    cleared. No cron — deliberately manual-only, triggered from the Jobs
+    page."""
     with conn:
         cur = conn.execute(
             """
             UPDATE engine_instances
             SET rate_limited_until = NULL, consecutive_failures = 0,
-                last_failure_at = NULL, updated_at = ?
-            WHERE rate_limited_until IS NOT NULL
+                last_failure_at = NULL,
+                auth_disabled_until = NULL, consecutive_auth_failures = 0,
+                last_auth_failure_at = NULL, updated_at = ?
+            WHERE rate_limited_until IS NOT NULL OR auth_disabled_until IS NOT NULL
             """,
             (_now(),),
         )

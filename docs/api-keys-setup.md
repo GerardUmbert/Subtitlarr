@@ -8,6 +8,17 @@ how the engine cascade works.
 
 ## Google Gemini
 
+> **Use a Google account dedicated to this app — not your main personal
+> one.** Automated translation traffic can occasionally trip Google's
+> automated abuse/ToS review systems (e.g. a burst of retries after a
+> batch of failures), and a flagged account's API access can be suspended
+> with little warning. If that account is also your main Gmail/Drive/
+> Photos account, the fallout isn't limited to this app. Create a fresh
+> Google account with nothing else tied to it and use that one here — a
+> handful of free accounts is normal for this setup anyway (see "Doubling
+> again with a second account" below), so this doesn't cost anything
+> extra.
+
 1. Go to [aistudio.google.com](https://aistudio.google.com) and sign in with
    a Google account.
 2. Click **Get API key** (left sidebar) → **Create API key**. Copy it.
@@ -48,8 +59,9 @@ The same 2-models-per-key trick works again with a second Google account
 and its own key, for **4 Gemini instances total** and 2000 requests/day
 combined:
 
-1. Repeat the "Google Gemini" steps above with a second Google account (a
-   second free Gmail account works fine) to get a second key.
+1. Repeat the "Google Gemini" steps above with a second Google account —
+   again, a fresh account with nothing else tied to it, not your main
+   one — to get a second key.
 2. Add it as **"Gemini Secondary"**, model **`gemini-3.5-flash-lite`**,
    batch token budget `4000`.
 3. (Optional — see the quality note above) Add **"Gemini Secondary

@@ -9,6 +9,7 @@ from app.bazarr.client import BazarrClient
 from app.db import repository
 from app.engine import run_events, upload_queue
 from app.providers.base import (
+    ProviderAuthError,
     ProviderContentBlockedError,
     ProviderError,
     ProviderRateLimitedError,
@@ -69,13 +70,15 @@ async def _call_provider(
     """One raw translate() call with the diagnostic timing log lines —
     factored out of _try_cascade so the sending/response log shape stays
     identical to before this was a cascade instead of active/fallback.
-    on_call_result(provider, rate_limited: bool), if given, is called
-    after EVERY attempt — True on a ProviderRateLimitedError (feeds the
-    rate-limit cooldown counter), False on success (resets it) — before
-    a rate-limit exception propagates. Only ProviderRateLimitedError
-    triggers this; ProviderContentBlockedError/other failures aren't
-    evidence the INSTANCE itself is unreachable, just that this specific
-    content tripped its filter, so they don't count toward the cooldown."""
+    on_call_result(provider, outcome: str), if given, is called after
+    EVERY attempt with one of "rate_limited", "auth_failed", or "ok" —
+    before the corresponding exception (if any) propagates. Feeds the
+    matching cooldown counter (rate-limit vs auth — kept separate, see
+    ProviderAuthError's docstring for why) on failure, resets BOTH on
+    "ok". ProviderContentBlockedError/other failures aren't evidence the
+    INSTANCE itself is unreachable, just that this specific content
+    tripped its filter (or some other non-instance-health issue), so they
+    don't call on_call_result at all."""
     call_started = time.monotonic()
     logger.info(
         "Sending translate() call for item %d batch %d/%d to %s (%d chars)",
@@ -85,12 +88,16 @@ async def _call_provider(
         llm_response = await provider.translate(
             dialogue_text, source_lang, target_lang, catalan_vegeta_insults, language_variants
         )
+    except ProviderAuthError:
+        if on_call_result is not None:
+            on_call_result(provider, "auth_failed")
+        raise
     except ProviderRateLimitedError:
         if on_call_result is not None:
-            on_call_result(provider, True)
+            on_call_result(provider, "rate_limited")
         raise
     if on_call_result is not None:
-        on_call_result(provider, False)
+        on_call_result(provider, "ok")
     logger.info(
         "translate() call for item %d (%s) took %.2fs",
         item_id, provider.name, time.monotonic() - call_started,
@@ -353,7 +360,7 @@ async def _try_cascade(
                 on_call_result,
             )
             return llm_response, index
-        except (ProviderRateLimitedError, ProviderContentBlockedError) as new_exc:
+        except (ProviderRateLimitedError, ProviderContentBlockedError, ProviderAuthError) as new_exc:
             exc = new_exc
             continue
     raise exc
@@ -408,6 +415,29 @@ async def _translate_batch(
             catalan_vegeta_insults, language_variants, item_id, batch_index, batch_total,
             on_call_result,
         )
+    except ProviderAuthError as exc:
+        # No same-instance retry — unlike a rate limit, a bad/revoked key
+        # will produce the exact same 401 on an immediate retry, so
+        # retrying here would just waste a request and a wait for nothing.
+        # Falls straight to the next cascade entry instead.
+        logger.warning(
+            "Provider %s auth failure for item %d (%s); falling back",
+            active_provider.name, item_id, exc,
+        )
+        if run_id is not None:
+            run_events.emit(
+                run_id, item_id, batch_index, batch_total, "fell_back",
+                f"{active_provider.name}: auth failure ({exc}) — falling back",
+            )
+        if len(cascade) < 2:
+            raise
+        llm_response, engine_index = await _try_cascade(
+            cascade, 1, dialogue_text, source_lang, target_lang,
+            catalan_vegeta_insults, language_variants, item_id, batch_index, batch_total,
+            retry_pause_seconds, run_id, exc, on_call_result,
+        )
+        engine_used = cascade[engine_index].name
+        model_used = cascade[engine_index].model
     except ProviderRateLimitedError as exc:
         # A real rate limit (retry_after_seconds set) relies entirely on
         # the provider's own shared gate — sleeping here too would wait
@@ -527,7 +557,7 @@ NVIDIA_CONCURRENT_BATCH_WINDOW = 4
 
 # Set of provider names that get the windowed-concurrency treatment above
 # instead of translating batches strictly sequentially.
-_CONCURRENT_PROVIDERS = {"nvidia", "openrouter", "groq", "gemini"}
+_CONCURRENT_PROVIDERS = {"nvidia", "openrouter", "groq", "gemini", "anthropic"}
 
 
 async def _translate_batches(

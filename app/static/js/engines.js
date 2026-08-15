@@ -104,6 +104,19 @@ const PROVIDER_TYPES = {
       TEMPERATURE_FIELD,
     ],
   },
+  anthropic: {
+    label: "Anthropic (Claude)",
+    badges: ["API key"],
+    fields: [
+      { key: "model", label: "Model", placeholder: "claude-haiku-4-5-20251001", hint:
+        'A real Claude model ID, billed per-token from your Anthropic Console balance — see <a href="https://docs.claude.com/en/docs/about-claude/models" target="_blank" rel="noopener noreferrer">docs.claude.com</a> for the current lineup. Haiku is the fastest/cheapest and usually sufficient for subtitle translation.' },
+      { key: "api_key", label: "API key", type: "password", secret: true, hint:
+        'Get a key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">console.anthropic.com/settings/keys</a> — billed against your Console balance, separate from a claude.ai Pro subscription.' },
+      { key: "batch_token_budget", label: "Batch size (dialogue tokens)", type: "number", min: 1, step: 100 },
+      { key: "concurrent_batch_window", label: "Concurrent batches", type: "number", min: 1, step: 1 },
+      TEMPERATURE_FIELD,
+    ],
+  },
 };
 
 const NUM_CTX_OPTIONS = [4096, 8192, 16384, 32768, 65536, 131072, 262144];

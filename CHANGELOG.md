@@ -3,6 +3,35 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.11.9]
+
+### Added
+- Anthropic (Claude) as a translation engine — a real, instantiable
+  provider (previously a stub), reached via the Messages API. Add an
+  Anthropic Console API key on the Translation Engine page, separate
+  from any claude.ai subscription.
+- A guard against repeated auth failures: 3 consecutive 401/403
+  responses from the same engine instance now disable it for 24h
+  (tracked separately from the existing rate-limit cooldown, since a
+  bad/revoked key never self-resolves the way a rate limit does) and
+  fall back to the next cascade entry immediately, without a
+  same-instance retry. Applies to Gemini, NVIDIA, OpenRouter, Groq, and
+  Anthropic.
+- Docs: a callout recommending a Google account dedicated to this app,
+  not your main personal one, for getting a Gemini API key — automated
+  translation traffic can occasionally trip Google's abuse/ToS review,
+  and a flagged account's fallout shouldn't extend to your primary
+  Gmail/Drive.
+
+### Changed
+- Compare Engines: when both sides share the same engine instance, the
+  diff headers and downloaded filenames now show the temperature so the
+  two results stay distinguishable.
+- Raised the local (Ollama/llama.cpp) watchdog timeout from 300s to
+  600s, and the outer request timeout from 600s to 1200s, so the
+  watchdog still has room to catch a stuck request and retry before the
+  whole attempt times out.
+
 ## [0.11.8]
 
 ### Added
