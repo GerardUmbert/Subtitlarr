@@ -84,6 +84,23 @@ def test_non_hi_beats_hi_within_same_priority_tier():
     assert pick_source_language(source_map, target_lang="it", source_priority=["en"]) == "en"
 
 
+def test_higher_priority_hi_language_beats_lower_priority_non_hi_language():
+    """Regression test: A Dog's Purpose had EN (HI-only), IT (non-HI), and
+    ES (HI-only), with priority list [en, es, it, ca]. IT being both
+    non-HI and on the priority list must NOT let it jump ahead of EN, which
+    is higher in the priority list even though only its HI track exists —
+    priority order comes first, HI is only a tiebreaker within one language."""
+    source_map = {
+        "en": SourceCandidate(path="/path/en.hi.srt", hi=True),
+        "it": SourceCandidate(path="/path/it.srt", hi=False),
+        "es": SourceCandidate(path="/path/es.hi.srt", hi=True),
+    }
+    assert (
+        pick_source_language(source_map, target_lang="ca", source_priority=["en", "es", "it", "ca"])
+        == "en"
+    )
+
+
 def test_any_language_non_hi_beats_any_language_hi_when_nothing_on_priority_list():
     source_map = {
         "de": SourceCandidate(path="/path/de.hi.srt", hi=True),

@@ -40,6 +40,13 @@
   <h1 class="reveal">Changelog</h1>
   <p class="lede reveal">Generated from <a href="https://github.com/GerardUmbert/Subtitlarr/blob/master/CHANGELOG.md">CHANGELOG.md</a> — that file is the source of truth.</p>
 <div class="changelog-entry reveal-scroll">
+<div class="changelog-version">0.11.10</div>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li>Source-language selection could pick a lower-priority language over a higher-priority one just because the higher-priority language only had a hearing-impaired (HI) track available. E.g. with priority list <code>[en, es, it, ca]</code>, an item with only <code>en.hi.srt</code>/<code>es.hi.srt</code> but a non-HI <code>it.srt</code> was translated from Italian instead of English — HI was being treated as disqualifying across the whole priority list instead of only as a tiebreaker within a single language.</li>
+</ul>
+</div>
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.11.9</div>
 <div class="changelog-section-title">Added</div>
 <ul>

@@ -64,22 +64,20 @@ def pick_source_language(
     would silently break for anyone whose library isn't English-first).
 
     Preference order:
-      1. Priority-list language, non-HI track
-      2. Priority-list language, HI track (better to translate a real
-         dialogue track with bracketed sound cues than guess at a
-         different language's subtitle, which may not even match)
-      3. Any other available language, non-HI
-      4. Any other available language, HI
+      1. Each priority-list language in list order, non-HI track preferred
+         over its own HI track — but a HIGHER-priority language's HI track
+         still wins over a LOWER-priority language's non-HI track (a
+         language earlier in the list is what the user actually wants
+         translated from; HI is only a tiebreaker within the same
+         language, never a reason to skip ahead to a lower-priority one).
+      2. Any other available language, non-HI
+      3. Any other available language, HI
     """
     candidates = [(lang, c) for lang, c in source_map.items() if lang != target_lang]
 
     for lang in source_priority:
         match = source_map.get(lang)
-        if match and lang != target_lang and not match.hi:
-            return lang
-    for lang in source_priority:
-        match = source_map.get(lang)
-        if match and lang != target_lang and match.hi:
+        if match and lang != target_lang:
             return lang
     for lang, c in candidates:
         if not c.hi:

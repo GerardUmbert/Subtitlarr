@@ -3,6 +3,17 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.11.10]
+
+### Fixed
+- Source-language selection could pick a lower-priority language over a
+  higher-priority one just because the higher-priority language only had
+  a hearing-impaired (HI) track available. E.g. with priority list
+  `[en, es, it, ca]`, an item with only `en.hi.srt`/`es.hi.srt` but a
+  non-HI `it.srt` was translated from Italian instead of English — HI was
+  being treated as disqualifying across the whole priority list instead
+  of only as a tiebreaker within a single language.
+
 ## [0.11.9]
 
 ### Added
