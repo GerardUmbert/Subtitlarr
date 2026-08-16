@@ -247,6 +247,16 @@ createApp({
         if (this.sortBy) {
           params.sort_by = this.sortBy;
           params.sort_dir = this.sortDir;
+        } else if (
+          this.statusFilter === "translated_pending_upload" ||
+          this.statusFilter === "done" ||
+          this.statusFilter === "failed"
+        ) {
+          // These tabs are about what happened most recently, so default
+          // to newest-first instead of the stable alphabetical default —
+          // unlike title order, this doesn't need to be click-to-opt-in.
+          params.sort_by = "updated";
+          params.sort_dir = "desc";
         }
         const result = await Api.getQueue(params);
         this.items = result.data;

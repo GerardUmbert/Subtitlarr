@@ -3,6 +3,15 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.11.11]
+
+### Changed
+- Queue page: the Pending upload, Done, and Failed tabs now default to
+  showing the most recently updated items first, instead of alphabetical
+  by title. Other tabs (All, Queued, Translating, No source) keep the
+  existing stable alphabetical order, since those rows shouldn't reshuffle
+  while an item is actively queued or running.
+
 ## [0.11.10]
 
 ### Fixed
