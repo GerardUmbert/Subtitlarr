@@ -3,6 +3,14 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.11.12]
+
+### Fixed
+- Queue page: clicking a column header to sort (e.g. "Updated") stuck
+  around after switching tabs, so it silently applied to every other
+  tab too — including Queued and No source, which are supposed to stay
+  alphabetical. Switching tabs now resets to that tab's own default sort.
+
 ## [0.11.11]
 
 ### Changed

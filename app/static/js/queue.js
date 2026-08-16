@@ -146,6 +146,12 @@ createApp({
       this.currentBatchOnly = false;
       this.statusFilter = value;
       this.page = 1;
+      // Switching tabs resets to that tab's own default sort rather than
+      // carrying over a manual column-click from whatever tab you were on
+      // before — otherwise clicking "Updated" once on Done would silently
+      // keep applying itself to Queued/No source forever after.
+      this.sortBy = null;
+      this.sortDir = "asc";
       this.syncUrl();
       this.refresh();
     },
