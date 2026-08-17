@@ -74,6 +74,31 @@ def test_age_gated_queue_respects_threshold(conn):
     assert len(repository.get_age_gated_queue(conn, age_threshold_days=14)) == 1
 
 
+def test_list_job_events_merges_in_scheduled_translation_runs(conn):
+    """job_events itself never gets a 'translate' row written to it (that
+    would be a second writer for what run_history already owns durably) —
+    list_job_events merges scheduled runs in read-only instead, so the
+    Jobs page can show translation activity alongside the other cron jobs
+    without a duplicate write path."""
+    with conn:
+        conn.execute(
+            "INSERT INTO job_events (job, triggered_by, started_at, finished_at, status, result) "
+            "VALUES ('sync_media', 'cron', '2026-08-17T01:00:00', '2026-08-17T01:00:05', 'done', '5 seen')"
+        )
+    run_id = repository.start_run(conn, "scheduled")
+    repository.finish_run(conn, run_id, processed=3, failed=1)
+
+    events = repository.list_job_events(conn)
+
+    jobs = {e["job"] for e in events}
+    assert "sync_media" in jobs
+    assert "translate" in jobs
+    translate_event = next(e for e in events if e["job"] == "translate")
+    assert translate_event["status"] == "done"
+    assert translate_event["result"] == "3 processed, 1 failed"
+    assert translate_event["triggered_by"] == "cron"
+
+
 def test_purge_unsynced_items_removes_everything_but_translated(conn):
     repository.upsert_item_seen(
         conn, item_type="episode", bazarr_id=99, series_id=2,
@@ -88,7 +113,7 @@ def test_purge_unsynced_items_removes_everything_but_translated(conn):
     done_item = conn.execute("SELECT id FROM items WHERE bazarr_id = 100").fetchone()
     repository.update_item_status(conn, done_item["id"], "done", mark_completed=True)
 
-    purged = repository.purge_unsynced_items(conn)
+    purged = repository.purge_unsynced_items(conn, still_wanted=set())
 
     assert purged == 1
     remaining = conn.execute("SELECT bazarr_id, status FROM items").fetchall()
@@ -120,7 +145,7 @@ def test_purge_unsynced_items_spares_language_check_reset(conn):
     assert row["status"] == "pending"
     assert row["purge_exempt"] == 1
 
-    purged = repository.purge_unsynced_items(conn)
+    purged = repository.purge_unsynced_items(conn, still_wanted=set())
 
     assert purged == 0
     survivor = conn.execute("SELECT bazarr_id FROM items WHERE id = ?", (item["id"],)).fetchone()
@@ -131,6 +156,37 @@ def test_purge_unsynced_items_spares_language_check_reset(conn):
     repository.update_item_status(conn, item["id"], "done", mark_completed=True)
     row = conn.execute("SELECT purge_exempt FROM items WHERE id = ?", (item["id"],)).fetchone()
     assert row["purge_exempt"] == 0
+
+
+def test_purge_unsynced_items_spares_still_wanted_pending_item(conn):
+    """Regression test: purge_unsynced_items used to wipe EVERY non-done
+    item unconditionally, including ones Bazarr still currently reports as
+    wanted — poll_once then reinserted them as brand-new rows, resetting
+    first_seen_wanted to "now" on every single poll. Since nothing else
+    ever ages first_seen_wanted, an item could never accumulate enough age
+    to cross an age_threshold_days > 0 gate — the scheduled run's queue was
+    silently empty every day for over a week in production. A still-wanted
+    pending item must now survive the purge with its original
+    first_seen_wanted untouched."""
+    repository.upsert_item_seen(
+        conn, item_type="episode", bazarr_id=99, series_id=2,
+        title="Ep", series_title="Show", season_episode="1x1",
+        target_language="es",
+    )
+    item = conn.execute("SELECT id, first_seen_wanted FROM items WHERE bazarr_id = 99").fetchone()
+    original_first_seen = item["first_seen_wanted"]
+
+    purged = repository.purge_unsynced_items(
+        conn, still_wanted={("episode", 99, "es")}
+    )
+
+    assert purged == 0
+    survivor = conn.execute(
+        "SELECT id, first_seen_wanted FROM items WHERE bazarr_id = 99"
+    ).fetchone()
+    assert survivor is not None
+    assert survivor["id"] == item["id"]  # same row, not deleted-and-reinserted
+    assert survivor["first_seen_wanted"] == original_first_seen
 
 
 def test_purge_unsynced_items_deletes_orphaned_run_log(conn):
@@ -144,7 +200,7 @@ def test_purge_unsynced_items_deletes_orphaned_run_log(conn):
     pending_item = conn.execute("SELECT id FROM items WHERE bazarr_id = 99").fetchone()
     repository.log_item_attempt(conn, pending_item["id"], None, "failed")
 
-    repository.purge_unsynced_items(conn)
+    repository.purge_unsynced_items(conn, still_wanted=set())
 
     assert conn.execute("SELECT COUNT(*) FROM item_run_log").fetchone()[0] == 0
 
@@ -172,7 +228,7 @@ def test_purge_unsynced_items_spares_failed_items(conn):
     assert row["status"] == "failed"
     assert row["purge_exempt"] == 1
 
-    purged = repository.purge_unsynced_items(conn)
+    purged = repository.purge_unsynced_items(conn, still_wanted=set())
 
     assert purged == 0
     survivor = conn.execute("SELECT bazarr_id FROM items WHERE id = ?", (item["id"],)).fetchone()

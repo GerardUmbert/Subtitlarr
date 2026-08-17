@@ -51,6 +51,10 @@ const JOB_LABELS = {
   sync_media: "Sync wanted / missing",
   sync_subs: "Pull pending subtitles",
   push_uploads: "Push queued uploads",
+  language_check: "Language check",
+  backup: "Backup",
+  stale_audit: "Stale audit",
+  translate: "Translate",
 };
 
 const EVENT_TYPE_LABELS = {

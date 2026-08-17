@@ -50,11 +50,11 @@ def get_events(
 
 @router.get("/jobs")
 def get_job_events(limit: int = 100, conn=Depends(state.get_conn)):
-    """Start/finish log of the non-translation jobs (Bazarr wanted-list
-    sync, source prefetch, upload push) — cron-fired and manual alike.
-    Translation runs are NOT included here; see the main list_history
-    endpoint (run_history) for those."""
-    return {"data": [dict(row) for row in repository.list_job_events(conn, limit=limit)]}
+    """Start/finish log of every scheduled job — Bazarr wanted-list sync,
+    source prefetch, upload push, language check, backup, and scheduled
+    translation runs (merged in from run_history; see
+    repository.list_job_events)."""
+    return {"data": repository.list_job_events(conn, limit=limit)}
 
 
 @router.get("/language-mismatches")

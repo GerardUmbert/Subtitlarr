@@ -83,4 +83,4 @@ def test_restoring_an_older_schema_backup_gets_migrated_back_to_current(tmp_path
 
     # And the endpoint this mirrors must not crash calling a function
     # that touches the new column right after — the exact live failure.
-    repository.purge_unsynced_items(live_conn)
+    repository.purge_unsynced_items(live_conn, still_wanted=set())

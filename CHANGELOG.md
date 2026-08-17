@@ -3,6 +3,27 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.11.13]
+
+### Fixed
+- **The scheduled/age-gated translation run could go silently empty for
+  days.** Every Bazarr poll (`sync_media`, which also runs at the start of
+  every translate run) deleted and reinserted every not-yet-translated
+  item, including ones Bazarr still currently wanted — resetting
+  `first_seen_wanted` to "now" on each poll. Since that timestamp anchors
+  the age-gate clock and nothing else advances it, an item could never
+  accumulate enough age to cross an `age_threshold_days` > 0 gate; the
+  scheduled run's queue was silently empty every single day. Purging is
+  now scoped to only the items Bazarr's current wanted list no longer
+  reports — a still-wanted pending item keeps its original
+  `first_seen_wanted` across every poll.
+
+### Changed
+- Jobs/History page: the "Jobs" tab now also shows scheduled translation
+  runs (merged in from the existing run history, not a new duplicate
+  record), so it's visible alongside Sync/Pull/Push/Language check/Backup
+  instead of only appearing on the separate "Runs" tab.
+
 ## [0.11.12]
 
 ### Fixed

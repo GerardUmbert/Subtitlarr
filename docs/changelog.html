@@ -40,6 +40,17 @@
   <h1 class="reveal">Changelog</h1>
   <p class="lede reveal">Generated from <a href="https://github.com/GerardUmbert/Subtitlarr/blob/master/CHANGELOG.md">CHANGELOG.md</a> — that file is the source of truth.</p>
 <div class="changelog-entry reveal-scroll">
+<div class="changelog-version">0.11.13</div>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li><strong>The scheduled/age-gated translation run could go silently empty for days.</strong> Every Bazarr poll (<code>sync_media</code>, which also runs at the start of every translate run) deleted and reinserted every not-yet-translated item, including ones Bazarr still currently wanted — resetting <code>first_seen_wanted</code> to &quot;now&quot; on each poll. Since that timestamp anchors the age-gate clock and nothing else advances it, an item could never accumulate enough age to cross an <code>age_threshold_days</code> &gt; 0 gate; the scheduled run&#x27;s queue was silently empty every single day. Purging is now scoped to only the items Bazarr&#x27;s current wanted list no longer reports — a still-wanted pending item keeps its original <code>first_seen_wanted</code> across every poll.</li>
+</ul>
+<div class="changelog-section-title">Changed</div>
+<ul>
+<li>Jobs/History page: the &quot;Jobs&quot; tab now also shows scheduled translation runs (merged in from the existing run history, not a new duplicate record), so it&#x27;s visible alongside Sync/Pull/Push/Language check/Backup instead of only appearing on the separate &quot;Runs&quot; tab.</li>
+</ul>
+</div>
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.11.12</div>
 <div class="changelog-section-title">Fixed</div>
 <ul>

@@ -157,6 +157,35 @@ async def test_preview_does_not_overwrite_an_already_done_items_source(conn):
 
 
 @pytest.mark.asyncio
+async def test_repeated_poll_preserves_first_seen_wanted_for_still_pending_item(conn):
+    """Regression test: poll_once used to purge (delete) every non-done
+    item unconditionally before re-syncing, including ones Bazarr still
+    currently wants — so a still-pending item got deleted and reinserted
+    as brand new on every single poll, resetting first_seen_wanted to
+    "now" every time. Since first_seen_wanted anchors the age-gate clock
+    and nothing else advances it, the scheduled (age-gated) run's queue
+    was silently empty every day in production — an item could never
+    accumulate a single day of age. A still-wanted pending item's
+    first_seen_wanted must survive repeated polls unchanged."""
+    await poller.poll_once(conn, FakeClientWithEnglishSource())
+    row = conn.execute(
+        "SELECT id, first_seen_wanted FROM items WHERE bazarr_id = 1277 AND target_language = 'es'"
+    ).fetchone()
+    original_id = row["id"]
+    original_first_seen = row["first_seen_wanted"]
+
+    await poller.poll_once(conn, FakeClientWithEnglishSource())
+    await poller.poll_once(conn, FakeClientWithEnglishSource())
+
+    row = conn.execute(
+        "SELECT id, first_seen_wanted, status FROM items WHERE bazarr_id = 1277 AND target_language = 'es'"
+    ).fetchone()
+    assert row["id"] == original_id  # same row, never deleted-and-reinserted
+    assert row["first_seen_wanted"] == original_first_seen
+    assert row["status"] == "pending"
+
+
+@pytest.mark.asyncio
 async def test_target_allowlist_filters_unwanted_target_languages(conn):
     """Bazarr's profile can want a language purely as a fallback SOURCE
     (e.g. EN, to guarantee a translatable file exists) without Subtitlarr
@@ -176,6 +205,41 @@ async def test_target_allowlist_filters_unwanted_target_languages(conn):
     ).fetchone()
     assert pt_row is not None
     assert pt_row["status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_poll_still_purges_items_bazarr_no_longer_wants(conn):
+    """The other half of the fix above: an item must still be purged once
+    Bazarr genuinely stops reporting it as wanted (e.g. the language was
+    fulfilled another way) — only STILL-wanted items are meant to survive
+    a poll untouched."""
+    await poller.poll_once(conn, FakeClientWithEnglishSource())
+    row = conn.execute(
+        "SELECT id FROM items WHERE bazarr_id = 1277 AND target_language = 'es'"
+    ).fetchone()
+    assert row is not None
+
+    class FakeClientWantingNothing:
+        async def iter_all_wanted_episodes(self):
+            return
+            yield  # pragma: no cover
+
+        async def iter_all_wanted_movies(self):
+            return
+            yield  # pragma: no cover
+
+        async def get_movie_detail(self, radarr_id: int):
+            return None
+
+        async def get_episode_detail(self, sonarr_episode_id: int):
+            return None
+
+    await poller.poll_once(conn, FakeClientWantingNothing())
+
+    row = conn.execute(
+        "SELECT id FROM items WHERE bazarr_id = 1277 AND target_language = 'es'"
+    ).fetchone()
+    assert row is None  # purged — Bazarr no longer wants it
 
 
 @pytest.mark.asyncio

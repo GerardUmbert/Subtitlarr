@@ -88,15 +88,27 @@ def reset_stuck_translating_items(conn: sqlite3.Connection) -> int:
         return cur.rowcount
 
 
-def purge_unsynced_items(conn: sqlite3.Connection) -> int:
-    """Wipes every item not yet translated (anything but 'done' and
-    'translated_pending_upload') ahead of a fresh poll_once() sync, so
-    wanted/translatable/no_source stats are rebuilt entirely from what
-    Bazarr reports THIS poll instead of accumulating forever. Without this,
-    a transient spike in Bazarr's wanted list (e.g. toggling "treat bundled
-    subtitles as downloaded") permanently inflates local counts, since nothing
-    else in the sync path ever deletes rows. item_run_log entries for purged
-    items are deleted too, so History's item join never sees orphans.
+def purge_unsynced_items(
+    conn: sqlite3.Connection, still_wanted: set[tuple[str, int, str]]
+) -> int:
+    """Deletes every not-yet-translated item (anything but 'done' and
+    'translated_pending_upload') that Bazarr's CURRENT wanted list no longer
+    reports, ahead of a fresh poll_once() sync — so wanted/translatable/
+    no_source stats stay accurate instead of accumulating stale rows
+    forever (e.g. a transient spike from toggling Bazarr's "treat bundled
+    subtitles as downloaded" setting would otherwise inflate counts
+    permanently). item_run_log entries for purged items are deleted too, so
+    History's item join never sees orphans.
+
+    `still_wanted` is the full set of (item_type, bazarr_id, target_language)
+    keys this poll is about to see from Bazarr — anything already 'pending'
+    that's still in that set is left alone, NOT deleted-and-reinserted, so
+    its first_seen_wanted timestamp survives (deleting and reinserting it
+    every poll would reset the age-gate clock to "just discovered" daily,
+    making an age threshold >0 impossible to ever satisfy — confirmed live:
+    every item's first_seen_wanted was stamped fresh every single poll,
+    silently starving the age-gated scheduled run of anything to do for
+    over a week straight).
 
     purge_exempt items are skipped even though they're 'pending' —
     confirmed live: a language-check mismatch reset or a stale-audit
@@ -113,9 +125,13 @@ def purge_unsynced_items(conn: sqlite3.Connection) -> int:
     Returns the number of items purged."""
     with conn:
         rows = conn.execute(
-            "SELECT id FROM items WHERE status NOT IN ('done', 'translated_pending_upload') AND purge_exempt = 0"
+            "SELECT id, item_type, bazarr_id, target_language FROM items "
+            "WHERE status NOT IN ('done', 'translated_pending_upload') AND purge_exempt = 0"
         ).fetchall()
-        ids = [row["id"] for row in rows]
+        ids = [
+            row["id"] for row in rows
+            if (row["item_type"], row["bazarr_id"], row["target_language"]) not in still_wanted
+        ]
         if ids:
             placeholders = ",".join("?" for _ in ids)
             conn.execute(f"DELETE FROM item_run_log WHERE item_id IN ({placeholders})", ids)
@@ -695,10 +711,41 @@ def finish_job_event(
         )
 
 
-def list_job_events(conn: sqlite3.Connection, *, limit: int = 100) -> list[sqlite3.Row]:
-    return conn.execute(
+def list_job_events(conn: sqlite3.Connection, *, limit: int = 100) -> list[dict]:
+    """job_events itself deliberately excludes translation runs (see
+    0010_add_job_events.sql — avoids two competing writers for the same
+    event). Scheduled translation runs are merged in here, read-only, from
+    their real source of truth (run_history) as synthetic 'translate' rows
+    shaped like a job_events row, so the Jobs page can show every scheduled
+    activity — including translation — in one place without a second write
+    path duplicating run_history."""
+    events = [dict(row) for row in conn.execute(
         "SELECT * FROM job_events ORDER BY started_at DESC LIMIT ?", (limit,)
+    ).fetchall()]
+    scheduled_runs = conn.execute(
+        """
+        SELECT id, started_at, finished_at, items_processed, items_failed
+        FROM run_history WHERE triggered_by = 'scheduled'
+        ORDER BY started_at DESC LIMIT ?
+        """,
+        (limit,),
     ).fetchall()
+    for run in scheduled_runs:
+        events.append({
+            "id": f"run_history:{run['id']}",
+            "job": "translate",
+            "triggered_by": "cron",
+            "started_at": run["started_at"],
+            "finished_at": run["finished_at"],
+            "status": "running" if run["finished_at"] is None else "done",
+            "result": (
+                None if run["finished_at"] is None
+                else f"{run['items_processed']} processed, {run['items_failed']} failed"
+            ),
+            "error": None,
+        })
+    events.sort(key=lambda e: e["started_at"], reverse=True)
+    return events[:limit]
 
 
 def start_run(conn: sqlite3.Connection, triggered_by: str) -> int:
