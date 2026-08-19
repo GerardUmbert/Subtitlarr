@@ -7,6 +7,9 @@ folders. All reading and writing of subtitles happens through Bazarr's own
 REST API, so Bazarr remains the only thing with filesystem access to your
 library.
 
+**Full documentation, setup guides, and other helpers:
+[gerardumbert.github.io/Subtitlarr](https://gerardumbert.github.io/Subtitlarr)**
+
 ## How it works
 
 1. Polls Bazarr's wanted-subtitle list on a schedule.
@@ -68,8 +71,10 @@ automatically):
   dedicated to this app, not your main personal one** — automated
   translation traffic can occasionally trip Google's automated abuse/ToS
   review and get that account's API access suspended with little warning,
-  and you don't want that tied to your primary Gmail/Drive account. See
-  [`docs/api-keys-setup.md`](docs/api-keys-setup.md) for details.
+  and you don't want that tied to your primary Gmail/Drive account. See the
+  [Engine Setup guide](https://gerardumbert.github.io/Subtitlarr/api-keys.html)
+  (or [`docs/api-keys-setup.md`](docs/api-keys-setup.md) for the raw source)
+  for details.
 - **NVIDIA NIM** — free tier, up to 40 requests/minute. Get a key at
   [build.nvidia.com](https://build.nvidia.com). Must be pointed at a real
   instructable chat model (defaults to DeepSeek V4 Flash) — NVIDIA also
@@ -87,7 +92,10 @@ automatically):
 Every instance has its own API key/model/batch-size configuration, kept
 entirely in Subtitlarr's own database — there's no environment variable for
 engine setup anymore. The provider interface is written so more engines can
-be added later without changes to the rest of the app.
+be added later without changes to the rest of the app. See the full
+[Engine Setup guide](https://gerardumbert.github.io/Subtitlarr/api-keys.html)
+(or [`docs/api-keys-setup.md`](docs/api-keys-setup.md) for the raw source)
+for step-by-step instructions per provider.
 
 ### Recommended cascade
 
@@ -254,6 +262,9 @@ actually worth it over a local one for your content.
   page after first start — see above.
 
 ## Running it
+
+See the [Install guide](https://gerardumbert.github.io/Subtitlarr/install.html)
+for the full walkthrough; the essentials are below.
 
 ### Docker (published image)
 
