@@ -119,6 +119,7 @@ class EngineRunResult:
     srt_path: Path | None = None
     subtitle_text: str | None = None  # composed SRT, for inline diff rendering
     temperature: float | None = None  # the actual value used for this run (override or instance default)
+    thinking: bool | str | None = None  # the actual value used for this run — None when not applicable (non-Ollama)
     total_seconds: float = 0.0
     batch_count: int = 0
     cue_count: int = 0
@@ -146,6 +147,7 @@ async def _run_one_engine(
     catalan_vegeta_insults: bool,
     language_variants: dict[str, str],
     temperature_override: float | None = None,
+    thinking_override: bool | str | None = None,
 ) -> EngineRunResult:
     """Translates the SAME already-fetched source cues with one engine
     instance, using the exact same batching/retry/alignment-check pipeline
@@ -161,10 +163,21 @@ async def _run_one_engine(
     temperature_override, when given, replaces the instance's own SAVED
     temperature for just this comparison run — lets the compare tool show
     what temperature actually changes without having to edit and re-save
-    the real instance config first."""
+    the real instance config first.
+
+    thinking_override works the same way but only applies to the two local
+    provider types, Ollama and llama.cpp (each maps the same bool|"low"|
+    "medium"|"high" shape onto its own API's reasoning field — see
+    OllamaProvider/LlamaCppProvider); it's silently ignored for any other
+    provider_type rather than raised, since the compare UI only shows the
+    control for local-engine sides and a stale override left over from
+    switching instance A/B shouldn't break the run."""
+    _THINKING_CAPABLE_TYPES = {"ollama", "llamacpp"}
     config = instance["config"]
     if temperature_override is not None:
         config = {**config, "temperature": temperature_override}
+    if thinking_override is not None and instance["provider_type"] in _THINKING_CAPABLE_TYPES:
+        config = {**config, "thinking": thinking_override}
     provider = registry.build_provider(
         instance["provider_type"], config, instance_name=instance["name"]
     )
@@ -172,6 +185,9 @@ async def _run_one_engine(
     num_ctx = config.get("num_ctx", 8192)
     resolved_budget = _batch_token_budget(num_ctx, batch_budget_override)
     resolved_temperature = config.get("temperature", registry.DEFAULT_TEMPERATURE)
+    resolved_thinking = (
+        config.get("thinking", False) if instance["provider_type"] in _THINKING_CAPABLE_TYPES else None
+    )
 
     started = time.monotonic()
     try:
@@ -191,6 +207,7 @@ async def _run_one_engine(
             ok=True,
             subtitle_text=srt_bytes.decode("utf-8"),
             temperature=resolved_temperature,
+            thinking=resolved_thinking,
             total_seconds=elapsed,
             batch_count=len(batches),
             cue_count=len(original_subs),
@@ -200,7 +217,8 @@ async def _run_one_engine(
         elapsed = time.monotonic() - started
         return EngineRunResult(
             instance_id=instance["id"], instance_name=instance["name"], model=provider.model,
-            ok=False, error=str(exc), temperature=resolved_temperature, total_seconds=elapsed,
+            ok=False, error=str(exc), temperature=resolved_temperature, thinking=resolved_thinking,
+            total_seconds=elapsed,
         )
     except Exception as exc:  # noqa: BLE001 - one engine's failure must not abort the other's comparison
         elapsed = time.monotonic() - started
@@ -208,7 +226,7 @@ async def _run_one_engine(
         return EngineRunResult(
             instance_id=instance["id"], instance_name=instance["name"], model=provider.model,
             ok=False, error=str(exc) or type(exc).__name__, temperature=resolved_temperature,
-            total_seconds=elapsed,
+            thinking=resolved_thinking, total_seconds=elapsed,
         )
     finally:
         await provider.aclose()
@@ -244,6 +262,8 @@ async def run_compare(
     catalan_vegeta_insults_b: bool | None = None,
     temperature_a: float | None = None,
     temperature_b: float | None = None,
+    thinking_a: bool | str | None = None,
+    thinking_b: bool | str | None = None,
     uploaded_source: list | None = None,
     uploaded_source_lang: str | None = None,
     uploaded_target_lang: str | None = None,
@@ -275,7 +295,10 @@ async def run_compare(
 
     temperature_a/_b work the same way — None on either side falls back to
     that instance's own SAVED temperature (registry.DEFAULT_TEMPERATURE if
-    that instance predates the setting existing)."""
+    that instance predates the setting existing).
+
+    thinking_a/_b work the same way, but only apply when that side's
+    instance is Ollama — see _run_one_engine's thinking_override docstring."""
     with state.db_lock:
         instance_a = engine_instances_repo.get_instance(conn, instance_id_a)
     if instance_a is None:
@@ -336,29 +359,29 @@ async def run_compare(
         results = [
             await _run_one_engine(
                 instance=instance_a, catalan_vegeta_insults=resolved_insults_a,
-                temperature_override=temperature_a, **common_kwargs,
+                temperature_override=temperature_a, thinking_override=thinking_a, **common_kwargs,
             )
         ]
     elif parallel:
         results = list(await asyncio.gather(
             _run_one_engine(
                 instance=instance_a, catalan_vegeta_insults=resolved_insults_a,
-                temperature_override=temperature_a, **common_kwargs,
+                temperature_override=temperature_a, thinking_override=thinking_a, **common_kwargs,
             ),
             _run_one_engine(
                 instance=instance_b, catalan_vegeta_insults=resolved_insults_b,
-                temperature_override=temperature_b, **common_kwargs,
+                temperature_override=temperature_b, thinking_override=thinking_b, **common_kwargs,
             ),
         ))
     else:
         results = [
             await _run_one_engine(
                 instance=instance_a, catalan_vegeta_insults=resolved_insults_a,
-                temperature_override=temperature_a, **common_kwargs,
+                temperature_override=temperature_a, thinking_override=thinking_a, **common_kwargs,
             ),
             await _run_one_engine(
                 instance=instance_b, catalan_vegeta_insults=resolved_insults_b,
-                temperature_override=temperature_b, **common_kwargs,
+                temperature_override=temperature_b, thinking_override=thinking_b, **common_kwargs,
             ),
         ]
 

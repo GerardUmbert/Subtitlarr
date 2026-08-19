@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.11.14]
+
+### Added
+- **Unraid Community Applications submission.** Added `LICENSE`
+  (AGPL-3.0), `ca_profile.xml`, and a finished `unraid/subtitlarr.xml`
+  template so Subtitlarr can be submitted to the Unraid CA store.
+- Compare page: a per-side "thinking" control (Off/Low/Medium/High) for
+  Ollama and llama.cpp engine instances, letting you test different
+  reasoning-effort settings without changing the real saved engine
+  config. Defaults to off everywhere, matching existing behavior — a
+  model's hidden reasoning pass can otherwise exhaust the generation
+  budget before the actual translation gets written.
+
 ## [0.11.13]
 
 ### Fixed

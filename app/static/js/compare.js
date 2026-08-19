@@ -112,6 +112,17 @@ createApp({
       temperatureA: null,
       temperatureB: null,
 
+      // Per-side reasoning-effort override — only meaningful for local
+      // engine instances (Ollama/llama.cpp), which each map this same
+      // bool|"low"|"medium"|"high" shape onto their own API's reasoning
+      // field (see OllamaProvider/LlamaCppProvider). false is the safe
+      // default: a hidden reasoning pass can otherwise exhaust a small
+      // local model's generation budget before it ever writes the actual
+      // translation. Populated from the picked instance's saved config the
+      // moment it's chosen, same as temperatureA/B above.
+      thinkingA: false,
+      thinkingB: false,
+
       // Optional: compare engine A's fresh result against an uploaded
       // already-translated file instead of running a second engine.
       useReference: false,
@@ -137,6 +148,17 @@ createApp({
     },
     isCatalanTarget() {
       return this.targetLangCode === "ca";
+    },
+    // Only Ollama/llama.cpp instances support a reasoning-effort override —
+    // cloud providers have no equivalent field, so the control stays
+    // hidden rather than offering a setting that would silently do nothing.
+    thinkingCapableA() {
+      const inst = this.instances.find((i) => i.id === this.instanceIdA);
+      return !!inst && (inst.provider_type === "ollama" || inst.provider_type === "llamacpp");
+    },
+    thinkingCapableB() {
+      const inst = this.instances.find((i) => i.id === this.instanceIdB);
+      return !!inst && (inst.provider_type === "ollama" || inst.provider_type === "llamacpp");
     },
     sameEndpointWarning() {
       if (!this.instanceIdA || !this.instanceIdB || this.useReference) return null;
@@ -245,10 +267,12 @@ createApp({
     onInstanceAChange() {
       const inst = this.instances.find((i) => i.id === this.instanceIdA);
       this.temperatureA = inst && inst.config ? (inst.config.temperature ?? null) : null;
+      this.thinkingA = inst && inst.config ? (inst.config.thinking ?? false) : false;
     },
     onInstanceBChange() {
       const inst = this.instances.find((i) => i.id === this.instanceIdB);
       this.temperatureB = inst && inst.config ? (inst.config.temperature ?? null) : null;
+      this.thinkingB = inst && inst.config ? (inst.config.thinking ?? false) : false;
     },
     // The number input's min/max attrs are only a soft browser hint — a
     // user can still type/scroll past them. Confirmed live: temperature=3
@@ -343,6 +367,8 @@ createApp({
         ...(this.isCatalanTarget
           ? { catalanVegetaInsultsA: this.catalanVegetaInsultsA, catalanVegetaInsultsB: this.catalanVegetaInsultsB }
           : {}),
+        ...(this.thinkingCapableA ? { thinkingA: this.thinkingA } : {}),
+        ...(this.thinkingCapableB && !this.useReference ? { thinkingB: this.thinkingB } : {}),
       };
       try {
         if (this.sourceMode === "library") {

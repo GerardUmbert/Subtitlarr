@@ -29,6 +29,19 @@ DEFAULT_LLAMACPP_TIMEOUT_SECONDS = 1200.0
 WATCHDOG_TIMEOUT_SECONDS = 600.0
 
 
+def _resolve_reasoning_effort(thinking: bool | str) -> str:
+    """Maps the shared bool|"low"|"medium"|"high" thinking setting onto
+    llama.cpp server's own reasoning_effort values. False -> "none"
+    (matches Ollama's think=False default-off behavior); True has no
+    direct llama.cpp equivalent (it's an Ollama on/off shorthand), so it
+    maps to "medium" as a reasonable middle default."""
+    if thinking is False:
+        return "none"
+    if thinking is True:
+        return "medium"
+    return thinking
+
+
 class LlamaCppProvider(TranslationProvider):
     """A local llama.cpp server (the project's own built-in HTTP server —
     see github.com/ggml-org/llama.cpp/tools/server — not Ollama, a
@@ -73,6 +86,7 @@ class LlamaCppProvider(TranslationProvider):
         api_key: str | None = None,
         model: str | None = None,
         temperature: float | None = None,
+        thinking: bool | str = False,
         instance_name: str | None = None,
     ):
         if instance_name:
@@ -81,6 +95,17 @@ class LlamaCppProvider(TranslationProvider):
         self._model = model
         self.model = model or "(server default)"
         self._temperature = temperature
+        # llama.cpp server's own equivalent of Ollama's "think" field:
+        # reasoning_effort in the request body — "none" disables reasoning
+        # entirely, "low"/"medium"/"high" request graded effort on models
+        # that support it (unsupported models just ignore the value).
+        # False/True from the shared thinking config map onto "none"/
+        # "medium" so the SAME per-instance setting works across both
+        # local providers without the caller needing to know which API
+        # shape is underneath. Same default-off reasoning as Ollama's: a
+        # hidden reasoning pass can otherwise exhaust the generation
+        # budget before the strict index/format output is ever written.
+        self._reasoning_effort = _resolve_reasoning_effort(thinking)
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else None
         self._client = httpx.AsyncClient(base_url=self._base_url, timeout=timeout, headers=headers)
 
@@ -88,7 +113,7 @@ class LlamaCppProvider(TranslationProvider):
         await self._client.aclose()
 
     async def _chat_request(self, messages: list[dict]) -> httpx.Response:
-        body = {"messages": messages}
+        body = {"messages": messages, "reasoning_effort": self._reasoning_effort}
         if self._model:
             body["model"] = self._model
         if self._temperature is not None:
@@ -170,10 +195,19 @@ class LlamaCppProvider(TranslationProvider):
 
         data = resp.json()
         try:
-            content = data["choices"][0]["message"]["content"]
+            message = data["choices"][0]["message"]
+            content = message["content"]
         except (KeyError, IndexError) as exc:
             raise ProviderError(f"Unexpected llama.cpp response shape: {data}") from exc
         if not content:
+            reasoning = message.get("reasoning_content")
+            if reasoning:
+                logger.warning(
+                    "llama.cpp response content was empty but reasoning_content was "
+                    "populated (%d chars) — model likely exhausted its token budget "
+                    "during reasoning before writing content.",
+                    len(reasoning),
+                )
             raise ProviderError(f"llama.cpp response missing message content: {data}")
         return content
 

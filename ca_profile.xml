@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CommunityApplications>
+  <Profile>Maintainer of Subtitlarr, a companion app for Bazarr that fills gaps in your subtitle library by translating subtitles you already have into languages you're missing, using a local or cloud LLM. This repository hosts Subtitlarr's own Community Applications template. Support and issues: https://github.com/GerardUmbert/Subtitlarr/issues</Profile>
+  <Icon>https://raw.githubusercontent.com/GerardUmbert/Subtitlarr/master/unraid/icon.png</Icon>
+  <WebPage>https://github.com/GerardUmbert/Subtitlarr</WebPage>
+</CommunityApplications>

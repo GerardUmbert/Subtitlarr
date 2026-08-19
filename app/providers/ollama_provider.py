@@ -51,6 +51,7 @@ class OllamaProvider(TranslationProvider):
         timeout: float | None = None,
         num_ctx: int = 8192,
         temperature: float | None = None,
+        thinking: bool | str = False,
         instance_name: str | None = None,
     ):
         if instance_name:
@@ -59,6 +60,18 @@ class OllamaProvider(TranslationProvider):
         self._model = model
         self.model = model
         self._temperature = temperature
+        # Ollama's "think" field on /api/chat: False disables reasoning
+        # entirely, True enables it at the model's default effort, and
+        # "low"/"medium"/"high" request graded effort on models that
+        # support it (gpt-oss, some Gemma/Qwen reasoning variants) — models
+        # without graded support just treat any non-False value as "on".
+        # Defaults to False: reasoning-capable models otherwise spend the
+        # whole generation budget on a hidden thinking block before ever
+        # writing to "content" — observed live as a 32-cue batch exhausting
+        # num_predict entirely inside message.thinking, leaving
+        # message.content empty. The strict index/format output this task
+        # needs doesn't benefit from visible reasoning by default.
+        self._thinking = thinking
         # Ollama defaults to a conservative 4096-token context regardless of
         # what the model actually supports (Gemma 3 supports up to 128K) —
         # without this, a batch of subtitle cues larger than 4096 tokens
@@ -105,6 +118,7 @@ class OllamaProvider(TranslationProvider):
             json={
                 "model": self._model,
                 "stream": False,
+                "think": self._thinking,
                 "options": options,
                 "messages": messages,
             },
@@ -203,8 +217,17 @@ class OllamaProvider(TranslationProvider):
             raise ProviderError(f"Ollama request failed ({resp.status_code}): {resp.text}")
 
         data = resp.json()
-        content = data.get("message", {}).get("content")
+        message = data.get("message", {})
+        content = message.get("content")
         if not content:
+            thinking = message.get("thinking")
+            if thinking:
+                logger.warning(
+                    "Ollama response content was empty but thinking was populated "
+                    "(%d chars) — model likely exhausted num_predict during "
+                    "reasoning before writing content.",
+                    len(thinking),
+                )
             raise ProviderError(f"Ollama response missing message content: {data}")
         return content
 

@@ -44,6 +44,9 @@ DEFAULT_CONFIG_BY_TYPE: dict[str, dict] = {
         "num_ctx": 8192,
         "batch_token_budget": 400,
         "temperature": DEFAULT_TEMPERATURE,
+        # False/"low"/"medium"/"high" — see OllamaProvider.__init__ for why
+        # this defaults off.
+        "thinking": False,
     },
     "llamacpp": {
         "base_url": "http://localhost:8080",
@@ -51,6 +54,9 @@ DEFAULT_CONFIG_BY_TYPE: dict[str, dict] = {
         "api_key": "",
         "batch_token_budget": 400,
         "temperature": DEFAULT_TEMPERATURE,
+        # False/True/"low"/"medium"/"high" — mapped onto llama.cpp server's
+        # own reasoning_effort field, see LlamaCppProvider.__init__.
+        "thinking": False,
     },
     "gemini": {
         "api_key": "",
@@ -111,6 +117,26 @@ def validate_temperature(value: float | None) -> None:
         )
 
 
+# A reasoning-effort toggle — only meaningful for the two local provider
+# types, "ollama" (maps straight onto its own /api/chat "think" field) and
+# "llamacpp" (mapped onto its reasoning_effort field — see
+# LlamaCppProvider._resolve_reasoning_effort). False/True plus the graded
+# levels reasoning-capable models can accept (gpt-oss, some Gemma/Qwen
+# reasoning variants); ungraded models just treat any non-off value as
+# "on".
+THINKING_VALUES = (False, True, "low", "medium", "high")
+
+
+def validate_thinking(value) -> None:
+    """Raises ValueError if value isn't one of THINKING_VALUES. None (not
+    set) is always fine — it means "use the instance's own saved
+    setting."""
+    if value is None:
+        return
+    if value not in THINKING_VALUES:
+        raise ValueError(f"thinking must be one of {THINKING_VALUES!r}, got {value!r}")
+
+
 def build_provider(
     provider_type: str, config: dict, *, instance_name: str | None = None
 ) -> TranslationProvider:
@@ -127,6 +153,7 @@ def build_provider(
             model=config["model"],
             num_ctx=config.get("num_ctx", 8192),
             temperature=temperature,
+            thinking=config.get("thinking", False),
             instance_name=instance_name,
         )
     elif provider_type == "gemini":
@@ -160,6 +187,7 @@ def build_provider(
             api_key=config.get("api_key") or None,
             model=config.get("model") or None,
             temperature=temperature,
+            thinking=config.get("thinking", False),
             instance_name=instance_name,
         )
     else:

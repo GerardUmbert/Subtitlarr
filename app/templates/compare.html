@@ -116,6 +116,30 @@
     </div>
     <p class="field-hint">Lower = more literal/consistent, higher = more varied/creative. Pre-filled from each engine's saved config — edit here to test a different value without changing the real instance.</p>
 
+    <div class="field-row" v-if="thinkingCapableA || (thinkingCapableB && !useReference)" style="margin-top:6px;">
+      <div class="field" v-if="thinkingCapableA">
+        <label>Engine A thinking</label>
+        <select v-model="thinkingA">
+          <option :value="false">Off</option>
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+      <div class="field" v-if="thinkingCapableB && !useReference">
+        <label>Engine B thinking</label>
+        <select v-model="thinkingB">
+          <option :value="false">Off</option>
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+    </div>
+    <p class="field-hint" v-if="thinkingCapableA || (thinkingCapableB && !useReference)">
+      Local engines only. Off skips the model's reasoning pass entirely — safest for strict index/format output, since reasoning can otherwise exhaust the generation budget before the translation itself gets written. Low/Medium/High request graded reasoning effort on models that support it.
+    </p>
+
     <div class="field-row" v-if="!useReference" style="margin-top:6px;">
       <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
         <input type="checkbox" v-model="parallel" />
@@ -170,6 +194,9 @@
           {% raw %}{{ side.batch_count }}{% endraw %} quer{% raw %}{{ side.batch_count === 1 ? 'y' : 'ies' }}{% endraw %} ·
           {% raw %}{{ side.avg_seconds_per_cue }}{% endraw %}s/cue avg ·
           temp {% raw %}{{ side.temperature }}{% endraw %}
+          <template v-if="side.thinking !== null && side.thinking !== undefined">
+            · thinking {% raw %}{{ side.thinking === false ? 'off' : side.thinking === true ? 'on' : side.thinking }}{% endraw %}
+          </template>
         </div>
         <div class="stat-hint" v-else-if="side && !side.ok">{% raw %}{{ side.error }}{% endraw %}</div>
         <div class="stat-hint" v-else-if="side">reference upload — not timed</div>

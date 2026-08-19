@@ -51,6 +51,21 @@ async def search_library_endpoint(
     return {"data": search_library(q, source_language)}
 
 
+def _parse_thinking_form(value: str | None) -> bool | str | None:
+    """Converts a thinking_a/_b multipart Form string into the bool|str
+    shape run_compare expects — "true"/"false" (case-insensitive) become
+    real booleans, "low"/"medium"/"high" pass through unchanged, None (the
+    field wasn't sent) stays None."""
+    if value is None:
+        return None
+    lowered = value.lower()
+    if lowered == "true":
+        return True
+    if lowered == "false":
+        return False
+    return value
+
+
 def _serialize(result):
     return {
         "run_id": result.run_id,
@@ -68,6 +83,7 @@ def _serialize(result):
                 "error": r.error,
                 "subtitle_text": r.subtitle_text,
                 "temperature": r.temperature,
+                "thinking": r.thinking,
                 "total_seconds": round(r.total_seconds, 2),
                 "batch_count": r.batch_count,
                 "cue_count": r.cue_count,
@@ -99,6 +115,12 @@ class CompareRequest(BaseModel):
     # that instance's own saved config value.
     temperature_a: float | None = None
     temperature_b: float | None = None
+    # Per-side override of Ollama's "think" field — False/True/"low"/
+    # "medium"/"high". Only applies when that side's engine instance is
+    # Ollama; silently ignored otherwise. None falls back to that
+    # instance's own saved config value.
+    thinking_a: bool | str | None = None
+    thinking_b: bool | str | None = None
 
 
 @router.post("")
@@ -119,6 +141,8 @@ async def compare(
     try:
         registry.validate_temperature(req.temperature_a)
         registry.validate_temperature(req.temperature_b)
+        registry.validate_thinking(req.thinking_a)
+        registry.validate_thinking(req.thinking_b)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -133,6 +157,8 @@ async def compare(
             catalan_vegeta_insults_b=req.catalan_vegeta_insults_b,
             temperature_a=req.temperature_a,
             temperature_b=req.temperature_b,
+            thinking_a=req.thinking_a,
+            thinking_b=req.thinking_b,
         )
     except CompareError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -152,6 +178,12 @@ async def compare_uploaded(
     catalan_vegeta_insults_b: bool | None = Form(None),
     temperature_a: float | None = Form(None),
     temperature_b: float | None = Form(None),
+    # Sent as a string since Form() fields can't take a bool|str union the
+    # way a pydantic model field can — "true"/"false" map to the actual
+    # booleans, "low"/"medium"/"high" pass through as-is. See CompareRequest
+    # .thinking_a/_b for the underlying semantics.
+    thinking_a: str | None = Form(None),
+    thinking_b: str | None = Form(None),
     conn=Depends(state.get_conn),
     client=Depends(state.get_client),
 ):
@@ -162,9 +194,13 @@ async def compare_uploaded(
 
     instance_id_a == instance_id_b is allowed on purpose — see compare()
     above for why."""
+    resolved_thinking_a = _parse_thinking_form(thinking_a)
+    resolved_thinking_b = _parse_thinking_form(thinking_b)
     try:
         registry.validate_temperature(temperature_a)
         registry.validate_temperature(temperature_b)
+        registry.validate_thinking(resolved_thinking_a)
+        registry.validate_thinking(resolved_thinking_b)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -180,6 +216,8 @@ async def compare_uploaded(
             catalan_vegeta_insults_b=catalan_vegeta_insults_b,
             temperature_a=temperature_a,
             temperature_b=temperature_b,
+            thinking_a=resolved_thinking_a,
+            thinking_b=resolved_thinking_b,
         )
     except CompareError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -127,6 +127,8 @@ const Api = (() => {
         catalan_vegeta_insults_b: opts.catalanVegetaInsultsB ?? null,
         temperature_a: opts.temperatureA ?? null,
         temperature_b: opts.temperatureB ?? null,
+        thinking_a: opts.thinkingA ?? null,
+        thinking_b: opts.thinkingB ?? null,
       }),
     runCompareUploaded: async (file, sourceLang, targetLang, instanceIdA, instanceIdB, parallel, opts = {}) => {
       const form = new FormData();
@@ -140,6 +142,8 @@ const Api = (() => {
       if (opts.catalanVegetaInsultsB != null) form.append("catalan_vegeta_insults_b", opts.catalanVegetaInsultsB ? "true" : "false");
       if (opts.temperatureA != null) form.append("temperature_a", String(opts.temperatureA));
       if (opts.temperatureB != null) form.append("temperature_b", String(opts.temperatureB));
+      if (opts.thinkingA != null) form.append("thinking_a", String(opts.thinkingA));
+      if (opts.thinkingB != null) form.append("thinking_b", String(opts.thinkingB));
       const resp = await fetch("/api/compare/uploaded", { method: "POST", body: form });
       const data = await resp.json().catch(() => null);
       if (!resp.ok) throw new Error((data && data.detail) || resp.statusText);

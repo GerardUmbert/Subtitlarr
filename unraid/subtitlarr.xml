@@ -1,16 +1,17 @@
 <?xml version="1.0"?>
 <Container version="2">
-  <Name>subtitlarr</Name>
+  <Name>Subtitlarr</Name>
   <Repository>ghcr.io/gerardumbert/subtitlarr:latest</Repository>
   <Registry>https://ghcr.io/gerardumbert/subtitlarr</Registry>
   <Network>bridge</Network>
   <MyIP/>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
-  <Support>https://github.com/GerardUmbert/Subtitlarr</Support>
+  <Support>https://github.com/GerardUmbert/Subtitlarr/issues</Support>
   <Project>https://github.com/GerardUmbert/Subtitlarr</Project>
+  <License>https://github.com/GerardUmbert/Subtitlarr/blob/master/LICENSE</License>
   <Overview>Fills gaps in your Bazarr subtitle library by translating subtitles you already have (e.g. English) into languages you're missing (e.g. Spanish), using a local or cloud LLM. Never mounts your media folders — all reading and writing of subtitles happens through Bazarr's own REST API, so Bazarr remains the only thing with filesystem access to your library.&#13;&#10;&#13;&#10;Everything except the port and data path below is configured from the web UI after first start — Bazarr connection, translation engines (Ollama, llama.cpp, Gemini, NVIDIA NIM, OpenRouter, Groq), scheduling, and all other settings persist in Subtitlarr's own database, not container environment variables.&#13;&#10;&#13;&#10;No media path needs to be mapped into this container — only the /data path below, which is Subtitlarr's own small SQLite database, not your library.</Overview>
-  <Category>MediaApp:Other Tools:</Category>
+  <Category>MediaApp:Other MediaApp:Video</Category>
   <WebUI>http://[IP]:[PORT:7777]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/GerardUmbert/Subtitlarr/master/unraid/subtitlarr.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/GerardUmbert/Subtitlarr/master/unraid/icon.png</Icon>
