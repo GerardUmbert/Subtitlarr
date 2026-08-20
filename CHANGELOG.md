@@ -3,6 +3,15 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.11.17]
+
+### Added
+- **Sidebar version number now links to the source repository**, and the
+  README gained a License section pointing at `LICENSE`. AGPL-3.0
+  requires prominently offering users of a running instance a way to
+  get the corresponding source — the app previously had no such link
+  anywhere in its UI.
+
 ## [0.11.16]
 
 ### Fixed
