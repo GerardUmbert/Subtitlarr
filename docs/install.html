@@ -66,7 +66,8 @@ docker compose up -d</code></pre>
 
   <h2 id="unraid" class="reveal-scroll">Unraid</h2>
   <div class="panel reveal-scroll">
-    <p><strong>Community Applications template</strong> — use <a href="https://github.com/GerardUmbert/Subtitlarr/blob/master/unraid/subtitlarr.xml">unraid/subtitlarr.xml</a> as a starting point in Unraid's Docker tab (Add Container → Template). It points at the published <code>ghcr.io/gerardumbert/subtitlarr</code> image and only exposes the fields that genuinely can't be configured from the web UI afterward: <strong>WebUI Port</strong>, <strong>Data</strong> path, and <strong>PUID</strong>/<strong>PGID</strong>. Everything else — Bazarr connection, engines, scheduling — is set from the app's own UI once it's running, not from the container form.</p>
+    <p><strong>Community Applications</strong> — Subtitlarr is published in the CA store. Search "Subtitlarr" from the Apps tab, or install directly from <a href="https://ca.unraid.net/apps/subtitlarr-0ejd54j1xpuckv?q=Subtitlarr">ca.unraid.net/apps/subtitlarr-0ejd54j1xpuckv</a>. It points at the published <code>ghcr.io/gerardumbert/subtitlarr</code> image and only exposes the fields that genuinely can't be configured from the web UI afterward: <strong>WebUI Port</strong>, <strong>Data</strong> path, and <strong>PUID</strong>/<strong>PGID</strong>. Everything else — Bazarr connection, engines, scheduling — is set from the app's own UI once it's running, not from the container form.</p>
+    <p>Not using CA? The template source lives at <a href="https://github.com/GerardUmbert/Subtitlarr/blob/master/unraid/subtitlarr.xml">unraid/subtitlarr.xml</a> — add it as a template in Unraid's Docker tab (Add Container → Template → paste the raw file URL).</p>
   </div>
   <p>Manual container setup:</p>
   <ul>

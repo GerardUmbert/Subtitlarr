@@ -293,15 +293,19 @@ add an Ollama engine instance pointing at `http://ollama:11434`.
 
 ### Unraid (or any Docker host with Bazarr/Ollama already running)
 
-- **Community Applications template**: use
-  [`unraid/subtitlarr.xml`](unraid/subtitlarr.xml) as a starting point, then
-  add it as a template in Unraid's Docker tab (Add Container → Template →
-  paste the raw file URL or import it manually). It points at the published
-  `ghcr.io/gerardumbert/subtitlarr` image and only exposes the fields that
-  genuinely can't be configured from the web UI afterward: **WebUI Port**,
-  **Data** path, and **PUID**/**PGID**. Everything else — Bazarr
-  connection, translation engines, scheduling, all other settings — is set
-  from the app's own UI once it's running, not from the container form.
+- **Community Applications**: Subtitlarr is published in the CA store —
+  search "Subtitlarr" from the Apps tab, or install directly from
+  [ca.unraid.net/apps/subtitlarr-0ejd54j1xpuckv](https://ca.unraid.net/apps/subtitlarr-0ejd54j1xpuckv?q=Subtitlarr).
+  It points at the published `ghcr.io/gerardumbert/subtitlarr` image and
+  only exposes the fields that genuinely can't be configured from the web
+  UI afterward: **WebUI Port**, **Data** path, and **PUID**/**PGID**.
+  Everything else — Bazarr connection, translation engines, scheduling,
+  all other settings — is set from the app's own UI once it's running, not
+  from the container form.
+- **Manual template import** (only if you're not using CA): the template
+  source lives at [`unraid/subtitlarr.xml`](unraid/subtitlarr.xml) — add it
+  as a template in Unraid's Docker tab (Add Container → Template → paste
+  the raw file URL).
 - **Manual container**: create a container from
   `ghcr.io/gerardumbert/subtitlarr:latest` with:
   - **Port**: `7777` (container) → keep the host side matching `7777` too if
