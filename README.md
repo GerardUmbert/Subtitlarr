@@ -412,3 +412,9 @@ See [AGENTS.md](AGENTS.md) for more detailed day-to-day development notes.
   musl/Alpine, which caused real build failures. `slim` trades a larger
   image (~150MB base vs. Alpine's ~50MB) for a build that's known to work.
 - `PORT` is not yet wired to anything — see the Configuration table above.
+
+## License
+
+[AGPL-3.0](LICENSE) — free to use, modify, and self-host. If you run a
+modified version as a network service, you must make that version's
+complete source available to its users.
