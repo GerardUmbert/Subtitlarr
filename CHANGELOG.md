@@ -3,6 +3,17 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.11.15]
+
+### Added
+- **Optional cooldown-clearing before each scheduled run.** New "Clear
+  engine rate limits before each scheduled run" checkbox on the Settings
+  page (on by default). With a daily cron, an engine's 24h rate-limit/
+  auth cooldown can outlive the gap to the next scheduled run if the
+  cron fires before the cooldown's exact trip time — previously this
+  silently starved that engine (or the whole cascade) on every following
+  run until someone noticed and cleared it by hand from the Jobs page.
+
 ## [0.11.14]
 
 ### Added

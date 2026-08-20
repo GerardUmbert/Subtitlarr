@@ -7,6 +7,7 @@ createApp({
       ageThresholdDays: 14,
       dailyTranslationLimit: 100,
       pauseBetweenItemsSeconds: 30,
+      clearRateLimitsBeforeScheduledRun: true,
       queueUploadsEnabled: false,
       pushUploadsCron: "",
       syncMediaCron: "",
@@ -42,6 +43,7 @@ createApp({
       this.ageThresholdDays = cfg.age_threshold_days;
       this.dailyTranslationLimit = cfg.daily_translation_limit;
       this.pauseBetweenItemsSeconds = cfg.pause_between_items_seconds;
+      this.clearRateLimitsBeforeScheduledRun = cfg.clear_rate_limits_before_scheduled_run;
       this.queueUploadsEnabled = cfg.queue_uploads_enabled;
       this.pushUploadsCron = cfg.push_uploads_cron;
       this.syncMediaCron = cfg.sync_media_cron;
@@ -85,6 +87,7 @@ createApp({
           age_threshold_days: this.ageThresholdDays,
           daily_translation_limit: this.dailyTranslationLimit,
           pause_between_items_seconds: this.pauseBetweenItemsSeconds,
+          clear_rate_limits_before_scheduled_run: this.clearRateLimitsBeforeScheduledRun,
           queue_uploads_enabled: this.queueUploadsEnabled,
           push_uploads_cron: this.pushUploadsCron,
           sync_media_cron: this.syncMediaCron,

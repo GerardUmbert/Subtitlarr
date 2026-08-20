@@ -374,6 +374,9 @@ class RunController:
         return await self.run_batch(items, triggered_by="manual_full")
 
     async def run_scheduled(self) -> RunProgress:
+        if self._settings.clear_rate_limits_before_scheduled_run:
+            with state.db_lock:
+                engine_instances_repo.clear_all_rate_limits(self._conn)
         await self.poll()
         items = selector.get_age_gated_queue(self._conn, self._settings.age_threshold_days)
         return await self.run_batch(items, triggered_by="scheduled")

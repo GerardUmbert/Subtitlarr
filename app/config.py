@@ -29,6 +29,16 @@ class Settings(BaseSettings):
     # A brief rest between items so a long run doesn't peg the GPU
     # non-stop for hours straight. 0 disables the pause entirely.
     pause_between_items_seconds: int = 30
+    # When true, a scheduled run clears every engine's rate-limit/auth
+    # cooldown before it starts, same as clicking "Clear all rate limits"
+    # on the Jobs page. On by default — with a daily cron, a cooldown
+    # tripped mid-run one day can outlive the ~24h gap to the next run
+    # (cron time landing before the cooldown's exact trip time),
+    # otherwise silently starving every following run until someone
+    # notices and clears it by hand. The cascade will simply re-trip a
+    # genuinely still-exhausted engine's cooldown again after a few
+    # failures, same as any other run.
+    clear_rate_limits_before_scheduled_run: bool = True
     # When true, a successful translation is cached to local disk instead of
     # immediately uploaded to Bazarr — items sit as 'translated_pending_upload'
     # until a separate "push queued uploads" action sends them all in one

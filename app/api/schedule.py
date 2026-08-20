@@ -16,6 +16,7 @@ class ScheduleConfig(BaseModel):
     age_threshold_days: int
     daily_translation_limit: int
     pause_between_items_seconds: int
+    clear_rate_limits_before_scheduled_run: bool
     queue_uploads_enabled: bool
     push_uploads_cron: str
     sync_media_cron: str
@@ -31,6 +32,7 @@ def get_schedule_config():
         "age_threshold_days": settings.age_threshold_days,
         "daily_translation_limit": settings.daily_translation_limit,
         "pause_between_items_seconds": settings.pause_between_items_seconds,
+        "clear_rate_limits_before_scheduled_run": settings.clear_rate_limits_before_scheduled_run,
         "queue_uploads_enabled": settings.queue_uploads_enabled,
         "push_uploads_cron": settings.push_uploads_cron,
         "sync_media_cron": settings.sync_media_cron,
@@ -105,6 +107,10 @@ def set_schedule_config(
     settings_store.save_one(conn, "daily_translation_limit", config.daily_translation_limit)
     settings.pause_between_items_seconds = config.pause_between_items_seconds
     settings_store.save_one(conn, "pause_between_items_seconds", config.pause_between_items_seconds)
+    settings.clear_rate_limits_before_scheduled_run = config.clear_rate_limits_before_scheduled_run
+    settings_store.save_one(
+        conn, "clear_rate_limits_before_scheduled_run", config.clear_rate_limits_before_scheduled_run
+    )
     settings.queue_uploads_enabled = config.queue_uploads_enabled
     settings_store.save_one(conn, "queue_uploads_enabled", config.queue_uploads_enabled)
     settings.push_uploads_cron = config.push_uploads_cron

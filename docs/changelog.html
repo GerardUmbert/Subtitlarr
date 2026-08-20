@@ -40,6 +40,13 @@
   <h1 class="reveal">Changelog</h1>
   <p class="lede reveal">Generated from <a href="https://github.com/GerardUmbert/Subtitlarr/blob/master/CHANGELOG.md">CHANGELOG.md</a> — that file is the source of truth.</p>
 <div class="changelog-entry reveal-scroll">
+<div class="changelog-version">0.11.15</div>
+<div class="changelog-section-title">Added</div>
+<ul>
+<li><strong>Optional cooldown-clearing before each scheduled run.</strong> New "Clear engine rate limits before each scheduled run" checkbox on the Settings page (on by default). With a daily cron, an engine's 24h rate-limit/auth cooldown can outlive the gap to the next scheduled run if the cron fires before the cooldown's exact trip time — previously this silently starved that engine (or the whole cascade) on every following run until someone noticed and cleared it by hand from the Jobs page.</li>
+</ul>
+</div>
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.11.14</div>
 <div class="changelog-section-title">Added</div>
 <ul>

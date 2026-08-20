@@ -279,6 +279,59 @@ def test_cancel_current_returns_false_when_no_run_is_active(conn):
 
 
 @pytest.mark.asyncio
+async def test_run_scheduled_clears_rate_limits_first_when_enabled(conn, monkeypatch):
+    """With clear_rate_limits_before_scheduled_run on, an engine still in
+    its 24h cooldown from a PRIOR run must not silently starve today's
+    scheduled run just because the cron fired before the cooldown's exact
+    trip time expired."""
+    instance = engine_instances_repo.create_instance(
+        conn, name="gemini", provider_type="gemini", config={"api_key": "x", "model": "m"}
+    )
+    for _ in range(engine_instances_repo.RATE_LIMIT_FAILURE_THRESHOLD):
+        _expire_burst_debounce(conn, instance["id"])
+        engine_instances_repo.record_rate_limited_failure(conn, instance["id"])
+    assert engine_instances_repo.get_instance(conn, instance["id"])["rate_limited_until"] is not None
+
+    monkeypatch.setattr(runner_module.poller, "poll_once", lambda conn, client: _no_op_poll())
+    monkeypatch.setattr(runner_module.selector, "get_age_gated_queue", lambda conn, days: [])
+    monkeypatch.setattr(runner_module.selector, "resolve_and_gate", _fake_resolve_and_gate)
+
+    settings = Settings(pause_between_items_seconds=0, clear_rate_limits_before_scheduled_run=True)
+    controller = RunController(conn, lambda: object(), settings)
+    await controller.run_scheduled()
+
+    assert engine_instances_repo.get_instance(conn, instance["id"])["rate_limited_until"] is None
+
+
+@pytest.mark.asyncio
+async def test_run_scheduled_leaves_rate_limits_alone_when_disabled(conn, monkeypatch):
+    instance = engine_instances_repo.create_instance(
+        conn, name="gemini", provider_type="gemini", config={"api_key": "x", "model": "m"}
+    )
+    for _ in range(engine_instances_repo.RATE_LIMIT_FAILURE_THRESHOLD):
+        _expire_burst_debounce(conn, instance["id"])
+        engine_instances_repo.record_rate_limited_failure(conn, instance["id"])
+    assert engine_instances_repo.get_instance(conn, instance["id"])["rate_limited_until"] is not None
+
+    monkeypatch.setattr(runner_module.poller, "poll_once", lambda conn, client: _no_op_poll())
+    monkeypatch.setattr(runner_module.selector, "get_age_gated_queue", lambda conn, days: [])
+    monkeypatch.setattr(runner_module.selector, "resolve_and_gate", _fake_resolve_and_gate)
+
+    settings = Settings(pause_between_items_seconds=0, clear_rate_limits_before_scheduled_run=False)
+    controller = RunController(conn, lambda: object(), settings)
+    # The only instance is still rate-limited and wasn't cleared, so
+    # run_batch has no usable cascade left to build.
+    with pytest.raises(runner_module.NoEngineConfiguredError):
+        await controller.run_scheduled()
+
+    assert engine_instances_repo.get_instance(conn, instance["id"])["rate_limited_until"] is not None
+
+
+async def _no_op_poll():
+    return {}
+
+
+@pytest.mark.asyncio
 async def test_cancel_mid_item_stops_the_run_without_starting_the_next_item(conn, monkeypatch):
     """A Stop click arriving mid-item (simulated here by translate_item
     itself raising RunCancelledError, which is what happens once
