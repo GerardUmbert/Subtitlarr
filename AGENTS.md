@@ -18,9 +18,10 @@ at minimum:
 
 ```
 DB_PATH=./data/subtitlarr.db
-BAZARR_BASE_URL=http://<your-bazarr-host>:6767
-BAZARR_API_KEY=<your-bazarr-api-key>
 ```
+
+Bazarr connection and translation engines are set from the web UI after
+first start, not via `.env` — see README.md.
 
 **Set `DB_PATH` explicitly and always as a relative repo-local path.**
 `config.py`'s hardcoded default is `/data/subtitlarr.db` — an absolute Unix

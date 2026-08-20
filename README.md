@@ -273,18 +273,17 @@ docker run -d \
   --name subtitlarr \
   -p 7777:7777 \
   -v ./data:/data \
-  -e BAZARR_BASE_URL=http://<your-bazarr-host>:6767 \
-  -e BAZARR_API_KEY=<your-bazarr-api-key> \
   ghcr.io/gerardumbert/subtitlarr:latest
 ```
 
-Open `http://localhost:7777`, then add at least one engine instance from the
-**Translation Engine** page before running a translation.
+Open `http://localhost:7777`, then set your Bazarr connection from
+**Settings** and add at least one engine instance from the **Translation
+Engine** page before running a translation.
 
 ### Docker Compose (local dev, or if you don't already run Ollama)
 
 ```bash
-cp .env.example .env   # fill in BAZARR_BASE_URL, BAZARR_API_KEY, etc.
+cp .env.example .env   # fill in scheduling defaults, PUID/PGID, etc.
 docker compose up -d
 ```
 
