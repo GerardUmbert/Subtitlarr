@@ -35,7 +35,10 @@
         <p class="field-hint">Brief rest between translations so the GPU isn't pegged non-stop for hours (0 = no pause).</p>
       </div>
       <div class="field">
-        <label><input type="checkbox" v-model="clearRateLimitsBeforeScheduledRun" /> Clear engine rate limits before each scheduled run</label>
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="checkbox" v-model="clearRateLimitsBeforeScheduledRun" style="width:auto;" />
+          Clear engine rate limits before each scheduled run
+        </label>
         <p class="field-hint">Un-flags every engine currently in a rate-limit/auth cooldown right before a scheduled run starts, same as "Clear all rate limits" on the Jobs page. With a daily cron, a cooldown tripped mid-run one day can otherwise outlive the ~24h gap to the next run and silently skip that engine again. A genuinely still-exhausted engine just re-trips its cooldown after a few failures, same as any other run.</p>
       </div>
       <p class="field-hint" v-if="nextRun">Next scheduled run: {% raw %}{{ nextRun }}{% endraw %}</p>
