@@ -3,6 +3,16 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.11.16]
+
+### Fixed
+- **Docker image was missing OCI metadata labels**, so registries/CA
+  showed "Last Update: Unknown" for the published image instead of the
+  actual build date. The release workflow now generates standard
+  `org.opencontainers.image.*` labels (created/version/revision/source)
+  via `docker/metadata-action`, and the Dockerfile carries static
+  title/description/source/license labels.
+
 ## [0.11.15]
 
 ### Added

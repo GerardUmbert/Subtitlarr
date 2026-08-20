@@ -1,5 +1,10 @@
 FROM python:3.12-slim
 
+LABEL org.opencontainers.image.title="Subtitlarr" \
+      org.opencontainers.image.description="Fills gaps in your Bazarr subtitle library by translating subtitles you already have into languages you're missing, using a local or cloud LLM." \
+      org.opencontainers.image.source="https://github.com/GerardUmbert/Subtitlarr" \
+      org.opencontainers.image.licenses="AGPL-3.0"
+
 WORKDIR /app
 
 RUN apt-get update \

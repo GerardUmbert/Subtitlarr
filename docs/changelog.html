@@ -40,6 +40,13 @@
   <h1 class="reveal">Changelog</h1>
   <p class="lede reveal">Generated from <a href="https://github.com/GerardUmbert/Subtitlarr/blob/master/CHANGELOG.md">CHANGELOG.md</a> — that file is the source of truth.</p>
 <div class="changelog-entry reveal-scroll">
+<div class="changelog-version">0.11.16</div>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li><strong>Docker image was missing OCI metadata labels</strong>, so registries/CA showed "Last Update: Unknown" for the published image instead of the actual build date. The release workflow now generates standard <code>org.opencontainers.image.*</code> labels (created/version/revision/source) via <code>docker/metadata-action</code>, and the Dockerfile carries static title/description/source/license labels.</li>
+</ul>
+</div>
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.11.15</div>
 <div class="changelog-section-title">Added</div>
 <ul>
