@@ -89,6 +89,18 @@ class Settings(BaseSettings):
     backup_cron: str = "30 2 * * *"
     backup_keep_count: int = 20
 
+    # Anonymous usage telemetry: a daily ping (instance id, app version, OS,
+    # configured engine types, item/translation counts — no Bazarr URL, API
+    # keys, filenames, or subtitle content) sent to a GA4 property this
+    # project's maintainer controls. On by default, user-visible and
+    # toggleable from Settings. Silently disabled regardless of the toggle
+    # if telemetry_measurement_id/telemetry_api_secret aren't set (e.g.
+    # building from source without the maintainer's own GA credentials).
+    telemetry_enabled: bool = True
+    telemetry_measurement_id: str = ""
+    telemetry_api_secret: str = ""
+    telemetry_cron: str = "0 4 * * *"
+
     # Runtime
     db_path: str = "/data/subtitlarr.db"
     run_concurrency: int = 1

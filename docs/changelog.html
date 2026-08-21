@@ -40,6 +40,13 @@
   <h1 class="reveal">Changelog</h1>
   <p class="lede reveal">Generated from <a href="https://github.com/GerardUmbert/Subtitlarr/blob/master/CHANGELOG.md">CHANGELOG.md</a> — that file is the source of truth.</p>
 <div class="changelog-entry reveal-scroll">
+<div class="changelog-version">0.11.18</div>
+<div class="changelog-section-title">Added</div>
+<ul>
+<li><strong>Anonymous usage telemetry, on by default and toggleable from Settings.</strong> Sends a daily ping (random install ID, app version, OS, configured translation engine types, current queue size, and completed/failed/run counts SINCE the last successful ping) to help gauge overall adoption — never Bazarr URL/API keys, engine names/hosts, file paths, or subtitle content. Counts are sent as deltas rather than lifetime totals so summing every ping in GA4 gives a correct global total instead of double-counting each instance&#x27;s history on every fire. Silently disabled entirely if no GA4 credentials are configured on the deployment, so a from-source build without them sends nothing regardless of the toggle. Restoring a database backup (or moving the DB file to new hardware) keeps the same install identity and counters, since that&#x27;s the same instance continuing, not a new one.</li>
+</ul>
+</div>
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.11.17</div>
 <div class="changelog-section-title">Added</div>
 <ul>
@@ -50,14 +57,14 @@
 <div class="changelog-version">0.11.16</div>
 <div class="changelog-section-title">Fixed</div>
 <ul>
-<li><strong>Docker image was missing OCI metadata labels</strong>, so registries/CA showed "Last Update: Unknown" for the published image instead of the actual build date. The release workflow now generates standard <code>org.opencontainers.image.*</code> labels (created/version/revision/source) via <code>docker/metadata-action</code>, and the Dockerfile carries static title/description/source/license labels.</li>
+<li><strong>Docker image was missing OCI metadata labels</strong>, so registries/CA showed &quot;Last Update: Unknown&quot; for the published image instead of the actual build date. The release workflow now generates standard <code>org.opencontainers.image.*</code> labels (created/version/revision/source) via <code>docker/metadata-action</code>, and the Dockerfile carries static title/description/source/license labels.</li>
 </ul>
 </div>
 <div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.11.15</div>
 <div class="changelog-section-title">Added</div>
 <ul>
-<li><strong>Optional cooldown-clearing before each scheduled run.</strong> New "Clear engine rate limits before each scheduled run" checkbox on the Settings page (on by default). With a daily cron, an engine's 24h rate-limit/auth cooldown can outlive the gap to the next scheduled run if the cron fires before the cooldown's exact trip time — previously this silently starved that engine (or the whole cascade) on every following run until someone noticed and cleared it by hand from the Jobs page.</li>
+<li><strong>Optional cooldown-clearing before each scheduled run.</strong> New &quot;Clear engine rate limits before each scheduled run&quot; checkbox on the Settings page (on by default). With a daily cron, an engine&#x27;s 24h rate-limit/ auth cooldown can outlive the gap to the next scheduled run if the cron fires before the cooldown&#x27;s exact trip time — previously this silently starved that engine (or the whole cascade) on every following run until someone noticed and cleared it by hand from the Jobs page.</li>
 </ul>
 </div>
 <div class="changelog-entry reveal-scroll">

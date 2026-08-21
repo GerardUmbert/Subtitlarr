@@ -52,3 +52,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            TELEMETRY_MEASUREMENT_ID=${{ secrets.TELEMETRY_MEASUREMENT_ID }}
+            TELEMETRY_API_SECRET=${{ secrets.TELEMETRY_API_SECRET }}

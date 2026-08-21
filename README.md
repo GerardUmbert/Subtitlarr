@@ -355,6 +355,10 @@ table.
 | `LANGUAGE_CHECK_CRON` | Optional cron to audit recently-completed items for the wrong output language and reset any mismatch to pending; needs a check engine picked on the Jobs page first; blank = manual only | `0 5 * * *` |
 | `BACKUP_CRON` | Daily snapshot of the whole database to `/data/backups/`; blank disables it | `30 2 * * *` |
 | `BACKUP_KEEP_COUNT` | How many daily/manual snapshots to retain before pruning the oldest | `20` |
+| `TELEMETRY_ENABLED` | Send an anonymous daily usage ping (install ID, version, OS, configured engine types, item/translation counts — never Bazarr URL, API keys, or subtitle content); toggleable from Settings | `true` |
+| `TELEMETRY_MEASUREMENT_ID` | GA4 Measurement ID telemetry is sent to; leave blank to disable telemetry entirely regardless of `TELEMETRY_ENABLED` | `` |
+| `TELEMETRY_API_SECRET` | GA4 Measurement Protocol API secret | `` |
+| `TELEMETRY_CRON` | Cron schedule for the telemetry ping; blank disables it | `0 4 * * *` |
 | `DB_PATH` | SQLite file path inside the container | `/data/subtitlarr.db` |
 | `RUN_CONCURRENCY` | Reserved for future use | `1` |
 | `LOG_LEVEL` | Logging verbosity | `INFO` |

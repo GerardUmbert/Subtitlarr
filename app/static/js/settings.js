@@ -15,6 +15,7 @@ createApp({
       languageCheckCron: "",
       backupCron: "",
       backupKeepCount: 20,
+      telemetryEnabled: true,
       nextRun: "",
       nextPushUploadsRun: "",
       nextSyncMediaRun: "",
@@ -51,6 +52,7 @@ createApp({
       this.languageCheckCron = cfg.language_check_cron;
       this.backupCron = cfg.backup_cron;
       this.backupKeepCount = cfg.backup_keep_count;
+      this.telemetryEnabled = cfg.telemetry_enabled;
       await this.loadNextRun();
       try {
         const status = await Api.getSyncStatus();
@@ -94,6 +96,7 @@ createApp({
           sync_subs_cron: this.syncSubsCron,
           language_check_cron: this.languageCheckCron,
           backup_cron: this.backupCron,
+          telemetry_enabled: this.telemetryEnabled,
         });
         await this.loadNextRun();
         this.saved = true;

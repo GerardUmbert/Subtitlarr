@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.11.18]
+
+### Added
+- **Anonymous usage telemetry, on by default and toggleable from
+  Settings.** Sends a daily ping (random install ID, app version, OS,
+  configured translation engine types, current queue size, and
+  completed/failed/run counts SINCE the last successful ping) to help
+  gauge overall adoption — never Bazarr URL/API keys, engine
+  names/hosts, file paths, or subtitle content. Counts are sent as
+  deltas rather than lifetime totals so summing every ping in GA4
+  gives a correct global total instead of double-counting each
+  instance's history on every fire. Silently disabled entirely if no
+  GA4 credentials are configured on the deployment, so a from-source
+  build without them sends nothing regardless of the toggle. Restoring
+  a database backup (or moving the DB file to new hardware) keeps the
+  same install identity and counters, since that's the same instance
+  continuing, not a new one.
+
 ## [0.11.17]
 
 ### Added

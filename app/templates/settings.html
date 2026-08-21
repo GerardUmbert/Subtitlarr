@@ -143,6 +143,20 @@
     </div>
   </div>
 
+  <div class="panel" style="margin-top:16px;">
+    <div class="panel-body">
+    <div class="panel-title">Privacy</div>
+
+      <div class="field">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="checkbox" v-model="telemetryEnabled" style="width:auto;" />
+          Share anonymous usage statistics
+        </label>
+        <p class="field-hint">Sends a daily ping with a random install ID, app version, OS, which translation engine type(s) are configured, and item/translation counts. Never includes your Bazarr URL, API keys, engine names, file paths, or subtitle content. On by default — turn off anytime.</p>
+      </div>
+    </div>
+  </div>
+
   <div class="field-row" style="margin-top:16px;">
     <button class="btn btn-primary" @click="save" :disabled="saving">
       {% raw %}{{ saving ? 'Saving…' : 'Save' }}{% endraw %}

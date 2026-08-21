@@ -28,6 +28,7 @@ PERSISTED_KEYS = (
     "sync_subs_cron",
     "language_check_cron",
     "backup_cron",
+    "telemetry_enabled",
 )
 
 

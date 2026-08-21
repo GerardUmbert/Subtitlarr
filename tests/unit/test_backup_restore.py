@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from app import telemetry
 from app.db import database, repository
 from app.engine import backup
 
@@ -32,6 +33,31 @@ def test_restore_recovers_a_deleted_item(db_path):
     backup.restore_backup(conn, db_path, backup_filename)
 
     assert conn.execute("SELECT COUNT(*) FROM items").fetchone()[0] == 1
+
+
+def test_restore_keeps_telemetry_instance_id_and_counters(db_path):
+    """Restore (and, by the same mechanism, moving the DB file to new
+    hardware) is the SAME instance continuing, not a new install — the
+    common real-world case is migrating one running Subtitlarr to a new
+    NAS, not handing a backup to a second, separate install. Keeping
+    the identity and delta counters intact means the next ping reports
+    only genuinely new activity, instead of re-reporting the restored
+    snapshot's entire history as if it were a fresh install."""
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    conn.execute(
+        "INSERT INTO run_history (started_at, finished_at, triggered_by) VALUES ('t', 't', 'manual_full')"
+    )
+    conn.commit()
+    original_id = telemetry.build_payload(conn)["instance_id"]
+
+    result = backup.run_backup(db_path, keep_count=20)
+    backup_filename = Path(result["path"]).name
+
+    backup.restore_backup(conn, db_path, backup_filename)
+
+    payload = telemetry.build_payload(conn)
+    assert payload["instance_id"] == original_id
 
 
 def test_restoring_an_older_schema_backup_gets_migrated_back_to_current(tmp_path):

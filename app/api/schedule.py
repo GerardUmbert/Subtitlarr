@@ -23,6 +23,7 @@ class ScheduleConfig(BaseModel):
     sync_subs_cron: str
     language_check_cron: str
     backup_cron: str
+    telemetry_enabled: bool
 
 
 @router.get("/config/schedule")
@@ -40,6 +41,7 @@ def get_schedule_config():
         "language_check_cron": settings.language_check_cron,
         "backup_cron": settings.backup_cron,
         "backup_keep_count": settings.backup_keep_count,
+        "telemetry_enabled": settings.telemetry_enabled,
     }
 
 
@@ -123,6 +125,8 @@ def set_schedule_config(
     settings_store.save_one(conn, "language_check_cron", config.language_check_cron)
     settings.backup_cron = config.backup_cron
     settings_store.save_one(conn, "backup_cron", config.backup_cron)
+    settings.telemetry_enabled = config.telemetry_enabled
+    settings_store.save_one(conn, "telemetry_enabled", config.telemetry_enabled)
     return {"saved": True}
 
 

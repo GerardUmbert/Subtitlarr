@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app import state
+from app import __version__, state
 from app.api import (
     bazarr_conn,
     compare,
@@ -31,6 +31,7 @@ from app.engine.runner import RunController
 from app.logging_conf import configure_logging
 from app.providers import languages as language_names
 from app.scheduler.cron import CronScheduler
+from app import telemetry
 
 configure_logging()
 
@@ -44,6 +45,7 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 # cached version, making fixed bugs look unfixed.
 ASSET_VERSION = str(int(time.time()))
 templates.env.globals["asset_version"] = ASSET_VERSION
+templates.env.globals["app_version"] = __version__
 
 
 @asynccontextmanager
@@ -102,6 +104,12 @@ async def lifespan(app: FastAPI):
             settings.backup_cron,
             jobs.cron_backup,
             job_id="backup",
+        )
+    if settings.telemetry_cron:
+        state.cron_scheduler.install(
+            settings.telemetry_cron,
+            functools.partial(telemetry.send_ping, state.db_conn, settings),
+            job_id="telemetry",
         )
 
     yield
