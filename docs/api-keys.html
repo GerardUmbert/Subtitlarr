@@ -162,7 +162,12 @@
   </div>
   <div class="step">
     <div class="step-num">3</div>
-    <div class="step-body"><p>Once the queue is drained, re-run just the failures. Filter the Queue page to the <strong>Failed</strong> chip and run that filtered batch. A second pass over just the failures often clears a meaningful chunk of them on its own (rate limits expiring, quota resets).</p></div>
+    <div class="step-body">
+      <p>Once the queue is drained, re-run just the failures. Filter the Queue page to the <strong>Failed</strong> chip and run that filtered batch. A second pass over just the failures often clears a meaningful chunk of them on its own (rate limits expiring, quota resets).</p>
+      <div class="callout">
+        A batch that keeps failing against the same cloud engine is usually hitting a genuine content block, not a transient error — repeatedly re-submitting it risks that provider's own abuse/ToS enforcement against the account behind the key. Don't loop content you expect to keep tripping the filter against a key you'd mind losing; use a throwaway/secondary account for that instead, and route genuinely repeat-blocked content to a local engine (step 4).
+      </div>
+    </div>
   </div>
   <div class="step">
     <div class="step-num">4</div>

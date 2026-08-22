@@ -3,6 +3,18 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.11.20]
+
+### Added
+- **Each app page now links to its most relevant section of the docs
+  site** (Jobs, Translation Engines, Language Rules, Bazarr Connection,
+  History, Settings), opening in a new tab.
+- **Docs gained a note on repeatedly re-running content-blocked
+  batches** against the same cloud engine key — that's usually a
+  genuine content filter hit, not a transient error, and repeatedly
+  re-submitting it risks the provider's own abuse enforcement against
+  the account behind the key.
+
 ## [0.11.19]
 
 ### Added

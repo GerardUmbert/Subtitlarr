@@ -157,6 +157,9 @@
       <div class="step-body">
         <h3>Once the queue is drained, re-run just the failures</h3>
         <p>On the Queue page, filter to the <strong>Failed</strong> chip and run that filtered batch. A second pass over just the failures often clears a meaningful chunk of them on its own — a rate limit expires, a transient error doesn't repeat, quota resets overnight. Targeting the Failed filter specifically means only those items are touched, not a full re-run of everything already <code>done</code>.</p>
+        <div class="callout">
+          A batch that keeps landing back in <code>failed</code> against the same cloud engine is usually hitting a genuine content block, not a transient error — repeatedly re-submitting the same flagged content risks that provider's own abuse/ToS enforcement against the account behind the key, not just another failed item. If a batch is content you expect to keep tripping the filter, don't loop it against the same key indefinitely — use a throwaway/secondary account for that key rather than one tied to anything you'd mind losing, and consider routing genuinely repeat-blocked content to a local engine instead (see step 4).
+        </div>
       </div>
     </div>
     <div class="step">
