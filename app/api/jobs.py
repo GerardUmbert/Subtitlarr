@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app import state
+from app import state, telemetry
 from app.config import settings
 from app.db import database, engine_instances_repo, repository
 from app.engine import backup, language_check, stale_audit, upload_queue
@@ -432,6 +432,19 @@ async def restore_backup_now(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     database.apply_migrations(conn)
     return {"restored": True, **result}
+
+
+@router.post("/telemetry/send-now")
+async def send_telemetry_now(conn=Depends(state.get_conn)):
+    """Fires the daily usage ping immediately instead of waiting for
+    telemetry_cron (default 4 AM) — mainly so a user (or the maintainer)
+    can confirm telemetry is actually wired up and reaching GA4 without
+    an overnight wait. Visible right away as a 'telemetry' row on the
+    Jobs/History page (done/failed/skipped), same as every other job."""
+    state.spawn_background_task(
+        telemetry.send_ping(conn, settings, triggered_by="manual"), description="telemetry"
+    )
+    return {"started": True}
 
 
 _stale_audit_state = {"active": False, "error": None, "result": None}

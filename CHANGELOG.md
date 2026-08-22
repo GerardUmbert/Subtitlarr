@@ -3,6 +3,21 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.11.19]
+
+### Added
+- **Telemetry pings are now visible on the Jobs/History page** as a
+  "Usage telemetry" entry (done/failed/skipped), same as every other
+  scheduled job. Previously a successful ping left no trace anywhere —
+  only a warning log line on failure — so there was no way to tell
+  "it worked" apart from "the cron never fired." Settings also gained
+  a "Send test ping now" button to confirm telemetry reaches GA4
+  without waiting for the daily schedule.
+
+### Fixed
+- **Hardened log output to never include request credentials**, even
+  incidentally via a third-party library's own request logging.
+
 ## [0.11.18]
 
 ### Added

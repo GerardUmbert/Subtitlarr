@@ -1,10 +1,22 @@
 import logging
 import os
+import re
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from app.config import settings
+
+# Redacts any api_secret query param value before it reaches a log handler,
+# regardless of which logger the record originated from.
+_API_SECRET_PATTERN = re.compile(r"(api_secret=)[^&\s\"]+")
+
+
+class _RedactSecretsFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.msg = _API_SECRET_PATTERN.sub(r"\1<redacted>", record.getMessage())
+        record.args = ()
+        return True
 
 # Alongside the DB in the same persistent volume, so it survives restarts
 # and is readable in every deployment (Docker/Unraid included) — not just
@@ -31,6 +43,9 @@ def configure_logging() -> None:
 
     stream_handler = logging.StreamHandler(sys.stdout)
     stream_handler.setFormatter(formatter)
+    # Attached per-handler (not to a logger) so it applies to every record
+    # reaching that handler regardless of which logger originated it.
+    stream_handler.addFilter(_RedactSecretsFilter())
 
     handlers: list[logging.Handler] = [stream_handler]
     if _RUNNING_UNDER_PYTEST:
@@ -42,6 +57,7 @@ def configure_logging() -> None:
             LOG_FILE, maxBytes=LOG_MAX_BYTES, backupCount=LOG_BACKUP_COUNT, encoding="utf-8"
         )
         file_handler.setFormatter(formatter)
+        file_handler.addFilter(_RedactSecretsFilter())
         handlers.append(file_handler)
     except OSError:
         # Read-only or inaccessible volume — stdout logging still works,

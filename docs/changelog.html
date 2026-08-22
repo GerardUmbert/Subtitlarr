@@ -40,6 +40,17 @@
   <h1 class="reveal">Changelog</h1>
   <p class="lede reveal">Generated from <a href="https://github.com/GerardUmbert/Subtitlarr/blob/master/CHANGELOG.md">CHANGELOG.md</a> — that file is the source of truth.</p>
 <div class="changelog-entry reveal-scroll">
+<div class="changelog-version">0.11.19</div>
+<div class="changelog-section-title">Added</div>
+<ul>
+<li><strong>Telemetry pings are now visible on the Jobs/History page</strong> as a &quot;Usage telemetry&quot; entry (done/failed/skipped), same as every other scheduled job. Previously a successful ping left no trace anywhere — only a warning log line on failure — so there was no way to tell &quot;it worked&quot; apart from &quot;the cron never fired.&quot; Settings also gained a &quot;Send test ping now&quot; button to confirm telemetry reaches GA4 without waiting for the daily schedule.</li>
+</ul>
+<div class="changelog-section-title">Fixed</div>
+<ul>
+<li><strong>Hardened log output to never include request credentials</strong>, even incidentally via a third-party library&#x27;s own request logging.</li>
+</ul>
+</div>
+<div class="changelog-entry reveal-scroll">
 <div class="changelog-version">0.11.18</div>
 <div class="changelog-section-title">Added</div>
 <ul>

@@ -168,3 +168,68 @@ async def test_send_ping_swallows_http_errors(conn):
             side_effect=httpx.ConnectError("refused")
         )
         await telemetry.send_ping(conn, settings)  # must not raise
+
+
+def _last_telemetry_event(conn):
+    row = conn.execute(
+        "SELECT * FROM job_events WHERE job = 'telemetry' ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    return dict(row) if row else None
+
+
+@pytest.mark.asyncio
+async def test_successful_ping_is_visible_as_a_job_event(conn):
+    """Regression: previously a successful ping left NO trace anywhere —
+    only a warning log line on failure. Silence was ambiguous between
+    "it worked" and "the cron never fired." A job_events row gives it
+    the same Jobs/History page visibility every other cron job has."""
+    settings = Settings(_env_file=None)
+    settings.telemetry_enabled = True
+    settings.telemetry_measurement_id = "G-TEST"
+    settings.telemetry_api_secret = "secret"
+
+    with respx.mock:
+        respx.post("https://www.google-analytics.com/mp/collect").mock(
+            return_value=httpx.Response(204)
+        )
+        await telemetry.send_ping(conn, settings, triggered_by="manual")
+
+    event = _last_telemetry_event(conn)
+    assert event is not None
+    assert event["status"] == "done"
+    assert event["triggered_by"] == "manual"
+    assert "sent" in event["result"]
+
+
+@pytest.mark.asyncio
+async def test_disabled_ping_is_visible_as_a_skipped_job_event(conn):
+    settings = Settings(_env_file=None)
+    settings.telemetry_enabled = False
+    settings.telemetry_measurement_id = "G-TEST"
+    settings.telemetry_api_secret = "secret"
+
+    await telemetry.send_ping(conn, settings, triggered_by="cron")
+
+    event = _last_telemetry_event(conn)
+    assert event is not None
+    assert event["status"] == "done"
+    assert "disabled" in event["result"]
+
+
+@pytest.mark.asyncio
+async def test_failed_ping_is_visible_as_a_failed_job_event(conn):
+    settings = Settings(_env_file=None)
+    settings.telemetry_enabled = True
+    settings.telemetry_measurement_id = "G-TEST"
+    settings.telemetry_api_secret = "secret"
+
+    with respx.mock:
+        respx.post("https://www.google-analytics.com/mp/collect").mock(
+            side_effect=httpx.ConnectError("refused")
+        )
+        await telemetry.send_ping(conn, settings)
+
+    event = _last_telemetry_event(conn)
+    assert event is not None
+    assert event["status"] == "failed"
+    assert event["error"] is not None

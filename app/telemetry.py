@@ -27,7 +27,7 @@ import uuid
 
 import httpx
 
-from app import __version__
+from app import __version__, state
 from app.config import Settings
 from app.db import repository
 from app.db.engine_instances_repo import SEPARATOR_TYPE
@@ -87,18 +87,34 @@ def build_payload(conn: sqlite3.Connection) -> dict:
     }
 
 
-async def send_ping(conn: sqlite3.Connection, settings: Settings) -> None:
+async def send_ping(conn: sqlite3.Connection, settings: Settings, *, triggered_by: str = "cron") -> None:
     """Fire-and-forget: any failure (network, GA4 rejecting the payload) is
     logged and swallowed. Telemetry must never be able to break a
     scheduled run or crash the app.
 
     Only advances the stored "last sent" counters on a successful send —
     if the request fails, the next ping's delta correctly includes
-    whatever would have been missed, instead of silently dropping it."""
+    whatever would have been missed, instead of silently dropping it.
+
+    Every attempt (skipped, sent, or failed) is recorded as a job_events
+    row — same visibility every other cron job (backup, sync_media, ...)
+    already gets on the Jobs/History page. Before this, a successful
+    ping had NO visible trace anywhere; the only log line was a warning
+    on failure, so silence was ambiguous between "it worked" and "the
+    cron never fired at all"."""
     if not settings.telemetry_enabled:
+        with state.db_lock:
+            event_id = repository.start_job_event(conn, "telemetry", triggered_by=triggered_by)
+            repository.finish_job_event(conn, event_id, status="done", result="skipped (disabled in Settings)")
         return
     if not settings.telemetry_measurement_id or not settings.telemetry_api_secret:
+        with state.db_lock:
+            event_id = repository.start_job_event(conn, "telemetry", triggered_by=triggered_by)
+            repository.finish_job_event(conn, event_id, status="done", result="skipped (no GA4 credentials configured)")
         return
+
+    with state.db_lock:
+        event_id = repository.start_job_event(conn, "telemetry", triggered_by=triggered_by)
 
     payload = build_payload(conn)
     instance_id = payload.pop("instance_id")
@@ -129,8 +145,20 @@ async def send_ping(conn: sqlite3.Connection, settings: Settings) -> None:
             response.raise_for_status()
     except httpx.HTTPError as exc:
         logger.warning("Telemetry ping failed (non-fatal): %s", exc)
+        with state.db_lock:
+            repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
         return
 
     repository.set_config(conn, _LAST_SENT_COMPLETED_KEY, current_completed)
     repository.set_config(conn, _LAST_SENT_FAILED_KEY, current_failed)
     repository.set_config(conn, _LAST_SENT_RUNS_KEY, current_runs)
+
+    with state.db_lock:
+        repository.finish_job_event(
+            conn, event_id, status="done",
+            result=(
+                f"sent: +{payload['items_completed_delta']} completed, "
+                f"+{payload['items_failed_delta']} failed, "
+                f"+{payload['translation_runs_delta']} run(s)"
+            ),
+        )

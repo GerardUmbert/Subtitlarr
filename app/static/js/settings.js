@@ -16,6 +16,8 @@ createApp({
       backupCron: "",
       backupKeepCount: 20,
       telemetryEnabled: true,
+      sendingTelemetry: false,
+      telemetrySent: false,
       nextRun: "",
       nextPushUploadsRun: "",
       nextSyncMediaRun: "",
@@ -149,6 +151,17 @@ createApp({
         // keep last known state on transient failure
       } finally {
         this.backupsLoading = false;
+      }
+    },
+    async sendTelemetryNow() {
+      this.sendingTelemetry = true;
+      this.telemetrySent = false;
+      try {
+        await Api.sendTelemetryNow();
+        this.telemetrySent = true;
+        setTimeout(() => (this.telemetrySent = false), 4000);
+      } finally {
+        this.sendingTelemetry = false;
       }
     },
     formatBackupTime(iso) {

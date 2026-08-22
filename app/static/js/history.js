@@ -55,6 +55,7 @@ const JOB_LABELS = {
   backup: "Backup",
   stale_audit: "Stale audit",
   translate: "Translate",
+  telemetry: "Usage telemetry",
 };
 
 const EVENT_TYPE_LABELS = {

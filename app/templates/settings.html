@@ -154,6 +154,13 @@
         </label>
         <p class="field-hint">Sends a daily ping with a random install ID, app version, OS, which translation engine type(s) are configured, and item/translation counts. Never includes your Bazarr URL, API keys, engine names, file paths, or subtitle content. On by default — turn off anytime.</p>
       </div>
+      <div class="field-row">
+        <button class="btn" @click="sendTelemetryNow" :disabled="sendingTelemetry">
+          {% raw %}{{ sendingTelemetry ? 'Sending…' : 'Send test ping now' }}{% endraw %}
+        </button>
+        <span v-if="telemetrySent" class="test-result">● sent — check the Jobs page for the result</span>
+      </div>
+      <p class="field-hint">Fires immediately instead of waiting for the daily schedule — useful to confirm telemetry is reaching Google Analytics. Shows up as a "Usage telemetry" entry on the Jobs page either way.</p>
     </div>
   </div>
 

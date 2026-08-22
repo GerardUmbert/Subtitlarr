@@ -94,6 +94,7 @@ const Api = (() => {
       request("POST", "/api/jobs/language-check/settings", { instance_id: instanceId }),
     pushUploads: () => request("POST", "/api/jobs/push-uploads"),
     runBackup: () => request("POST", "/api/jobs/backup"),
+    sendTelemetryNow: () => request("POST", "/api/jobs/telemetry/send-now"),
     listBackups: () => request("GET", "/api/jobs/backups"),
     restoreBackup: (filename) => request("POST", "/api/jobs/backups/restore", { filename }),
     getSyncStatus: () => request("GET", "/api/jobs/sync-status"),
