@@ -27,11 +27,50 @@ No LLM call happens on the server side at all — the server just accepts
 whatever `translated_text` is posted and reassembles it onto the
 original cue timing.
 
-## Workflow
+All of this works purely over HTTP against whichever Subtitlarr
+instance's base URL you're given (local dev, or a remote/NAS instance)
+— none of it requires local filesystem or database access. If working
+against a remote instance, confirm the base URL is reachable (a plain
+`curl` to `GET /api/run/current` is a good smoke test) before starting.
 
-1. **Find the item id.** Query the local instance's DB or
-   `GET /api/queue?status=failed` — confirm the item is actually
-   `failed` (or otherwise stuck) before spending effort on it.
+## Working through the whole failed backlog
+
+There is no dedicated "list items eligible for manual translation"
+endpoint — build the list from the existing Queue listing, purely over
+HTTP:
+
+1. **List failed items, paginated.** `GET /api/queue?status=failed&page=1&page_size=100`,
+   incrementing `page` until `data` comes back shorter than
+   `page_size` (or empty) — `total` in the response tells you how many
+   pages to expect. Each row includes `id`, `title`, `error_message`.
+2. **Classify by `error_message` before touching anything** — don't
+   manually translate every failed item indiscriminately:
+   - **Content-blocked** (`"blocked its own response"`, `"blocked this
+     request"`, `"prohibited content"`, etc.) — this workflow's actual
+     target. Nothing else fixes these; the same content will fail the
+     same way against the same engine every time.
+   - **Rate-limited** (`"rate limit hit (429)"`) — transient, NOT a
+     content problem. Retry these normally via
+     `POST /api/queue/run-by-ids` with the item ids, not manual
+     translation.
+   - **Auth/credential errors** (401, "service account is
+     deleted/disabled", etc.) — needs the user to fix the actual API
+     key/credential; manually translating around a dead key doesn't
+     help future runs using that same engine.
+   - **Everything else** (5xx server errors, timeouts, malformed
+     responses) — usually transient too; a plain retry is more
+     appropriate than manual translation.
+3. **Confirm the classification/target list with the user before
+   translating a large batch** — especially for a first pass against a
+   given instance, since "how many are actually content-blocked" can
+   only be known after step 1–2 run.
+4. Work through the content-blocked list one item at a time using the
+   single-item workflow below.
+
+## Single-item workflow
+
+1. **Confirm the item.** `GET /api/queue/{item_id}` — check `status`
+   and `error_message` match what you expect before spending effort.
 2. **Fetch the source.** `GET /api/queue/{item_id}/manual-translation/source`.
    Note `cue_count` — this tells you how much work is ahead and whether
    to chunk (see below).
