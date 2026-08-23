@@ -50,7 +50,14 @@ async def poll_once(conn: sqlite3.Connection, client: BazarrClient) -> dict:
     purge_unsynced_items' docstring). Only 'done'/'translated_pending_upload'
     items are exempt from purging entirely — those are Subtitlarr's own
     durable "translated" record and don't depend on Bazarr still listing the
-    item as wanted.
+    item as wanted. Right after, repository.reclaim_resolved_failed_items
+    requeues 'failed' items whose key ALSO just dropped out of that same
+    wanted set — Bazarr no longer reporting it missing means a real
+    subtitle likely exists now (uploaded by Bazarr or placed manually), so
+    the stuck failure is moot; the item is reset to 'pending' so the next
+    translate pass' own already-has-a-subtitle check verifies and finalizes
+    it. purge_exempt on 'failed' items otherwise means they'd sit as
+    'failed' forever even after being resolved outside Subtitlarr entirely.
     Upserts newly-seen (item, missing target language) pairs, stamping
     first_seen_wanted only on first sight, and eagerly previews each new
     item's source language for display."""
@@ -87,6 +94,14 @@ async def poll_once(conn: sqlite3.Connection, client: BazarrClient) -> dict:
         purged = repository.purge_unsynced_items(conn, still_wanted)
     if purged:
         logger.info("Purged %d unsynced item(s) ahead of fresh poll", purged)
+
+    with state.db_lock:
+        reclaimed = repository.reclaim_resolved_failed_items(conn, still_wanted)
+    if reclaimed:
+        logger.info(
+            "Reclaimed %d failed item(s) no longer reported missing by Bazarr; requeued as pending",
+            reclaimed,
+        )
 
     for wanted in wanted_episodes:
         for lang in wanted.missing_subtitles:

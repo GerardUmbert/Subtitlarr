@@ -278,6 +278,74 @@ async def test_skips_translation_when_bazarr_already_has_target_language(conn, m
     row = conn.execute("SELECT * FROM items WHERE bazarr_id = 42").fetchone()
     assert row["status"] == "done"
     assert row["engine_used"] is None
+    assert row["source_is_external"] == 1
+
+
+@pytest.mark.asyncio
+async def test_force_translate_bypasses_pre_existing_subtitle_guard(conn, monkeypatch):
+    """Regression test: an item marked 'done' via the pre-existing-subtitle
+    skip (source_is_external=1) can get permanently stuck if that file is
+    genuinely wrong-language garbage Bazarr downloaded on its own — every
+    retry hits the exact same skip again since the file is real and isn't
+    Subtitlarr's own prior output (confirmed live: "The Place Beyond the
+    Pines" had a Greek .srt sitting in its Catalan slot, likely fetched by
+    Bazarr before Subtitlarr ever looked at the item, and repeatedly
+    re-marked 'done' without ever being translated). force_translate is
+    the deliberate manual override for exactly this: it must skip the
+    guard entirely and perform a REAL translation, uploading over the
+    existing file and clearing source_is_external once it succeeds."""
+    repository.set_config(conn, "source_lang_priority", ["en"])
+    repository.upsert_item_seen(
+        conn, item_type="episode", bazarr_id=42, series_id=1,
+        title="Legacy", series_title="The Bear", season_episode="3x7",
+        target_language="es",
+    )
+
+    es_path = "/tv/The Bear/S03E07.es.srt"
+    fake_client = FakeBazarrClient(
+        wanted_episodes=[
+            WantedEpisode(
+                seriesTitle="The Bear", episode_number="3x7", episodeTitle="Legacy",
+                missing_subtitles=[LanguageInfo(name="Spanish", code2="es", code3="spa")],
+                sonarrSeriesId=1, sonarrEpisodeId=42,
+            )
+        ],
+        existing_language="en",
+        extra_subtitles=[
+            SubtitleInfo(
+                name="Spanish", code2="es", code3="spa", forced=False, hi=False,
+                path=es_path, file_size=100, embedded_track_id=None,
+            )
+        ],
+        extra_subtitle_contents={
+            es_path: [
+                SubtitleCue(
+                    index=1, content="Este es un archivo en el idioma equivocado.", proprietary="",
+                    start=SubtitleCueTime(hours=0, minutes=0, seconds=1, total_seconds=1, microseconds=0),
+                    end=SubtitleCueTime(hours=0, minutes=0, seconds=3, total_seconds=3, microseconds=0),
+                ),
+            ],
+        },
+    )
+
+    from app.config import Settings
+    settings = Settings()
+    fake_provider = FakeProvider()
+    stub_single_provider_cascade(monkeypatch, fake_provider)
+
+    controller = RunController(conn, lambda: fake_client, settings)
+    item_id = conn.execute("SELECT id FROM items WHERE bazarr_id = 42").fetchone()["id"]
+    progress = await controller.run_single_item(item_id, force_translate=True)
+
+    assert progress.processed == 1
+    assert progress.failed == 0
+    assert len(fake_client.uploaded) == 1  # a real translation WAS uploaded, overwriting the wrong file
+    assert fake_provider.received_catalan_vegeta_insults != []  # the provider was actually called
+
+    row = conn.execute("SELECT * FROM items WHERE bazarr_id = 42").fetchone()
+    assert row["status"] == "done"
+    assert row["engine_used"] is not None
+    assert row["source_is_external"] == 0
 
 
 @pytest.mark.asyncio

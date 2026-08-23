@@ -127,7 +127,8 @@ class RunController:
         return self._settings.daily_translation_limit
 
     async def run_batch(
-        self, items: list[sqlite3.Row], triggered_by: str, enforce_daily_limit: bool = True
+        self, items: list[sqlite3.Row], triggered_by: str, enforce_daily_limit: bool = True,
+        force_translate: bool = False,
     ) -> RunProgress:
         client = self._get_client()
         with state.db_lock:
@@ -288,6 +289,7 @@ class RunController:
                         concurrent_batch_window=concurrent_batch_window,
                         on_call_result=_on_call_result_for(name_to_instance_id),
                         cancel_check=lambda: progress.cancel_requested,
+                        force_translate=force_translate,
                     )
                 except translator.RunCancelledError:
                     # Cancelled partway through THIS item's own batches
@@ -381,12 +383,15 @@ class RunController:
         items = selector.get_age_gated_queue(self._conn, self._settings.age_threshold_days)
         return await self.run_batch(items, triggered_by="scheduled")
 
-    async def run_single_item(self, item_id: int) -> RunProgress:
+    async def run_single_item(self, item_id: int, force_translate: bool = False) -> RunProgress:
         with state.db_lock:
             item = repository.get_item(self._conn, item_id)
         if item is None:
             raise ValueError(f"Item {item_id} not found")
-        return await self.run_batch([item], triggered_by="manual_item", enforce_daily_limit=False)
+        return await self.run_batch(
+            [item], triggered_by="manual_item", enforce_daily_limit=False,
+            force_translate=force_translate,
+        )
 
     async def run_by_ids(self, item_ids: list[int]) -> RunProgress:
         """Runs an explicit, caller-chosen set of items as ONE batch/

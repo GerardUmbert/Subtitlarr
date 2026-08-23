@@ -689,6 +689,7 @@ async def translate_item(
     concurrent_batch_window: int = NVIDIA_CONCURRENT_BATCH_WINDOW,
     on_call_result=None,
     cancel_check=None,
+    force_translate: bool = False,
 ) -> None:
     """Fetches the source subtitle (via Bazarr's API, or from a local
     scratch-cache file when cached_source_path is provided — see
@@ -745,7 +746,18 @@ async def translate_item(
     # distinguishes "genuinely pre-existing, never touched by Subtitlarr"
     # from "our own prior output sitting here, possibly wrong" — only the
     # former should ever skip translation.
-    if item["item_type"] == "episode":
+    #
+    # force_translate bypasses this guard entirely — a deliberate,
+    # user-initiated "translate anyway" for an item Subtitlarr marked
+    # 'done' via this exact skip (source_is_external=1) that turned out to
+    # be wrong-language garbage from Bazarr's own subtitle search, not a
+    # real translation Subtitlarr ever verified. Never inferred
+    # automatically; only ever set by an explicit manual action, since a
+    # pre-existing non-Subtitlarr subtitle is just as often genuinely
+    # correct, and blindly overwriting those would destroy real user data.
+    if force_translate:
+        existing_detail = None
+    elif item["item_type"] == "episode":
         existing_detail = await client.get_episode_detail(item["bazarr_id"])
     else:
         existing_detail = await client.get_movie_detail(item["bazarr_id"])
@@ -783,6 +795,8 @@ async def translate_item(
                         conn, item_id, "done", source_language=source_lang,
                         mark_attempt=True, mark_completed=True,
                     )
+                with state.db_lock:
+                    repository.set_source_is_external(conn, item_id, True)
                 with state.db_lock:
                     repository.log_item_attempt(
                         conn, item_id, run_id, "done",
@@ -861,6 +875,8 @@ async def translate_item(
                     source_language=source_lang, engine_used=engine_used, model_used=model_used,
                     mark_completed=True,
                 )
+            with state.db_lock:
+                repository.set_source_is_external(conn, item_id, False)
         else:
             if item["item_type"] == "episode":
                 await client.upload_episode_subtitle(
@@ -882,6 +898,8 @@ async def translate_item(
                     source_language=source_lang, engine_used=engine_used, model_used=model_used,
                     mark_completed=True,
                 )
+            with state.db_lock:
+                repository.set_source_is_external(conn, item_id, False)
         with state.db_lock:
             repository.log_item_attempt(
                 conn, item_id, run_id, "done",

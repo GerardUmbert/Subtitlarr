@@ -139,6 +139,62 @@ def purge_unsynced_items(
         return len(ids)
 
 
+def reclaim_resolved_failed_items(
+    conn: sqlite3.Connection, still_wanted: set[tuple[str, int, str]]
+) -> int:
+    """Resets 'failed' items back to 'pending' if Bazarr's CURRENT wanted
+    list no longer reports them as missing that target language — i.e. a
+    real subtitle now exists for it (uploaded by Bazarr itself, or placed
+    there manually), and the failure is moot.
+
+    Scoped to status='failed' ONLY, and only items whose key has actually
+    DROPPED OUT of still_wanted THIS poll — never a blanket reset of every
+    failed item. This mirrors purge_unsynced_items' own set-difference
+    approach deliberately: a blanket per-poll reset is exactly the bug
+    fixed in 8b8334a (every still-wanted pending item got its
+    first_seen_wanted clock reset to "now" on every poll, starving the
+    age-gated scheduled run for over a week) and again in b57c774 (every
+    reset item got silently purged the very next poll). Only the specific
+    items that just left still_wanted are touched, so an item that's
+    still genuinely missing its subtitle and still genuinely failed stays
+    'failed', untouched, exactly as before.
+
+    The reset item goes back through the normal translate path rather
+    than being marked 'done' directly here — that path's own "Bazarr
+    already has a real, non-Subtitlarr subtitle" check (translator.py)
+    verifies the actual file before finalizing status, so a false-empty
+    Bazarr response, or a same-named-but-wrong subtitle, can't
+    incorrectly mark this done without ever being checked.
+
+    purge_exempt is cleared so the item re-enters normal purge
+    eligibility like any other 'pending' item from this point on, since
+    the reason it was exempt (protecting an unretried failure from being
+    purged and lost) no longer applies once it's been requeued.
+
+    Returns the number of items reclaimed."""
+    with conn:
+        rows = conn.execute(
+            "SELECT id, item_type, bazarr_id, target_language FROM items WHERE status = 'failed'"
+        ).fetchall()
+        ids = [
+            row["id"] for row in rows
+            if (row["item_type"], row["bazarr_id"], row["target_language"]) not in still_wanted
+        ]
+        if ids:
+            now = _now()
+            placeholders = ",".join("?" for _ in ids)
+            conn.execute(
+                f"""
+                UPDATE items
+                SET status = 'pending', last_updated = ?, status_changed_at = ?,
+                    error_message = NULL, error_detail = NULL, purge_exempt = 0
+                WHERE id IN ({placeholders})
+                """,
+                (now, now, *ids),
+            )
+        return len(ids)
+
+
 def upsert_item_seen(
     conn: sqlite3.Connection,
     *,
@@ -550,6 +606,19 @@ def get_items_for_language_check(conn: sqlite3.Connection, limit: int) -> list[s
         """,
         (limit,),
     ).fetchall()
+
+
+def set_source_is_external(conn: sqlite3.Connection, item_id: int, value: bool) -> None:
+    """Marks (or clears) an item as 'done' with content Subtitlarr never
+    actually translated or verified — see migration 0022's docstring for
+    why this exists. Deliberately does NOT touch status/last_updated/
+    status_changed_at: this is metadata ABOUT the current content sitting
+    at that item, not a status transition in its own right."""
+    with conn:
+        conn.execute(
+            "UPDATE items SET source_is_external = ? WHERE id = ?",
+            (1 if value else 0, item_id),
+        )
 
 
 def set_language_check_ok(conn: sqlite3.Connection, item_id: int) -> None:

@@ -48,7 +48,7 @@ def test_run_item_reresolves_source_language_fresh(client, monkeypatch):
 
     monkeypatch.setattr(queue_module.selector, "build_source_map", fake_build_source_map)
 
-    async def fake_run_single_item(self, item_id):
+    async def fake_run_single_item(self, item_id, force_translate=False):
         return None
 
     monkeypatch.setattr(RunController, "run_single_item", fake_run_single_item)
@@ -58,3 +58,32 @@ def test_run_item_reresolves_source_language_fresh(client, monkeypatch):
     body = resp.json()
     assert body["started"] is True
     assert body["source_language"] == "fr"
+
+
+def test_run_item_force_query_param_reaches_run_single_item(client, monkeypatch):
+    """?force=true on the run endpoint must reach run_single_item's
+    force_translate — the manual "translate anyway" override for an item
+    marked done via the pre-existing-subtitle skip (source_is_external),
+    where the file sitting on Bazarr was never actually verified/
+    translated by Subtitlarr and needs to be overwritten deliberately."""
+    from app.api import queue as queue_module
+    from app.engine.runner import RunController
+
+    item = client.get("/api/queue").json()["data"][0]
+
+    async def fake_build_source_map(client_, item_type, bazarr_id):
+        return {}
+
+    monkeypatch.setattr(queue_module.selector, "build_source_map", fake_build_source_map)
+
+    received = {}
+
+    async def fake_run_single_item(self, item_id, force_translate=False):
+        received["force_translate"] = force_translate
+        return None
+
+    monkeypatch.setattr(RunController, "run_single_item", fake_run_single_item)
+
+    resp = client.post(f"/api/queue/{item['id']}/run?force=true")
+    assert resp.status_code == 200
+    assert received["force_translate"] is True

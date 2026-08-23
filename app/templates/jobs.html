@@ -93,7 +93,7 @@
     </div>
   </div>
 
-  <div class="panel" style="margin-top:16px;">
+  <div class="panel" style="margin-top:16px;" id="language-check">
     <div class="panel-body">
     <div class="panel-title">Language check</div>
     <div class="panel-title-sub">Audits completed translations' ACTUAL output language against their target — catches a well-formed response that's silently still in the source language, which the normal alignment/integrity checks can't detect</div>
@@ -109,7 +109,7 @@
         <div class="field" style="max-width:320px;">
           <label>Engine to check with</label>
           <select v-model.number="languageCheckInstanceId" @change="saveLanguageCheckInstance">
-            <option :value="null" disabled>Pick an engine…</option>
+            <option :value="null">Never check (disabled)</option>
             <option v-for="inst in engineInstances" :key="inst.id" :value="inst.id">{% raw %}{{ inst.name }}{% endraw %}</option>
           </select>
         </div>

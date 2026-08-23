@@ -141,6 +141,7 @@ def get_item(item_id: int, conn=Depends(state.get_conn)):
 @router.post("/{item_id}/run")
 async def run_item(
     item_id: int,
+    force: bool = False,
     conn=Depends(state.get_conn),
     runner=Depends(state.get_runner),
     client=Depends(state.get_client),
@@ -165,6 +166,7 @@ async def run_item(
     )
 
     state.spawn_background_task(
-        runner.run_single_item(item_id), description=f"run-single-item({item_id})"
+        runner.run_single_item(item_id, force_translate=force),
+        description=f"run-single-item({item_id})",
     )
     return {"started": True, "source_language": resolved_source}

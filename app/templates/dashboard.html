@@ -23,6 +23,13 @@
   </div>
 
   <template v-else>
+  <div class="notice-banner" v-if="!languageCheckConfigured">
+    <span class="notice-banner-text">
+      <b>No language check engine configured</b> — completed translations are never verified to actually be
+      in the right language, including items marked done just because Bazarr already had a subtitle there.
+    </span>
+    <a href="/jobs#language-check">Pick an engine →</a>
+  </div>
   <div class="stats">
     <a class="stat" href="/queue?status=&item_type=&exclude_no_source=0">
       <div class="stat-label">Wanted (language-pairs)</div>

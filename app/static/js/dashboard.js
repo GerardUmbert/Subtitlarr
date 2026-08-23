@@ -28,6 +28,7 @@ createApp({
       run: { active: false, processed: 0, total: 0, failed: 0, rate_per_min: 0 },
       recentItems: [],
       engineInstances: [],
+      languageCheckInstanceId: null,
       polling: false,
       cancelling: false,
       _refreshTimerHandle: null,
@@ -83,6 +84,16 @@ createApp({
     pendingUploads() {
       return (this.stats.by_status && this.stats.by_status.translated_pending_upload) || 0;
     },
+    // Without a language check engine configured, a completed translation
+    // is never actually verified to be in the right language — including
+    // items marked 'done' just because Bazarr already had SOMETHING in
+    // that slot (which may be wrong-language content Bazarr downloaded
+    // on its own, never checked by anyone; see queue.js's
+    // externalBadgeLabel). Surfaced here rather than silently, since
+    // there's otherwise no signal telling anyone this gap exists.
+    languageCheckConfigured() {
+      return this.languageCheckInstanceId !== null && this.languageCheckInstanceId !== undefined;
+    },
     progressPct() {
       if (!this.run.total) return 0;
       return Math.min(100, Math.round((this.run.processed / this.run.total) * 100));
@@ -130,9 +141,18 @@ createApp({
         // ignore transient errors — keep last known state
       }
     },
+    async refreshLanguageCheckSettings() {
+      try {
+        const result = await Api.getLanguageCheckSettings();
+        this.languageCheckInstanceId = result.instance_id;
+      } catch (_) {
+        // ignore transient errors — keep last known state
+      }
+    },
     async refreshAll() {
       await Promise.all([
         this.refreshStats(), this.refreshRun(), this.refreshQueue(), this.refreshEngines(),
+        this.refreshLanguageCheckSettings(),
       ]);
     },
     async triggerRunNow() {

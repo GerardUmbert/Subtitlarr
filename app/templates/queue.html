@@ -65,6 +65,7 @@
               <div class="title-cell">
                 {% raw %}{{ item.series_title || item.title }}{% endraw %}
                 <span v-if="item.source_cached_locally" class="badge badge-local" title="Source subtitle is cached locally — won't re-fetch from Bazarr">cached</span>
+                <span v-if="item.source_is_external" class="badge badge-external" :title="externalBadgeTitle(item)">{% raw %}{{ externalBadgeLabel(item) }}{% endraw %}</span>
               </div>
               <div class="title-type">{% raw %}{{ item.season_episode ? item.season_episode + ' · episode' : 'movie' }}{% endraw %}</div>
             </td>
@@ -86,6 +87,10 @@
               <button class="link-btn" :disabled="!canRunItem(item)"
                       @click="runItem(item)">
                 {% raw %}{{ runningItemId === item.id ? 'running…' : (runActive ? 'run in progress…' : (item.status === 'done' ? 're-run' : 'run now')) }}{% endraw %}
+              </button>
+              <button v-if="item.source_is_external" class="link-btn" :disabled="!canRunItem(item)"
+                      @click="runItem(item, true)" title="Overwrite the existing subtitle with a real Subtitlarr translation">
+                translate anyway
               </button>
             </td>
           </tr>

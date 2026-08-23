@@ -5,7 +5,42 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [0.12.0]
 
+### Added
+- **Items marked done because Bazarr already had a subtitle there are
+  now flagged and surfaced on the Queue page** as an "external" badge,
+  instead of looking identical to a real Subtitlarr translation.
+  Subtitlarr never translates or verifies these — it only skips
+  because a file already exists in that slot — and that file can be
+  wrong (e.g. a mislabeled or wrong-language subtitle Bazarr's own
+  search downloaded). The badge reflects whether the periodic
+  language check has looked at it yet, and a new "translate anyway"
+  action lets you deliberately overwrite it with a real Subtitlarr
+  translation when needed.
+- **The Dashboard now warns when no language check engine is
+  configured**, linking straight to the Jobs page to pick one.
+  Without it, completed translations — including the
+  externally-sourced ones above — are never actually verified to be
+  in the right language.
+- **A 'failed' item is now automatically requeued once Bazarr no
+  longer reports it as missing that subtitle** — e.g. Bazarr found
+  and downloaded one on its own, or it was placed there manually.
+  Previously a failed item was permanently exempt from the sync's
+  purge (to protect it from being silently deleted and lost) but
+  nothing ever un-stuck it once the underlying problem resolved
+  itself outside Subtitlarr, so it just sat showing "failed" forever.
+  Only items whose specific key actually drops out of Bazarr's
+  current wanted list are touched, never a blanket reset of every
+  failed item on every poll — the requeued item still goes through
+  a real translate pass, which verifies the subtitle actually exists
+  before marking it done.
+
 ### Fixed
+- **The language check engine picker (Jobs page) couldn't be set back
+  to disabled once an engine was chosen** — the "pick an engine…"
+  placeholder was a disabled option, unselectable the moment a real
+  engine was picked, with no way back to "off" through the UI.
+  Replaced with a real, always-selectable "Never check (disabled)"
+  option.
 - **The Queue page's Duration column showed wildly inflated times
   (hours to days) for failed items**, even ones that failed in
   seconds and were never retried. The duration calculation relied on

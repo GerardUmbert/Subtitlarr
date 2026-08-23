@@ -28,7 +28,7 @@ const Api = (() => {
     cancelRun: () => request("POST", "/api/run/cancel"),
     pollNow: () => request("POST", "/api/run/poll"),
     getPollNowStatus: () => request("GET", "/api/run/poll/status"),
-    runItem: (id) => request("POST", `/api/queue/${id}/run`),
+    runItem: (id, force = false) => request("POST", `/api/queue/${id}/run${force ? "?force=true" : ""}`),
     getItem: (id) => request("GET", `/api/queue/${id}`),
     getMatchingCount: (params = {}) => {
       const qs = new URLSearchParams(params).toString();

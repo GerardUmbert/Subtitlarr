@@ -147,6 +147,32 @@ createApp({
       if (this.runActive) return false; // a run (any run) is already in progress server-side
       return item.status !== "translating"; // done/failed/pending/skipped can all be (re-)run manually
     },
+    // source_is_external items were marked done via the "Bazarr already
+    // had a subtitle here" skip — Subtitlarr never translated them
+    // itself. That does NOT mean nobody has ever checked the language:
+    // these items are still fully eligible for the periodic language
+    // check sweep like any other 'done' item (that's exactly how a
+    // wrong-language Bazarr download gets caught at all), so the badge
+    // must reflect language_check_status honestly instead of implying
+    // "unverified" when it may already be confirmed correct or wrong.
+    externalBadgeLabel(item) {
+      if (item.language_check_status === "ok") return "external · verified";
+      if (item.language_check_status === "mismatch") return "external · wrong language";
+      return "external · unchecked";
+    },
+    externalBadgeTitle(item) {
+      if (item.language_check_status === "ok") {
+        return "Bazarr already had this subtitle — Subtitlarr never translated it, " +
+          "but the language check confirmed it's actually correct.";
+      }
+      if (item.language_check_status === "mismatch") {
+        return "Bazarr already had this subtitle, and the language check confirmed " +
+          "it's the WRONG language. Use \"translate anyway\" to overwrite it.";
+      }
+      return "Bazarr already had this subtitle — Subtitlarr never translated it, and " +
+        "nothing has verified its language yet (the periodic language check hasn't " +
+        "reached it, or none is configured).";
+    },
     setFilter(value) {
       this.currentBatchOnly = false;
       this.statusFilter = value;
@@ -302,10 +328,17 @@ createApp({
         this.runningFiltered = false;
       }
     },
-    async runItem(item) {
+    async runItem(item, force = false) {
+      if (force && !confirm(
+        `"${item.title}" currently has a subtitle that was NOT translated ` +
+        `by Subtitlarr (found already on Bazarr, in an unverified language). ` +
+        `Translating now will overwrite it with a fresh Subtitlarr translation. Continue?`
+      )) {
+        return;
+      }
       this.runningItemId = item.id;
       try {
-        const result = await Api.runItem(item.id);
+        const result = await Api.runItem(item.id, force);
         if (!result.started) {
           alert(result.reason || "Could not start item");
           this.runningItemId = null;

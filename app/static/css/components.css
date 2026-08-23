@@ -452,6 +452,22 @@ a.panel:hover {
 .pill-warn { background: var(--warn-soft); color: var(--warn); }
 .pill-warn .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
 
+.notice-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  border-radius: 8px;
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  font-size: 13px;
+  color: var(--ink);
+}
+.notice-banner-text b { color: var(--warn); }
+.notice-banner a { color: var(--accent); font-weight: 600; white-space: nowrap; }
+
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
@@ -615,6 +631,7 @@ a.engine-card-line:hover { text-decoration: underline; }
   white-space: nowrap;
 }
 .badge-local { background: var(--good-soft); color: var(--good); }
+.badge-external { background: var(--warn-soft); color: var(--warn); }
 .badge-free { background: var(--good-soft); color: var(--good); }
 .badge-paid { background: var(--surface-2); color: var(--ink-faint); }
 

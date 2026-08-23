@@ -241,6 +241,91 @@ def test_purge_unsynced_items_spares_failed_items(conn):
     assert row["purge_exempt"] == 0
 
 
+def test_reclaim_resolved_failed_items_requeues_only_dropped_out_failures(conn):
+    """A 'failed' item whose (item_type, bazarr_id, target_language) key is
+    no longer in Bazarr's current wanted list means Bazarr now reports a
+    real subtitle for it — uploaded by Bazarr itself, or placed there
+    manually outside Subtitlarr entirely. That item should be requeued as
+    'pending' so the next translate pass' own already-has-a-subtitle check
+    verifies and finalizes it, instead of sitting stuck as 'failed'
+    forever (purge_exempt otherwise protects it from ever being purged
+    OR re-synced).
+
+    Critically, a still-wanted failed item (still genuinely missing its
+    subtitle) must be left completely untouched — this must never become
+    a blanket "reset every failed item every poll" the way a prior bug
+    reset every still-wanted pending item's first_seen_wanted on every
+    single poll (see purge_unsynced_items' docstring)."""
+    repository.upsert_item_seen(
+        conn, item_type="episode", bazarr_id=1, series_id=1,
+        title="Resolved Elsewhere", series_title="Show", season_episode="1x1",
+        target_language="es",
+    )
+    resolved_item = conn.execute("SELECT id FROM items WHERE bazarr_id = 1").fetchone()
+    repository.update_item_status(conn, resolved_item["id"], "failed", error_message="quota exceeded")
+
+    repository.upsert_item_seen(
+        conn, item_type="episode", bazarr_id=2, series_id=1,
+        title="Still Missing", series_title="Show", season_episode="1x2",
+        target_language="es",
+    )
+    still_failed_item = conn.execute("SELECT id FROM items WHERE bazarr_id = 2").fetchone()
+    repository.update_item_status(conn, still_failed_item["id"], "failed", error_message="quota exceeded")
+
+    # bazarr_id=1/es dropped out (subtitle now exists); bazarr_id=2/es is
+    # still reported missing.
+    reclaimed = repository.reclaim_resolved_failed_items(
+        conn, still_wanted={("episode", 2, "es")}
+    )
+
+    assert reclaimed == 1
+    resolved_row = conn.execute(
+        "SELECT status, purge_exempt, error_message FROM items WHERE id = ?", (resolved_item["id"],)
+    ).fetchone()
+    assert resolved_row["status"] == "pending"
+    assert resolved_row["purge_exempt"] == 0
+    assert resolved_row["error_message"] is None
+
+    still_failed_row = conn.execute(
+        "SELECT status, purge_exempt FROM items WHERE id = ?", (still_failed_item["id"],)
+    ).fetchone()
+    assert still_failed_row["status"] == "failed"
+    assert still_failed_row["purge_exempt"] == 1
+
+
+def test_reclaim_resolved_failed_items_ignores_non_failed_statuses(conn):
+    """Only 'failed' items are ever eligible — a 'pending' item dropping
+    out of still_wanted is purge_unsynced_items' job, not this one's, and
+    a 'done'/'translated_pending_upload' item must never be reset back to
+    'pending' just because Bazarr stopped listing it as wanted (it's
+    Subtitlarr's own durable translated record, independent of Bazarr's
+    wanted list by design)."""
+    repository.upsert_item_seen(
+        conn, item_type="movie", bazarr_id=10, series_id=None,
+        title="Done Movie", series_title=None, season_episode=None,
+        target_language="es",
+    )
+    done_item = conn.execute("SELECT id FROM items WHERE bazarr_id = 10").fetchone()
+    repository.update_item_status(conn, done_item["id"], "done", mark_completed=True)
+
+    repository.upsert_item_seen(
+        conn, item_type="movie", bazarr_id=11, series_id=None,
+        title="Pending Movie", series_title=None, season_episode=None,
+        target_language="es",
+    )
+    pending_item = conn.execute("SELECT id FROM items WHERE bazarr_id = 11").fetchone()
+
+    reclaimed = repository.reclaim_resolved_failed_items(conn, still_wanted=set())
+
+    assert reclaimed == 0
+    assert conn.execute(
+        "SELECT status FROM items WHERE id = ?", (done_item["id"],)
+    ).fetchone()["status"] == "done"
+    assert conn.execute(
+        "SELECT status FROM items WHERE id = ?", (pending_item["id"],)
+    ).fetchone()["status"] == "pending"
+
+
 def test_stats_counts_by_status(conn):
     repository.upsert_item_seen(
         conn, item_type="movie", bazarr_id=1, series_id=None,
