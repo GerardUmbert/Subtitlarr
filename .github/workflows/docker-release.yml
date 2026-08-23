@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*.*.*"
+      - "dev-v*.*.*"
 
 env:
   REGISTRY: ghcr.io
@@ -19,7 +20,20 @@ jobs:
 
       - name: Extract version from tag
         id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        # dev-v0.14.0 -> is_dev=true. Always pushed as the single fixed
+        # tag `dev` (not the literal dev-v0.14.0 tag name) — the whole
+        # point is a stable tag the NAS points at once and never has to
+        # update; each new dev-v*.*.* push just moves `dev` forward.
+        # Never touches `latest` or a bare version tag.
+        # v0.14.0 -> is_dev=false, version=0.14.0 (existing behavior,
+        # unchanged: pushed as both `latest` and the version number).
+        run: |
+          if [[ "$GITHUB_REF_NAME" == dev-v* ]]; then
+            echo "is_dev=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_dev=false" >> "$GITHUB_OUTPUT"
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Lowercase image name
         id: image
@@ -40,8 +54,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}
           tags: |
-            type=raw,value=latest
-            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=latest,enable=${{ steps.version.outputs.is_dev == 'false' }}
+            type=raw,value=${{ steps.version.outputs.version }},enable=${{ steps.version.outputs.is_dev == 'false' }}
+            type=raw,value=dev,enable=${{ steps.version.outputs.is_dev == 'true' }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
