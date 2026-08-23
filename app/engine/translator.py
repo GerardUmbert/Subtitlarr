@@ -853,7 +853,8 @@ async def translate_item(
 
         if add_ai_disclaimer:
             disclaimer = srt_io.disclaimer_text(
-                target_lang, language_name(source_lang), language_name(target_lang)
+                target_lang, language_name(source_lang), language_name(target_lang),
+                model_name=model_used,
             )
             translated_subs = srt_io.with_ai_disclaimer(translated_subs, disclaimer)
         srt_bytes = srt_io.compose_srt(translated_subs)

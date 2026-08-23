@@ -95,7 +95,9 @@ with _DISCLAIMER_TRANSLATIONS_PATH.open(encoding="utf-8") as _f:
     DISCLAIMER_TRANSLATIONS: dict[str, str] = json.load(_f)
 
 
-def disclaimer_text(target_lang: str, source_name: str, target_name: str) -> str:
+def disclaimer_text(
+    target_lang: str, source_name: str, target_name: str, model_name: str | None = None,
+) -> str:
     """Picks the target language's own translation of the AI-disclaimer
     template (see DISCLAIMER_TRANSLATIONS, generated once via Gemini and
     committed as a static file — see app/api/debug.py's
@@ -105,9 +107,21 @@ def disclaimer_text(target_lang: str, source_name: str, target_name: str) -> str
     app.providers.languages.language_name) substituted into the template's
     {source}/{target} placeholders — always in English, since per-language
     translated language names aren't available, but that's a minor,
-    expected wrinkle in an otherwise fully translated sentence."""
+    expected wrinkle in an otherwise fully translated sentence.
+
+    model_name, if given, is appended in brackets, untranslated — e.g.
+    "... Espereu errors ocasionals. [gemini-3.5-flash-lite]". Deliberately
+    NOT woven into any of the 187 translated templates (that would mean
+    re-translating every one with a new {model} placeholder for a purely
+    cosmetic difference); appending in English after the translated
+    sentence is far lower-risk and lets a reader spot-check which model
+    produced a given file — useful for judging whether a weaker model's
+    output needs a re-run, without having to read every translation."""
     template = DISCLAIMER_TRANSLATIONS.get(target_lang.lower(), DISCLAIMER_TEXT)
-    return template.format(source=source_name, target=target_name)
+    text = template.format(source=source_name, target=target_name)
+    if model_name:
+        text = f"{text} [{model_name}]"
+    return text
 
 
 def with_ai_disclaimer(subs: list[srt.Subtitle], text: str) -> list[srt.Subtitle]:

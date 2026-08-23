@@ -83,3 +83,23 @@ def test_disclaimer_text_case_insensitive_lookup():
     assert srt_io.disclaimer_text("ES", "English", "Spanish") == srt_io.disclaimer_text(
         "es", "English", "Spanish"
     )
+
+
+def test_disclaimer_text_appends_model_name_in_brackets():
+    """model_name is appended in English, untranslated, after the
+    (possibly translated) sentence — not woven into the 187 translated
+    templates, which would need every one re-translated with a new
+    {model} placeholder for a purely cosmetic difference. Lets a reader
+    spot-check which model produced a given file without reading every
+    translation."""
+    text = srt_io.disclaimer_text("es", "English", "Spanish", model_name="gemini-3.5-flash-lite")
+    assert text == (
+        "Subtitlarr utilizó IA para traducir esto de English a Spanish. "
+        "Espera errores ocasionales. [gemini-3.5-flash-lite]"
+    )
+
+
+def test_disclaimer_text_omits_bracket_when_model_name_not_given():
+    assert srt_io.disclaimer_text("es", "English", "Spanish", model_name=None) == srt_io.disclaimer_text(
+        "es", "English", "Spanish"
+    )

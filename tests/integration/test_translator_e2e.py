@@ -807,9 +807,14 @@ async def test_large_subtitle_is_batched_and_fully_translated(conn, monkeypatch)
     assert all(c.startswith("TR:Line number") for c in translated_content)
     assert translated_content[0] == "TR:Line number 0 of dialogue."
     assert translated_content[-1] == f"TR:Line number {n_cues - 1} of dialogue."
+    # the model that produced this file is appended to the disclaimer
+    # cue, so a real upload can be spot-checked for translation quality
+    # per-model without reading every file (see srt_io.disclaimer_text)
+    assert reparsed[0].content.endswith("[test-model]")
 
     row = conn.execute("SELECT * FROM items WHERE bazarr_id = 99").fetchone()
     assert row["status"] == "done"
+    assert row["model_used"] == "test-model"
 
 
 @pytest.mark.asyncio

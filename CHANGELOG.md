@@ -3,6 +3,18 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.13.0]
+
+### Added
+- **The AI disclaimer line now names which model produced the
+  translation** — e.g. "... Espereu errors ocasionals.
+  [gemini-3.5-flash-lite]" — appended in English after the (possibly
+  translated) sentence, not woven into any of the 187 translated
+  templates. Lets you spot-check which model a file came from directly
+  in the subtitle, without cross-referencing the Queue's Model column
+  — useful for judging whether a weaker fallback model's output is
+  worth a re-run without reading every translation.
+
 ## [0.12.0]
 
 ### Added
