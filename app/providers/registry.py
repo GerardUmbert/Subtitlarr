@@ -67,7 +67,7 @@ DEFAULT_CONFIG_BY_TYPE: dict[str, dict] = {
     },
     "nvidia": {
         "api_key": "",
-        "model": "deepseek-ai/deepseek-v4-flash",
+        "model": "",
         "batch_token_budget": 700,
         "concurrent_batch_window": 4,
         "temperature": DEFAULT_TEMPERATURE,

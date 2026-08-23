@@ -20,6 +20,13 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   completed item whose model is known. Manual/opt-in only, never runs
   on a schedule, since it's a real write per item, not a read.
 
+### Fixed
+- **The NVIDIA engine no longer defaults new instances to
+  `deepseek-ai/deepseek-v4-flash`** — that model is dead. A new
+  instance now starts with an empty model field instead of silently
+  pointing at a model that will never work; the model must be set to
+  whatever's currently listed on build.nvidia.com.
+
 ## [0.12.0]
 
 ### Added

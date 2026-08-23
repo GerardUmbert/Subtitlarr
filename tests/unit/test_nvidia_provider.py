@@ -128,9 +128,11 @@ async def test_nvidia_test_connection_reports_error_detail():
     await provider.aclose()
 
 
-def test_nvidia_defaults_to_deepseek_v4_flash():
+def test_nvidia_has_no_default_model():
+    """deepseek-ai/deepseek-v4-flash (the former default) is dead — no
+    model is silently assumed for an instance that doesn't set one."""
     provider = NvidiaProvider(api_key="testkey")
-    assert provider._model == "deepseek-ai/deepseek-v4-flash"
+    assert provider._model == ""
 
 
 @pytest.mark.asyncio

@@ -64,7 +64,7 @@ class NvidiaProvider(TranslationProvider):
     def __init__(
         self,
         api_key: str,
-        model: str = "deepseek-ai/deepseek-v4-flash",
+        model: str = "",
         timeout: float = DEFAULT_NVIDIA_TIMEOUT_SECONDS,
         temperature: float | None = None,
         instance_name: str | None = None,

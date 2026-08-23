@@ -61,11 +61,11 @@ const PROVIDER_TYPES = {
     ],
   },
   nvidia: {
-    label: "NVIDIA (DeepSeek V4 Flash)",
+    label: "NVIDIA",
     badges: ["free tier"],
     fields: [
-      { key: "model", label: "Model", placeholder: "deepseek-ai/deepseek-v4-flash", hint:
-        "Must be a real instructable chat model. NVIDIA also hosts translation-only models (e.g. Riva Translate) which are not compatible here." },
+      { key: "model", label: "Model", placeholder: "", hint:
+        "Must be a real instructable chat model currently hosted on build.nvidia.com — check the catalog there for what's available now. NVIDIA also hosts translation-only models (e.g. Riva Translate) which are not compatible here." },
       { key: "api_key", label: "API key", type: "password", secret: true, hint:
         'Get a free key at <a href="https://build.nvidia.com" target="_blank" rel="noopener noreferrer">build.nvidia.com</a>.' },
       { key: "batch_token_budget", label: "Batch size (dialogue tokens)", type: "number", min: 1, step: 100, hint:

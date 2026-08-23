@@ -89,8 +89,9 @@ both 3.1 instances and just use **"Gemini Main"** + **"Gemini Secondary"**
 2. Open any model page (e.g. search for DeepSeek), click **Get API Key**,
    and copy it.
 3. In Subtitlarr, add a new engine instance: provider **NVIDIA**, paste the
-   key, and set the model to a real instructable chat model — the default,
-   `deepseek-ai/deepseek-v4-flash`, is confirmed working. NVIDIA also hosts
+   key, and set the model to a real instructable chat model currently
+   listed in the [build.nvidia.com](https://build.nvidia.com) catalog —
+   there is no default model set for this engine. NVIDIA also hosts
    dedicated translation-only models (e.g. Riva Translate) — do **not** use
    one of those, they don't support the formatting instructions this app
    relies on and translations will fail.
@@ -139,10 +140,10 @@ bottom, once everything above is set up (max-throughput version, 2000/day):
 Drop rows 3 and 4 for the quality-first version instead (1000/day, every
 item on `gemini-3.5-flash-lite`).
 
-Optionally add an NVIDIA instance (`deepseek-ai/deepseek-v4-flash`, budget
-`700`) either above the separator as a 5th cloud fallback, or below it
-alongside Ollama, depending on whether you want it tried automatically or
-reserved for manual runs.
+Optionally add an NVIDIA instance (a real instructable chat model from the
+build.nvidia.com catalog, budget `700`) either above the separator as a
+5th cloud fallback, or below it alongside Ollama, depending on whether you
+want it tried automatically or reserved for manual runs.
 
 ## Recommended workflow
 

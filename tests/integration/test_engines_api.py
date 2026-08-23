@@ -122,11 +122,15 @@ def test_update_config_merges_not_replaces(client):
 
 
 def test_create_defaults_fill_in_missing_config_fields(client):
+    """No default model is filled in for a fresh NVIDIA instance —
+    deepseek-ai/deepseek-v4-flash (the former default) is dead, and
+    silently steering a new instance at a known-dead model is worse than
+    leaving it blank, which fails loudly at request time instead."""
     created = client.post(
         "/api/config/engine-instances",
         json={"name": "NVIDIA", "provider_type": "nvidia", "config": {}},
     ).json()
-    assert created["config"]["model"] == "deepseek-ai/deepseek-v4-flash"
+    assert created["config"]["model"] == ""
     assert created["config"]["batch_token_budget"] == 700
 
 
