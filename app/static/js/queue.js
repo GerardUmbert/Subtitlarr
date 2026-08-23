@@ -32,11 +32,16 @@ function duration(item) {
     const finished = new Date(item.completed_at).getTime();
     return formatSecs(Math.max(0, Math.round((finished - started) / 1000)));
   }
-  if (item.status === "failed" && item.last_updated) {
-    // No completed_at on a failure, but last_updated is stamped at the
-    // exact moment the failure was recorded — close enough to "when it
-    // stopped" to show real elapsed time instead of a dash.
-    const failedAt = new Date(item.last_updated).getTime();
+  if (item.status === "failed" && item.status_changed_at) {
+    // No completed_at on a failure. last_updated is NOT safe here — it's
+    // also refreshed by the Bazarr library sync on every item still in
+    // Bazarr's wanted list, including untouched failed ones, so a failed
+    // item left alone for days would show a duration of days once the
+    // next sync ran (confirmed live: every failed item's last_updated
+    // matched the most recent sync to the second, regardless of when it
+    // actually failed). status_changed_at is stamped ONLY when the
+    // status itself changes, so it stays a true "when it stopped".
+    const failedAt = new Date(item.status_changed_at).getTime();
     return formatSecs(Math.max(0, Math.round((failedAt - started) / 1000)));
   }
   return "—";

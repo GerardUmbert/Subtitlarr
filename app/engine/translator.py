@@ -780,7 +780,8 @@ async def translate_item(
                 )
                 with state.db_lock:
                     repository.update_item_status(
-                        conn, item_id, "done", source_language=source_lang, mark_completed=True,
+                        conn, item_id, "done", source_language=source_lang,
+                        mark_attempt=True, mark_completed=True,
                     )
                 with state.db_lock:
                     repository.log_item_attempt(

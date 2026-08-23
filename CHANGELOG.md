@@ -3,6 +3,27 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.12.0]
+
+### Fixed
+- **The Queue page's Duration column showed wildly inflated times
+  (hours to days) for failed items**, even ones that failed in
+  seconds and were never retried. The duration calculation relied on
+  `last_updated`, which is refreshed on every Bazarr library sync for
+  every item still on Bazarr's wanted list — including untouched
+  failed ones — so a failed item left alone across a sync would show
+  "duration" as the time since the *sync*, not the time since it
+  actually failed. A new `status_changed_at` timestamp is now stamped
+  only when an item's status genuinely changes, and the Queue page
+  uses that instead. Also fixes the same class of bug for items
+  marked done instantly because Bazarr already had a real subtitle
+  for them (previously computed against a stale, unrelated timestamp
+  from that item's last real translation attempt). Existing failed
+  items keep showing their old (incorrect) duration until re-run,
+  since the true failure time was never recorded separately before
+  this fix — going forward, all new failures and instant-done items
+  report accurately.
+
 ## [0.11.20]
 
 ### Added

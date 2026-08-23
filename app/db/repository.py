@@ -79,11 +79,11 @@ def reset_stuck_translating_items(conn: sqlite3.Connection) -> int:
         cur = conn.execute(
             """
             UPDATE items
-            SET status = 'pending', last_updated = ?,
+            SET status = 'pending', last_updated = ?, status_changed_at = ?,
                 error_message = 'Interrupted by a server restart; queued for retry.'
             WHERE status = 'translating'
             """,
-            (now,),
+            (now, now),
         )
         return cur.rowcount
 
@@ -184,8 +184,8 @@ def mark_skipped_no_source(conn: sqlite3.Connection, item_id: int) -> None:
     now = _now()
     with conn:
         conn.execute(
-            "UPDATE items SET status = 'skipped_no_source', last_updated = ? WHERE id = ?",
-            (now, item_id),
+            "UPDATE items SET status = 'skipped_no_source', last_updated = ?, status_changed_at = ? WHERE id = ?",
+            (now, now, item_id),
         )
 
 
@@ -206,10 +206,11 @@ def set_resolved_source_language(conn: sqlite3.Connection, item_id: int, source_
             """
             UPDATE items
             SET source_language = ?, last_updated = ?,
-                status = CASE WHEN status = 'skipped_no_source' THEN 'pending' ELSE status END
+                status = CASE WHEN status = 'skipped_no_source' THEN 'pending' ELSE status END,
+                status_changed_at = CASE WHEN status = 'skipped_no_source' THEN ? ELSE status_changed_at END
             WHERE id = ? AND status IN ('pending', 'skipped_no_source')
             """,
-            (source_language, now, item_id),
+            (source_language, now, now, item_id),
         )
 
 
@@ -274,8 +275,8 @@ def update_item_status(
     mark_completed: bool = False,
 ) -> None:
     now = _now()
-    fields = ["status = ?", "last_updated = ?"]
-    values: list = [status, now]
+    fields = ["status = ?", "last_updated = ?", "status_changed_at = ?"]
+    values: list = [status, now, now]
     if source_language is not None:
         fields.append("source_language = ?")
         values.append(source_language)
@@ -353,7 +354,7 @@ _QUEUE_SORT_COLUMNS = {
     "language": "target_language COLLATE NOCASE",
     "status": "status COLLATE NOCASE",
     "updated": "last_updated",
-    "duration": "last_updated",  # duration is computed client-side; closest proxy available server-side
+    "duration": "status_changed_at",  # duration is computed client-side; closest proxy available server-side
 }
 
 _RUN_HISTORY_SORT_COLUMNS = {
@@ -578,10 +579,10 @@ def reset_item_for_language_mismatch(conn: sqlite3.Connection, item_id: int, det
             """
             UPDATE items
             SET status = 'pending', language_check_status = 'unchecked', language_check_detail = NULL,
-                error_message = ?, last_updated = ?, purge_exempt = 1
+                error_message = ?, last_updated = ?, status_changed_at = ?, purge_exempt = 1
             WHERE id = ?
             """,
-            (f"Language check failed: {detail}", now, item_id),
+            (f"Language check failed: {detail}", now, now, item_id),
         )
 
 
@@ -605,13 +606,13 @@ def reset_item_for_stale_audit(conn: sqlite3.Connection, item_id: int) -> None:
         conn.execute(
             """
             UPDATE items
-            SET status = 'pending', error_message = ?, last_updated = ?, purge_exempt = 1
+            SET status = 'pending', error_message = ?, last_updated = ?, status_changed_at = ?, purge_exempt = 1
             WHERE id = ?
             """,
             (
                 "Stale audit: Bazarr has no real subtitle for this item's "
                 "target language despite status='done' — reset for a fresh attempt.",
-                now, item_id,
+                now, now, item_id,
             ),
         )
 
