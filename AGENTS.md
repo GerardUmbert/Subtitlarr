@@ -119,6 +119,15 @@ runs automatically on deploy:
   the context limit. If translations come back mostly untranslated or with
   low cue-recovery counts, try lowering the batch override (Engine settings
   page) before assuming it's a different bug.
+- **An item can be translated by Claude itself instead of a configured
+  engine** — for content a cloud provider's safety filter blocks
+  outright (e.g. period-accurate slurs/violence in a serious historical
+  drama) rather than genuinely fails on. See the `manual-translate`
+  skill (`.claude/skills/manual-translate/`) for the two API endpoints
+  and the chunking/verification workflow — don't translate a whole
+  large file in one pass; a long single generation is where cue-index
+  alignment mistakes happen.
+
 ## What NOT to do without being asked
 
 - Don't restart the dev server or kill Ollama while a translation is

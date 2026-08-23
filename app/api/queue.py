@@ -3,7 +3,8 @@ from pydantic import BaseModel
 
 from app import state
 from app.db import repository
-from app.engine import prefetch, selector
+from app.engine import manual_translation, prefetch, selector
+from app.subtitles import srt_io
 
 router = APIRouter(prefix="/api/queue", tags=["queue"])
 
@@ -170,3 +171,97 @@ async def run_item(
         description=f"run-single-item({item_id})",
     )
     return {"started": True, "source_language": resolved_source}
+
+
+@router.get("/{item_id}/manual-translation/source")
+async def get_manual_translation_source(
+    item_id: int, conn=Depends(state.get_conn), client=Depends(state.get_client),
+):
+    """Resolves this item's source subtitle the same way a normal run
+    would (source_lang_priority, HI-track fallback, etc.) and returns its
+    dialogue text in the same "index\\ncontent" format a real translation
+    provider is prompted with — for a human/external translator to
+    translate by hand and post back via POST .../manual-translation.
+
+    A no-usable-source or Bazarr-unreachable outcome marks the item
+    skipped_no_source/failed respectively (same as any other resolution
+    attempt) and is reported back as an error rather than silently
+    returning nothing."""
+    item = repository.get_item(conn, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    source_priority = repository.get_config(conn, "source_lang_priority", default=[])
+    ready = await selector.resolve_and_gate(conn, client, [item], source_priority)
+    if not ready:
+        refreshed = repository.get_item(conn, item_id)
+        raise HTTPException(
+            status_code=422,
+            detail=f"No usable source found — item status is now '{refreshed['status']}'.",
+        )
+
+    entry = ready[0]
+    cues = await client.get_subtitle_contents(entry["source_path"])
+    if not cues:
+        raise HTTPException(status_code=422, detail="Source subtitle path resolved but has no cues.")
+
+    subs = srt_io.cues_from_bazarr(cues)
+    return {
+        "item_id": item_id,
+        "source_language": entry["source_lang"],
+        "target_language": item["target_language"],
+        "cue_count": len(subs),
+        "dialogue_text": srt_io.extract_dialogue_text(subs),
+    }
+
+
+class ManualTranslationRequest(BaseModel):
+    translated_text: str
+    model_name: str = "claude-code"
+
+
+@router.post("/{item_id}/manual-translation")
+async def submit_manual_translation(
+    item_id: int, req: ManualTranslationRequest,
+    conn=Depends(state.get_conn), client=Depends(state.get_client), runner=Depends(state.get_runner),
+):
+    """Accepts a translation produced OUTSIDE any configured engine
+    (e.g. by hand, or by an assistant reading source text from the GET
+    endpoint above) and runs it through the same reassembly/integrity/
+    disclaimer/upload/DB-tracking steps a real provider's output goes
+    through — see engine.manual_translation.submit_manual_translation.
+    No LLM call happens here at all.
+
+    engine_used/model_used are recorded as "manual"/req.model_name (not
+    a real provider name) so this is honestly distinguishable in the
+    Queue's Model column, History, and the disclaimer line itself from
+    an actual API-driven translation.
+
+    Blocked while a translation run is active, same reasoning as the
+    force-translate path — a live run could be mid-write on this exact
+    item."""
+    item = repository.get_item(conn, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    if runner.current is not None and runner.current.active:
+        raise HTTPException(status_code=409, detail="A translation run is already in progress")
+
+    source_priority = repository.get_config(conn, "source_lang_priority", default=[])
+    ready = await selector.resolve_and_gate(conn, client, [item], source_priority)
+    if not ready:
+        refreshed = repository.get_item(conn, item_id)
+        raise HTTPException(
+            status_code=422,
+            detail=f"No usable source found — item status is now '{refreshed['status']}'.",
+        )
+    entry = ready[0]
+
+    try:
+        result = await manual_translation.submit_manual_translation(
+            conn, client, item, entry["source_lang"], entry["source_path"],
+            req.translated_text, req.model_name,
+        )
+    except manual_translation.ManualTranslationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return result
