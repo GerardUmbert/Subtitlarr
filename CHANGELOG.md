@@ -35,6 +35,15 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   before marking it done.
 
 ### Fixed
+- **The "external" badge showed "unchecked" for an item the language
+  check had already flagged as wrong-language**, contradicting the
+  Error column sitting right next to it. `language_check_status` gets
+  reset back to 'unchecked' the moment a mismatch is acted on (by
+  design — that verdict was about the discarded translation, not
+  whatever comes next), so it's not a reliable signal for "was this
+  ever checked." The badge now also recognizes the durable
+  `error_message` a mismatch leaves behind and shows "wrong language"
+  instead.
 - **The language check engine picker (Jobs page) couldn't be set back
   to disabled once an engine was chosen** — the "pick an engine…"
   placeholder was a disabled option, unselectable the moment a real

@@ -153,11 +153,24 @@ createApp({
     // these items are still fully eligible for the periodic language
     // check sweep like any other 'done' item (that's exactly how a
     // wrong-language Bazarr download gets caught at all), so the badge
-    // must reflect language_check_status honestly instead of implying
-    // "unverified" when it may already be confirmed correct or wrong.
+    // must reflect the real verdict instead of implying "unverified" when
+    // it may already be confirmed correct or wrong.
+    //
+    // language_check_status is NEVER actually 'mismatch' by the time this
+    // reads it — reset_item_for_language_mismatch clears it straight back
+    // to 'unchecked' in the same transaction as the reset, on purpose
+    // (that verdict was about the DISCARDED translation, see its
+    // docstring). The durable record of a confirmed mismatch is
+    // error_message instead ("Language check failed: detected as X,
+    // expected Y") — confirmed live: the Queue page showed that exact
+    // error text right next to a badge claiming "unchecked", visibly
+    // contradicting itself.
+    _wasFlaggedWrongLanguage(item) {
+      return !!(item.error_message && item.error_message.startsWith("Language check failed:"));
+    },
     externalBadgeLabel(item) {
       if (item.language_check_status === "ok") return "external · verified";
-      if (item.language_check_status === "mismatch") return "external · wrong language";
+      if (this._wasFlaggedWrongLanguage(item)) return "external · wrong language";
       return "external · unchecked";
     },
     externalBadgeTitle(item) {
@@ -165,9 +178,9 @@ createApp({
         return "Bazarr already had this subtitle — Subtitlarr never translated it, " +
           "but the language check confirmed it's actually correct.";
       }
-      if (item.language_check_status === "mismatch") {
+      if (this._wasFlaggedWrongLanguage(item)) {
         return "Bazarr already had this subtitle, and the language check confirmed " +
-          "it's the WRONG language. Use \"translate anyway\" to overwrite it.";
+          `it's the wrong language (${item.error_message}). Use "translate anyway" to overwrite it.`;
       }
       return "Bazarr already had this subtitle — Subtitlarr never translated it, and " +
         "nothing has verified its language yet (the periodic language check hasn't " +
