@@ -52,6 +52,12 @@ createApp({
       staleAuditStarted: false,
       staleAuditResult: null,
       staleAuditError: "",
+      disclaimerBackfillPendingCount: 0,
+      disclaimerBackfillActive: false,
+      startingDisclaimerBackfill: false,
+      disclaimerBackfillStarted: false,
+      disclaimerBackfillResult: null,
+      disclaimerBackfillError: "",
       error: "",
       _pollHandle: null,
     };
@@ -94,6 +100,13 @@ createApp({
         const status = await Api.getSyncStatus();
         this.languageCheckActive = status.language_check.active;
         this.staleAuditActive = status.stale_audit.active;
+        this.disclaimerBackfillActive = status.disclaimer_backfill.active;
+      } catch (_) {
+        // keep last known state on transient failure
+      }
+      try {
+        const backfillCount = await Api.getDisclaimerBackfillPendingCount();
+        this.disclaimerBackfillPendingCount = backfillCount.pending_count;
       } catch (_) {
         // keep last known state on transient failure
       }
@@ -287,6 +300,39 @@ createApp({
           setTimeout(check, 1000);
         } else {
           if (status.language_check.error) this.languageCheckError = status.language_check.error;
+          await this.load();
+        }
+      };
+      setTimeout(check, 1000);
+    },
+    async runDisclaimerBackfill() {
+      this.startingDisclaimerBackfill = true;
+      this.disclaimerBackfillError = "";
+      this.disclaimerBackfillResult = null;
+      try {
+        const result = await Api.runDisclaimerBackfill();
+        if (!result.started) {
+          this.disclaimerBackfillError = result.reason || "Could not start backfill";
+          return;
+        }
+        this.disclaimerBackfillStarted = true;
+        setTimeout(() => (this.disclaimerBackfillStarted = false), 3000);
+        await this.load();
+        this.pollDisclaimerBackfillResult();
+      } catch (err) {
+        this.disclaimerBackfillError = err.message;
+      } finally {
+        this.startingDisclaimerBackfill = false;
+      }
+    },
+    pollDisclaimerBackfillResult() {
+      const check = async () => {
+        const status = await Api.getSyncStatus();
+        this.disclaimerBackfillResult = status.disclaimer_backfill.result;
+        if (status.disclaimer_backfill.active) {
+          setTimeout(check, 1000);
+        } else {
+          if (status.disclaimer_backfill.error) this.disclaimerBackfillError = status.disclaimer_backfill.error;
           await this.load();
         }
       };

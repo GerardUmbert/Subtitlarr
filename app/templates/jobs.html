@@ -131,6 +131,27 @@
     </div>
   </div>
 
+  <div class="panel" style="margin-top:16px;" id="disclaimer-backfill">
+    <div class="panel-body">
+    <div class="panel-title">Tag existing translations with their model</div>
+    <div class="panel-title-sub">Stamps the model name onto the AI disclaimer line of already-translated subtitles, matching new translations — a real re-upload to Bazarr per item, not just a local edit</div>
+
+      <p class="field-hint">{% raw %}{{ disclaimerBackfillPendingCount }}{% endraw %} item{% raw %}{{ disclaimerBackfillPendingCount === 1 ? '' : 's' }}{% endraw %} not yet tagged.</p>
+      <div class="field-row">
+        <button class="btn" @click="runDisclaimerBackfill" :disabled="disclaimerBackfillActive || startingDisclaimerBackfill || disclaimerBackfillPendingCount === 0">
+          {% raw %}{{ disclaimerBackfillActive ? 'Tagging…' : (startingDisclaimerBackfill ? 'Starting…' : 'Backfill model tags') }}{% endraw %}
+        </button>
+        <span v-if="disclaimerBackfillStarted" class="test-result">● started</span>
+      </div>
+      <p class="field-hint" v-if="disclaimerBackfillResult">
+        ● tagged {% raw %}{{ disclaimerBackfillResult.tagged }}{% endraw %}<template v-if="disclaimerBackfillResult.skipped_no_content">,
+        {% raw %}{{ disclaimerBackfillResult.skipped_no_content }}{% endraw %} content not found</template><template v-if="disclaimerBackfillResult.errored">,
+        {% raw %}{{ disclaimerBackfillResult.errored }}{% endraw %} errored</template>
+      </p>
+      <p class="field-hint error" v-if="disclaimerBackfillError">● {% raw %}{{ disclaimerBackfillError }}{% endraw %}</p>
+    </div>
+  </div>
+
   <div class="panel" style="margin-top:16px;">
     <div class="panel-body">
     <div class="panel-title">Stale translation audit</div>

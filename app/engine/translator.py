@@ -878,6 +878,9 @@ async def translate_item(
                 )
             with state.db_lock:
                 repository.set_source_is_external(conn, item_id, False)
+            if add_ai_disclaimer:
+                with state.db_lock:
+                    repository.mark_disclaimer_model_tagged(conn, item_id)
         else:
             if item["item_type"] == "episode":
                 await client.upload_episode_subtitle(
@@ -901,6 +904,9 @@ async def translate_item(
                 )
             with state.db_lock:
                 repository.set_source_is_external(conn, item_id, False)
+            if add_ai_disclaimer:
+                with state.db_lock:
+                    repository.mark_disclaimer_model_tagged(conn, item_id)
         with state.db_lock:
             repository.log_item_attempt(
                 conn, item_id, run_id, "done",

@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from app import state, telemetry
 from app.config import settings
 from app.db import database, engine_instances_repo, repository
-from app.engine import backup, language_check, stale_audit, upload_queue
+from app.engine import backup, disclaimer_backfill, language_check, stale_audit, upload_queue
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -325,6 +325,63 @@ async def set_language_check_settings(req: LanguageCheckSettings, conn=Depends(s
     return {"saved": True}
 
 
+_disclaimer_backfill_state = {"active": False, "error": None, "result": None}
+
+
+async def _run_disclaimer_backfill(conn, client, triggered_by: str) -> None:
+    with state.db_lock:
+        event_id = repository.start_job_event(conn, "disclaimer_backfill", triggered_by=triggered_by)
+    _disclaimer_backfill_state["active"] = True
+    _disclaimer_backfill_state["error"] = None
+    _disclaimer_backfill_state["result"] = None
+    try:
+        result = await disclaimer_backfill.run_disclaimer_model_backfill(conn, client)
+        _disclaimer_backfill_state["result"] = result
+        with state.db_lock:
+            repository.finish_job_event(
+                conn, event_id, status="done",
+                result=(
+                    f"{result['tagged']} tagged, {result['skipped_no_disclaimer']} had no disclaimer, "
+                    f"{result['skipped_no_content']} content not found, {result['errored']} errored"
+                ),
+            )
+    except Exception as exc:  # noqa: BLE001 - surface to the UI, don't crash the app
+        _disclaimer_backfill_state["error"] = str(exc)
+        with state.db_lock:
+            repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
+    finally:
+        _disclaimer_backfill_state["active"] = False
+
+
+@router.get("/disclaimer-backfill/pending-count")
+def get_disclaimer_backfill_pending_count(conn=Depends(state.get_conn)):
+    return {"pending_count": len(repository.get_items_for_disclaimer_model_backfill(conn))}
+
+
+@router.post("/disclaimer-backfill")
+async def run_disclaimer_backfill_now(
+    conn=Depends(state.get_conn), client=Depends(state.get_client), runner=Depends(state.get_runner)
+):
+    """Stamps the model name onto the disclaimer line of every already-
+    translated item's subtitle that doesn't have it yet — matches what
+    new translations get automatically since v0.13.0. A real Bazarr
+    write (re-upload) per eligible item, not a read — manual/opt-in
+    only, never run on a schedule.
+
+    Blocked while a translation run is active — a live run may itself be
+    about to mark an item done and tag it, and interleaving this sweep's
+    own read-modify-upload against the same item risks a lost update."""
+    if _disclaimer_backfill_state["active"]:
+        return {"started": False, "reason": "A disclaimer backfill is already in progress"}
+    if runner.current is not None and runner.current.active:
+        return {"started": False, "reason": "A translation run is already in progress"}
+
+    state.spawn_background_task(
+        _run_disclaimer_backfill(conn, client, triggered_by="manual"), description="disclaimer-backfill"
+    )
+    return {"started": True}
+
+
 _backup_state = {"active": False, "error": None, "result": None}
 
 
@@ -502,6 +559,7 @@ def get_sync_status():
         "language_check": dict(_language_check_state),
         "backup": dict(_backup_state),
         "stale_audit": dict(_stale_audit_state),
+        "disclaimer_backfill": dict(_disclaimer_backfill_state),
     }
 
 

@@ -44,6 +44,7 @@
 <div class="changelog-section-title">Added</div>
 <ul>
 <li><strong>The AI disclaimer line now names which model produced the translation</strong> — e.g. &quot;... Espereu errors ocasionals. [gemini-3.5-flash-lite]&quot; — appended in English after the (possibly translated) sentence, not woven into any of the 187 translated templates. Lets you spot-check which model a file came from directly in the subtitle, without cross-referencing the Queue&#x27;s Model column — useful for judging whether a weaker fallback model&#x27;s output is worth a re-run without reading every translation.</li>
+<li><strong>A new Jobs page action backfills that same model tag onto already-translated subtitles</strong> — &quot;Backfill model tags&quot; edits the existing disclaimer line and re-uploads it to Bazarr for every completed item whose model is known. Manual/opt-in only, never runs on a schedule, since it&#x27;s a real write per item, not a read.</li>
 </ul>
 </div>
 <div class="changelog-entry reveal-scroll">

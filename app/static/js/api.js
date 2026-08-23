@@ -89,6 +89,8 @@ const Api = (() => {
     syncSubs: () => request("POST", "/api/jobs/sync-subs"),
     runLanguageCheck: () => request("POST", "/api/jobs/language-check"),
     runStaleAudit: () => request("POST", "/api/jobs/stale-audit"),
+    runDisclaimerBackfill: () => request("POST", "/api/jobs/disclaimer-backfill"),
+    getDisclaimerBackfillPendingCount: () => request("GET", "/api/jobs/disclaimer-backfill/pending-count"),
     getLanguageCheckSettings: () => request("GET", "/api/jobs/language-check/settings"),
     setLanguageCheckSettings: (instanceId) =>
       request("POST", "/api/jobs/language-check/settings", { instance_id: instanceId }),

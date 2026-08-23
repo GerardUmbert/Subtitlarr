@@ -663,6 +663,34 @@ def get_done_items_for_stale_audit(conn: sqlite3.Connection) -> list[sqlite3.Row
     return conn.execute("SELECT * FROM items WHERE status = 'done'").fetchall()
 
 
+def get_items_for_disclaimer_model_backfill(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Completed items translated by Subtitlarr (source_is_external=0 —
+    an externally-sourced file was never actually translated by us, so
+    there's no model to backfill) whose model IS known (model_used
+    predates the column on ~5% of the backlog — nothing honest to write
+    for those) and that haven't been tagged yet (disclaimer_model_tagged
+    — see migration adding it). No batch limit: this only costs one
+    Bazarr detail+content fetch and, if the disclaimer needs editing, one
+    upload per item — no LLM involved, so there's no quota to conserve,
+    same reasoning as get_done_items_for_stale_audit."""
+    return conn.execute(
+        """
+        SELECT * FROM items
+        WHERE status IN ('done', 'translated_pending_upload')
+          AND source_is_external = 0
+          AND model_used IS NOT NULL
+          AND disclaimer_model_tagged = 0
+        """
+    ).fetchall()
+
+
+def mark_disclaimer_model_tagged(conn: sqlite3.Connection, item_id: int) -> None:
+    with conn:
+        conn.execute(
+            "UPDATE items SET disclaimer_model_tagged = 1 WHERE id = ?", (item_id,)
+        )
+
+
 def reset_item_for_stale_audit(conn: sqlite3.Connection, item_id: int) -> None:
     """Confirmed live (v0.9.7): a 'done' item whose target_language has no
     real subtitle on Bazarr right now is simply a wrong record, regardless

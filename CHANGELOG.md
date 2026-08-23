@@ -14,6 +14,11 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   in the subtitle, without cross-referencing the Queue's Model column
   — useful for judging whether a weaker fallback model's output is
   worth a re-run without reading every translation.
+- **A new Jobs page action backfills that same model tag onto
+  already-translated subtitles** — "Backfill model tags" edits the
+  existing disclaimer line and re-uploads it to Bazarr for every
+  completed item whose model is known. Manual/opt-in only, never runs
+  on a schedule, since it's a real write per item, not a read.
 
 ## [0.12.0]
 
