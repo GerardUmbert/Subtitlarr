@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [dev]
 
 ### Added
 - **Items a cloud provider's safety filter blocks outright** (e.g.
