@@ -13,6 +13,7 @@ ollama-data/
 node_modules/
 plans/
 TODO.md
+scratch/
 unraid/my-subtitlarr.xml
 /*.srt
 /*.log

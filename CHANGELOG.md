@@ -3,6 +3,25 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+- **Items a cloud provider's safety filter blocks outright** (e.g.
+  period-accurate slurs or violence in serious historical drama) **can
+  now be translated by hand and submitted through a new manual
+  translation path**, instead of endlessly retrying the same content
+  against the same engine. Two new endpoints expose the source
+  dialogue in the same format a real provider is prompted with, then
+  accept a translation back and run it through the same reassembly,
+  integrity-check, disclaimer, and upload pipeline any provider's
+  output goes through. No LLM call happens server-side; the item's
+  engine/model are honestly recorded as "manual" and whatever model
+  name did the work.
+- **A `dev` Docker image tag** now builds from `dev-vX.Y.Z` tag pushes,
+  separate from `latest` and versioned tags — lets a test deployment
+  track in-progress work without disturbing what everyone else's
+  Docker installs pull.
+
 ## [0.13.0]
 
 ### Added

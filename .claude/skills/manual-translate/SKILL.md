@@ -35,6 +35,9 @@ against a remote instance, confirm the base URL is reachable (a plain
 
 ## Working through the whole failed backlog
 
+See [EXAMPLE_PROMPT.md](EXAMPLE_PROMPT.md) for a real prompt that invokes
+this workflow, plus notes on what made it work.
+
 There is no dedicated "list items eligible for manual translation"
 endpoint — build the list from the existing Queue listing, purely over
 HTTP:
@@ -67,20 +70,87 @@ HTTP:
 4. Work through the content-blocked list one item at a time using the
    single-item workflow below.
 
+## Use ONE background agent PER ITEM — never batch multiple items into one agent
+
+This is not a minor preference — batching multiple items into a single
+agent multiplies token cost, it doesn't save it. Within one agent's
+conversation, every tool call (source fetch, every chunk write, every
+verification run) stays in that agent's context permanently. If one
+agent translates 5 movies sequentially, movie 2's work happens on top
+of movie 1's entire accumulated context (chunks, source JSON, tool
+output), movie 3 pays for movies 1+2, and so on — the 5th item in a
+batch is far more expensive than the 1st, and the batch as a whole
+costs meaningfully more than 5 independent agents would. This was
+confirmed empirically: two 5-movie batch agents each burned ~520K
+tokens (roughly 100K/movie, front-loaded onto later items in the
+batch) — a single-item agent doing comparable-length content costs a
+small fraction of that because it never carries other items' leftover
+context.
+
+The fixed "cold start" cost of an agent reading this skill file and the
+conventions section is small by comparison and is NOT a reason to
+batch. Do not rationalize batching as a cost optimization — it isn't
+one. If asked to reconsider this, don't — the batching approach was
+tried, measured, and confirmed worse.
+
+So: once the classification and pilot/confirmation step (above) are
+done, spawn exactly one background agent per item id, whether it's a
+movie or a single TV episode. For a TV show with multiple pending
+episodes, still spawn one agent per episode (not one agent for the
+whole show) — the episodes don't need each other's context either.
+
+Each agent prompt must be self-contained — the agent has no memory of
+this conversation — and should include:
+
+1. A link/reference to this skill file and its single-item workflow.
+2. The single item id to work (with title, for sanity-checking against
+   what `GET /api/queue/{id}` returns).
+3. The base URL of the Subtitlarr instance.
+4. A reminder to chunk within the item (~250-350 cues per chunk,
+   appended to a single running local file rather than one scratch
+   file per chunk) and verify index parity once at the end before
+   submitting — this is a different concern from "don't batch items"
+   and both rules apply together. Also note that Node.js is the
+   available scripting runtime for the verify step (not `python3` —
+   it isn't installed; don't let the agent waste turns discovering
+   that itself).
+5. The project's translation conventions (see below) if relevant to the
+   content (e.g. period slurs).
+6. What to report back: success/failure and cue_count, so results can
+   be reconciled against the master classified list.
+
+Run agents in the background (the default) so they don't block on each
+other, and check results via task notifications rather than polling.
+Launching many single-item agents at once is fine and expected — that's
+the whole point, not a reason to batch them back together.
+
 ## Single-item workflow
+
+**Token-cost note:** the dominant cost here is I/O overhead, not the
+translation itself. A first live run on a 1188-cue movie burned
+~110K tokens because it wrote each chunk's translation to a scratch
+file and read it back before combining — 8 extra write+read round
+trips, plus environment-discovery overhead (missing `python3`, path
+interpolation issues). Steps 2–5 below are written to avoid that:
+keep chunks in your own working output, don't round-trip them through
+the filesystem, and don't rediscover the environment each item.
 
 1. **Confirm the item.** `GET /api/queue/{item_id}` — check `status`
    and `error_message` match what you expect before spending effort.
 2. **Fetch the source.** `GET /api/queue/{item_id}/manual-translation/source`.
-   Note `cue_count` — this tells you how much work is ahead and whether
-   to chunk (see below).
-3. **Translate in chunks of roughly 100–200 cues, not the whole file at
-   once.** A single very long generation (confirmed live: a 1498-cue
-   film translated in one pass) is where index-alignment mistakes
-   happen — attention drifts over a long continuous output and a cue
-   gets dropped or duplicated near the end. Smaller chunks are faster
-   per-chunk, and a mistake in one chunk doesn't require re-verifying
-   the whole file.
+   Note `cue_count`.
+3. **Translate in chunks of roughly 250–350 cues**, not the whole file
+   in one pass and not 100–150-cue slices either — very long single
+   passes are where index-alignment mistakes happen (attention drifts
+   over a long continuous output), but each chunk also carries fixed
+   overhead (re-stating format/conventions, a tool round trip), so
+   fewer/larger chunks within that safe range cost less overall.
+   **Write each chunk's translated output directly to one running local
+   file** (e.g. append to a single `translated.txt` in the scratchpad)
+   as you go — do not create a separate scratch file per chunk, and do
+   not read a chunk back after writing it just to re-verify it in
+   isolation. One file, appended to, read once at the end for the
+   parity check below.
 4. **Preserve every index exactly, and don't skip cues.** Every
    `<index>` in the source must appear exactly once in your translated
    output, with the same index number — `reassemble()` matches by
@@ -89,13 +159,15 @@ HTTP:
    Keep formatting markup (e.g. `<i>...</i>` italics on song lyrics/
    internal monologue) — it's part of the content, not stripped before
    reassembly.
-5. **Verify index parity before submitting**, especially after
-   concatenating multiple translated chunks back together. A quick
-   check: extract every `^\d+$` line from your combined translation and
-   diff the resulting set against `set(range(1, cue_count + 1))` — this
-   is exactly what caught a dropped/duplicated cue during the first use
-   of this workflow. Do this in a scratch script, not by eye — eyeballing
-   ~1500 lines is how the mistake happened in the first place.
+5. **Verify index parity before submitting**, once, against the fully
+   assembled file — not per chunk. Extract every `^\d+$` line and diff
+   the resulting set against `1..cue_count`. Use this exact Node
+   one-liner (Node is confirmed available; do not spend time discovering
+   or working around a missing `python3` — just use this):
+   ```
+   node -e "const fs=require('fs');const t=fs.readFileSync('translated.txt','utf8');const idx=[...t.matchAll(/^(\d+)$/gm)].map(m=>+m[1]);const want=new Set(Array.from({length:<CUE_COUNT>},(_,i)=>i+1));const got=new Set(idx);const missing=[...want].filter(x=>!got.has(x));const extra=idx.filter((x,i)=>idx.indexOf(x)!==i);console.log('count',idx.length,'missing',missing,'dupes',[...new Set(extra)])"
+   ```
+   Fix any gap/duplicate this reports before submitting.
 6. **Submit.** `POST /api/queue/{item_id}/manual-translation` with the
    full combined `translated_text` (all chunks concatenated — the
    endpoint takes one complete submission per item, not one call per

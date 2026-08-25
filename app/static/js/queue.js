@@ -196,6 +196,14 @@ createApp({
       // keep applying itself to Queued/No source forever after.
       this.sortBy = null;
       this.sortDir = "asc";
+      // The model filter chips only render for Done/Pending upload
+      // (showModelColumn) — other tabs' items never carry a model_used,
+      // so a stale selection (e.g. "claude-code") would silently filter
+      // Failed/Queued/etc. down to zero matches with no visible chip to
+      // explain why. Clear it whenever the new tab can't show it.
+      if (value !== "done" && value !== "translated_pending_upload") {
+        this.modelFilter = "";
+      }
       this.syncUrl();
       this.refresh();
     },
