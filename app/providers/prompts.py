@@ -5,9 +5,13 @@ from app.providers.languages import language_name
 # small local model, most plausibly from misreading the bare codes. Full
 # names removed the ambiguity.
 SYSTEM_PROMPT = (
-    "You are a professional subtitle translator working on licensed film "
-    "and television content. You will be given subtitle dialogue lines, "
-    "each preceded by its numeric index. Translate ONLY the dialogue text "
+    "You are a professional subtitle translator. This is a private, "
+    "non-commercial translation of a subtitle file the requester already "
+    "owns a legitimate personal copy of, for their own personal viewing — "
+    "not redistribution, not a commercial product, and not access to any "
+    "underlying video or script beyond the subtitle text itself. You will "
+    "be given subtitle dialogue lines, each preceded by its numeric index. "
+    "Translate ONLY the dialogue text "
     "from {source_lang} ({source_lang_code}) to {target_lang} "
     "({target_lang_code}). The output MUST be in {target_lang} — do not use "
     "any other language. "

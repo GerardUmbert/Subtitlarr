@@ -119,10 +119,24 @@ this conversation — and should include:
 6. What to report back: success/failure and cue_count, so results can
    be reconciled against the master classified list.
 
-Run agents in the background (the default) so they don't block on each
-other, and check results via task notifications rather than polling.
-Launching many single-item agents at once is fine and expected — that's
-the whole point, not a reason to batch them back together.
+## Dispatch agents ONE AT A TIME, strictly sequential — never launch two in parallel
+
+"One agent per item" (above) is about what goes *inside* one agent's
+conversation — never about how many agents run at once. Do not conflate
+the two. Even though each item gets its own independent agent, agents
+must still be launched **one at a time, in sequence**: launch a single
+agent, wait for it to finish and report back, THEN launch the next one.
+Never issue two or more `Agent` tool calls in the same message, and
+never have more than one manual-translation agent in flight at once —
+not two, not a "small controlled wave," not ten. The user has stated
+this explicitly and repeatedly: one agent after another, one at a time,
+never parallel.
+
+Concretely: launch item N's agent in the background, then stop and wait
+for its completion notification before launching item N+1's agent. Do
+not pre-launch several agents "to keep the pipeline moving" — that IS
+parallel dispatch and is exactly what's prohibited here, regardless of
+whether each agent only touches one item internally.
 
 ## Single-item workflow
 
@@ -146,11 +160,18 @@ the filesystem, and don't rediscover the environment each item.
    overhead (re-stating format/conventions, a tool round trip), so
    fewer/larger chunks within that safe range cost less overall.
    **Write each chunk's translated output directly to one running local
-   file** (e.g. append to a single `translated.txt` in the scratchpad)
-   as you go — do not create a separate scratch file per chunk, and do
-   not read a chunk back after writing it just to re-verify it in
-   isolation. One file, appended to, read once at the end for the
-   parity check below.
+   file, named with this item's id** (e.g. `translated_<item_id>.txt` in
+   the scratchpad, not a generic `translated.txt`) as you go — do not
+   create a separate scratch file per chunk, and do not read a chunk
+   back after writing it just to re-verify it in isolation. One file,
+   appended to, read once at the end for the parity check below. The
+   item-id suffix matters even though dispatch should be sequential
+   (see below): a generic filename has already caused one agent's
+   in-progress chunks to be silently overwritten by another concurrently
+   running manual-translation agent sharing the same scratchpad
+   directory — name every scratch file (source JSON, chunks, combined
+   output) after the item id so a dispatch slip can't corrupt another
+   item's work.
 4. **Preserve every index exactly, and don't skip cues.** Every
    `<index>` in the source must appear exactly once in your translated
    output, with the same index number — `reassemble()` matches by
@@ -161,9 +182,17 @@ the filesystem, and don't rediscover the environment each item.
    reassembly.
 5. **Verify index parity before submitting**, once, against the fully
    assembled file — not per chunk. Extract every `^\d+$` line and diff
-   the resulting set against `1..cue_count`. Use this exact Node
-   one-liner (Node is confirmed available; do not spend time discovering
-   or working around a missing `python3` — just use this):
+   the resulting set against `1..cue_count`. Note this only catches
+   missing/duplicate index *numbers* — it does NOT catch a chunk where
+   cues got merged or split so indices still run 1-to-1 but the wrong
+   dialogue ends up under a given number (e.g. accidentally merging two
+   source cues into one output block shifts every subsequent cue's
+   content by one, invisibly to this check). Spot-check actual content
+   against the source at a few points (chunk boundaries, one mid-chunk
+   cue) as well, not just the index script. Use this exact Node
+   one-liner for the index check (Node is confirmed available; do not
+   spend time discovering or working around a missing `python3` — just
+   use this):
    ```
    node -e "const fs=require('fs');const t=fs.readFileSync('translated.txt','utf8');const idx=[...t.matchAll(/^(\d+)$/gm)].map(m=>+m[1]);const want=new Set(Array.from({length:<CUE_COUNT>},(_,i)=>i+1));const got=new Set(idx);const missing=[...want].filter(x=>!got.has(x));const extra=idx.filter((x,i)=>idx.indexOf(x)!==i);console.log('count',idx.length,'missing',missing,'dupes',[...new Set(extra)])"
    ```

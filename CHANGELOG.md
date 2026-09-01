@@ -22,6 +22,16 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   track in-progress work without disturbing what everyone else's
   Docker installs pull.
 
+### Changed
+- **The system prompt sent to translation providers no longer describes
+  the content as "licensed film and television content"** — it now
+  states plainly that this is a private, non-commercial translation of
+  a subtitle file the requester already owns a personal copy of, for
+  their own viewing, not redistribution or a commercial product. The
+  old framing didn't help and may have made some providers' safety
+  filters more cautious rather than less; the new framing better
+  matches what's actually true of the request.
+
 ## [0.13.0]
 
 ### Added

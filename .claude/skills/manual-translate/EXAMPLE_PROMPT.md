@@ -53,13 +53,16 @@ single item, never multiple items batched into one agent**:
 Now that the content-blocked list is confirmed, work through the rest
 using background agents instead of continuing here — spawn ONE AGENT
 PER ITEM (a single movie, or a single TV episode), never multiple items
-in one agent. Each agent should get: a reference to the manual-translate
-skill, the base URL, its one item id/title, a reminder to chunk within
-that item (~250-350 cues per chunk, appended to one running local file
+in one agent. Launch agents ONE AT A TIME, strictly sequentially:
+launch a single item's agent, wait for its completion notification,
+then launch the next — never issue more than one Agent call in the
+same message, and never have more than one of these agents running at
+once. Each agent should get: a reference to the manual-translate skill,
+the base URL, its one item id/title, a reminder to chunk within that
+item (~250-350 cues per chunk, appended to one running local file
 rather than one scratch file per chunk) and verify index parity once at
 the end before submitting, and instructions to report back success/
-failure and cue_count. Run them in the background and summarize results
-as they land.
+failure and cue_count.
 ```
 
 ### Why one-per-item, not one-per-show or one-per-batch-of-movies
