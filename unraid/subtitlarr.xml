@@ -25,8 +25,11 @@
 
   <Config Name="WebUI Port" Target="7777" Default="7777" Mode="tcp" Description="Host port mapped to the container's internal port 7777 — keep this matching 7777 on both sides. Unraid's built-in Tailscale hook auto-configures Serve to proxy to the HOST-mapped port number, so a mismatched mapping (e.g. a different host port than the container's actual internal port) breaks the Tailscale hostname URL even though local/LAN access still works fine." Type="Port" Display="always" Required="true" Mask="false">7777</Config>
 
+  <Config Name="MCP Server Port" Target="7778" Default="7778" Mode="tcp" Description="Lets an MCP-aware AI assistant (e.g. Claude Code) connect remotely to monitor queue/job status and trigger translations, secured with a bearer token shown on the Jobs page. Set MCP_ENABLED (advanced, below) to false to disable the MCP server entirely instead of just hiding this port." Type="Port" Display="always" Required="true" Mask="false">7778</Config>
+
   <Config Name="Data" Target="/data" Default="/mnt/user/appdata/subtitlarr" Mode="rw" Description="Subtitlarr's own SQLite database (queue, run history, settings, engine instances). NOT a media path — do not point this at your library." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/subtitlarr</Config>
 
   <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User ID the app runs as inside the container — must own (or have write access to) the Data path above. Unraid's default 'nobody' user is 99." Type="Variable" Display="advanced" Required="false" Mask="false">99</Config>
   <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group ID the app runs as inside the container. Unraid's default 'users' group is 100." Type="Variable" Display="advanced" Required="false" Mask="false">100</Config>
+  <Config Name="MCP_ENABLED" Target="MCP_ENABLED" Default="true" Mode="" Description="Set to false to disable the MCP server process entirely (no listener on the MCP Server Port at all), if you don't intend to use AI-assistant access." Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
 </Container>
