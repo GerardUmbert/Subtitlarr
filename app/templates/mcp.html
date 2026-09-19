@@ -97,6 +97,12 @@
           exhausted quota, a dead credential).</li>
         <li><strong>Run control</strong> — start/cancel runs, run a filtered set or an explicit list of item ids.</li>
         <li><strong>Sync/jobs</strong> — trigger media/subtitle sync, push queued uploads, language check, stale audit.</li>
+        <li><strong>Engine cascade</strong> — list configured engine instances (API keys always masked) and reorder
+          the cascade. Adding/editing an instance's credentials stays a Translation Engine page action, not
+          available over MCP.</li>
+        <li><strong>Schedule/cutoff</strong> — read and update the age threshold ("cutoff" — how long an item must
+          have been missing a subtitle before a scheduled run touches it), daily translation limit, cron
+          expression, and pause between items.</li>
       </ul>
       <p class="field-hint">
         <strong>Safety rule built into every run-control tool's description:</strong> an item already <span class="mono">failed</span>

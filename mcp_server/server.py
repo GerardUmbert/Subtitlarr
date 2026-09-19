@@ -23,7 +23,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
 from app import state
-from app.api import dashboard, history, jobs, queue, run
+from app.api import dashboard, engine_instances, history, jobs, queue, run, schedule
 from mcp_server.safety import classify_failure
 
 
@@ -370,6 +370,98 @@ def build_mcp() -> FastMCP:
         involved."""
         return await jobs.run_stale_audit_now(
             conn=state.get_conn(), client=state.get_client(), runner=state.get_runner()
+        )
+
+    # -----------------------------------------------------------------
+    # Engine instances — list/reorder only, deliberately no credential
+    # writes (adding or editing an instance's API key stays a UI-only
+    # action; see plans/mcp-server.md)
+    # -----------------------------------------------------------------
+
+    @mcp.tool(annotations=READ_ONLY)
+    def subtitlarr_list_engine_instances() -> dict:
+        """Every configured translation engine instance, in cascade
+        order (the order a run tries them: primary first, then
+        fallbacks). Each entry's id, name, provider_type, enabled, and
+        rate-limit/cooldown state — never a real API key (masked as
+        e.g. "sk-...ab" plus a has_api_key flag, same as the Engines
+        page)."""
+        return engine_instances.list_engine_instances(conn=state.get_conn())
+
+    @mcp.tool(annotations=MUTATING)
+    def subtitlarr_reorder_engine_instances(ids: list[int]) -> dict:
+        """Sets the cascade order translation runs try engine instances
+        in — the first id becomes primary, the rest are tried in order
+        as fallbacks when an earlier one fails or is rate-limited. Pass
+        every instance id (from subtitlarr_list_engine_instances) for a
+        full, predictable reorder; any instance left out keeps its
+        existing relative order, appended after the ones you did list —
+        it is not removed or orphaned. Does not add, remove,
+        enable/disable, or change credentials on any instance, only
+        their relative order."""
+        req = engine_instances.ReorderRequest(ids=ids)
+        return engine_instances.reorder_engine_instances(req, conn=state.get_conn())
+
+    # -----------------------------------------------------------------
+    # Schedule / cutoff settings
+    # -----------------------------------------------------------------
+
+    @mcp.tool(annotations=READ_ONLY)
+    def subtitlarr_get_schedule_config() -> dict:
+        """Current scheduling settings: the translation cron expression,
+        age_threshold_days (how many days an item must have been
+        missing a subtitle before a scheduled/"run now" pass will
+        touch it — the "cutoff"), daily_translation_limit, and the
+        independent sync/backup/telemetry cron expressions."""
+        return schedule.get_schedule_config()
+
+    @mcp.tool(annotations=MUTATING)
+    @_catch_http_errors
+    def subtitlarr_set_schedule_config(
+        age_threshold_days: int | None = None,
+        daily_translation_limit: int | None = None,
+        cron_expression: str | None = None,
+        pause_between_items_seconds: int | None = None,
+    ) -> dict:
+        """Updates one or more scheduling settings — any field left as
+        None keeps its CURRENT value (this reads the full current
+        config first and only overrides the fields you pass, so calling
+        this with just age_threshold_days does not reset the cron
+        expression or anything else back to a default). age_threshold_days
+        is the "cutoff": lowering it (e.g. to 0) makes freshly-wanted
+        items eligible for translation immediately instead of waiting,
+        at the cost of giving Bazarr's own subtitle providers less time
+        to find a real subtitle first. daily_translation_limit caps how
+        many items a scheduled/"run now" pass will translate per day (0
+        = unlimited); it does not apply to a forced per-item re-run or
+        an explicit subtitlarr_run_by_ids call."""
+        current = schedule.get_schedule_config()
+        payload = schedule.ScheduleConfig(
+            cron_expression=cron_expression if cron_expression is not None else current["cron_expression"],
+            age_threshold_days=(
+                age_threshold_days if age_threshold_days is not None else current["age_threshold_days"]
+            ),
+            daily_translation_limit=(
+                daily_translation_limit
+                if daily_translation_limit is not None
+                else current["daily_translation_limit"]
+            ),
+            pause_between_items_seconds=(
+                pause_between_items_seconds
+                if pause_between_items_seconds is not None
+                else current["pause_between_items_seconds"]
+            ),
+            clear_rate_limits_before_scheduled_run=current["clear_rate_limits_before_scheduled_run"],
+            queue_uploads_enabled=current["queue_uploads_enabled"],
+            push_uploads_cron=current["push_uploads_cron"],
+            sync_media_cron=current["sync_media_cron"],
+            sync_subs_cron=current["sync_subs_cron"],
+            language_check_cron=current["language_check_cron"],
+            backup_cron=current["backup_cron"],
+            telemetry_enabled=current["telemetry_enabled"],
+        )
+        return schedule.set_schedule_config(
+            payload, scheduler=state.get_scheduler(), conn=state.get_conn(), runner=state.get_runner()
         )
 
     return mcp
