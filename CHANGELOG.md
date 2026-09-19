@@ -16,14 +16,24 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   that still hard-blocks retry), `credential_or_infra` (dead key/quota/
   5xx — retryable once a human confirms the underlying cause no longer
   applies), and `retryable`.
-- **`subtitlarr_submit_manual_translation` only accepted the translated
-  text inline**, with no way to point it at a file — for anything past
-  a few hundred cues, that forced the calling assistant to reproduce
-  the entire translation as literal tool-call output a second time
-  (after already generating it once), which reliably stalled on
-  anything movie-length. Added an alternate `translated_text_file`
-  parameter (an absolute path the server process can read) so the
-  content never has to be re-emitted as generated text at all.
+- **`subtitlarr_submit_manual_translation` had no way to submit a
+  translation without pasting the full text into the tool call** —
+  since the calling assistant already generated that text once, the
+  tool-call argument made it reproduce the entire thing as literal
+  output a second time, which reliably stalled on anything
+  movie-length (confirmed live: 1461 cues reproduced correctly via a
+  plain scripted HTTP POST to the existing REST endpoint, but
+  repeatedly failed to complete as an inline MCP tool-call argument).
+  A file-path parameter was tried first but doesn't actually work here
+  — this MCP server and the calling assistant don't share a
+  filesystem when Subtitlarr runs on a NAS, so a local path is
+  meaningless to the remote process. The real fix is procedural: the
+  tool's own description now tells the calling model to always use the
+  plain REST endpoint (`POST /api/queue/{item_id}/manual-translation`,
+  same host/port as the MCP connection minus `/mcp`) from a script
+  instead, for every submission regardless of size — a script reads
+  the file and builds the request body directly, so the content never
+  passes through the model's generated output more than once.
 - **The MCP server rejected every connection from a client not on
   localhost** (`421 Invalid Host header`) — its DNS-rebinding
   protection defaulted to allowing only `localhost`/`127.0.0.1`, which

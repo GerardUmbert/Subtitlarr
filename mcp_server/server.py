@@ -351,8 +351,7 @@ def build_mcp() -> FastMCP:
     @mcp.tool(annotations=MUTATING)
     @_catch_http_errors
     async def subtitlarr_submit_manual_translation(
-        item_id: int, translated_text: str | None = None,
-        translated_text_file: str | None = None, model_name: str = "claude-code",
+        item_id: int, translated_text: str, model_name: str = "claude-code"
     ) -> dict:
         """Submits a translation produced by the calling model itself
         (NOT a configured provider) — runs it through the same
@@ -360,39 +359,44 @@ def build_mcp() -> FastMCP:
         real provider's output goes through. No LLM call happens on the
         Subtitlarr side.
 
-        Give EITHER translated_text (inline string) OR
-        translated_text_file (an absolute path this server process can
-        read — e.g. a scratchpad file), not both. For anything past a
-        few hundred cues, prefer translated_text_file: the calling
-        model already has this content in its own generated output
-        (from writing translation chunks to that file) or a prior file
-        read, and re-typing/re-pasting the whole thing again as a
-        single inline string argument is exactly the failure mode this
-        parameter exists to avoid — that reproduction step, not the
-        actual translation work, is where large submissions have
-        previously stalled. Read the file server-side instead of
-        routing it back through the calling model's own output.
+        translated_text must be the FULL combined output for every cue
+        (all chunks concatenated), in the same "<index>\\n<content>"
+        format returned by subtitlarr_get_manual_translation_source —
+        one submission per item, not one call per chunk. engine_used is
+        recorded as "manual" so this stays honestly distinguishable
+        from a real API-driven translation everywhere in the UI.
 
-        Either way, the content must be the FULL combined output for
-        every cue (all chunks concatenated), in the same
-        "<index>\\n<content>" format returned by
-        subtitlarr_get_manual_translation_source — one submission per
-        item, not one call per chunk. engine_used is recorded as
-        "manual" so this stays honestly distinguishable from a real
-        API-driven translation everywhere in the UI."""
-        if (translated_text is None) == (translated_text_file is None):
-            raise HTTPException(
-                status_code=422,
-                detail="Give exactly one of translated_text or translated_text_file, not both/neither.",
-            )
-        if translated_text_file is not None:
-            try:
-                with open(translated_text_file, "r", encoding="utf-8") as f:
-                    translated_text = f.read()
-            except OSError as exc:
-                raise HTTPException(
-                    status_code=422, detail=f"Could not read translated_text_file: {exc}",
-                ) from exc
+        DO NOT CALL THIS TOOL. For every item, regardless of size, use
+        the plain REST endpoint instead, from a script (curl, Python
+        requests, PowerShell Invoke-RestMethod) — not by pasting the
+        translated text into a tool call. Calling this MCP tool forces
+        the calling model to reproduce the entire translation as
+        literal output a second time (it already generated the text
+        once; the tool-call argument makes it generate the same
+        content again as part of the call itself) — that reproduction
+        step, not the translation work, is what stalls, and it stalls
+        even on small items, just less visibly. A script reads the
+        file straight off disk and sends it as the request body; the
+        content never has to pass through the model's own output
+        twice. This tool exists for programmatic/non-model callers
+        that already hold the text as a value, not for an LLM calling
+        it directly.
+
+        Endpoint: POST /api/queue/{item_id}/manual-translation
+        Body: {"translated_text": "...", "model_name": "..."}  (same
+        shape as this tool's own arguments)
+        Base URL: this MCP connection's own host and port, with the
+        `/mcp` suffix replaced by nothing — e.g. if this session
+        connected to http://<host>:<port>/mcp, the API root is
+        http://<host>:<port>/api. No separate auth token needed; the
+        REST API has no auth of its own beyond whatever network access
+        already let this MCP connection through.
+        Example (write the translation to a local file first, then):
+          python -c "import json,requests; requests.post(
+            'http://<host>:<port>/api/queue/<item_id>/manual-translation',
+            json={'translated_text': open('translated.txt', encoding='utf-8').read(),
+                  'model_name': 'claude-code'})"
+        """
         req = queue.ManualTranslationRequest(translated_text=translated_text, model_name=model_name)
         return await queue.submit_manual_translation(
             item_id, req, conn=state.get_conn(), client=state.get_client(), runner=state.get_runner()
