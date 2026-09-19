@@ -15,15 +15,19 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   container's port mappings can't be added to an existing install
   automatically). Secured with a bearer token shown on a new "MCP
   Server" sidebar page (auto-generated on first use, regeneratable),
-  along with a ready-to-copy Claude Code connection command. 26 tools
-  cover: dashboard/queue/job/history status, manual translation (fetch
-  an item's source text and submit a translation done by the
-  connecting assistant itself), run control (start/cancel/filtered/by-
-  id/single-item), sync jobs (media/subtitle sync, push uploads,
-  language check, stale audit), engine-cascade listing and reordering
-  (never credential writes — adding/editing an instance's API key
-  stays UI-only), and the schedule/age-threshold cutoff. Includes a
-  hard safety rule enforced in the tool descriptions: a `failed` item
+  along with a ready-to-copy Claude Code connection command. 40 tools
+  cover: its own documentation (so the assistant answers "how do I
+  configure X" from the real current docs, not a guess), dashboard/
+  queue/job/history status (both live and durable event logs),
+  manual translation (fetch an item's source text and submit a
+  translation done by the connecting assistant itself), run control
+  (start/cancel/filtered/by-id/single-item/Bazarr refresh), sync jobs
+  (media/subtitle sync, push uploads, language check and its engine
+  setting, stale audit, closing stuck runs, clearing rate limits),
+  engine-cascade listing and reordering (never credential writes —
+  adding/editing an instance's API key stays UI-only), the
+  schedule/age-threshold cutoff, and language rules (read-only).
+  Includes a hard safety rule enforced in the tool descriptions: a `failed` item
   whose error is content-blocked, quota-exhausted, or a dead
   credential is never resubmitted to the same engine (risking that
   provider's abuse enforcement against the account) — those items are

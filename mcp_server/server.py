@@ -23,7 +23,8 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
 from app import state
-from app.api import dashboard, engine_instances, history, jobs, queue, run, schedule
+from app.api import dashboard, engine_instances, history, jobs, languages, queue, run, schedule
+from mcp_server.docs import DOC_LINKS
 from mcp_server.safety import classify_failure
 
 
@@ -86,6 +87,27 @@ def build_mcp() -> FastMCP:
     )
 
     # -----------------------------------------------------------------
+    # Documentation
+    # -----------------------------------------------------------------
+
+    @mcp.tool(annotations=READ_ONLY)
+    def subtitlarr_get_documentation_links() -> dict:
+        """Returns links to Subtitlarr's own real documentation on
+        GitHub (README, the full docs/settings reference site, install
+        guide, engine/API-key setup, changelog, AGENTS.md, and the
+        plans/ design-doc directory), each with a short description of
+        what it covers. Use this before answering ANY "how do I
+        configure/use/set up X" question about Subtitlarr itself, or
+        before recommending a setting/workflow — fetch whichever
+        linked page actually covers the topic and answer from that
+        current, real content rather than from general knowledge,
+        which may be stale or simply wrong about this specific app's
+        current settings and defaults. This tool itself does not fetch
+        anything — use your own web-fetch capability on the URL that's
+        actually relevant."""
+        return {"links": DOC_LINKS}
+
+    # -----------------------------------------------------------------
     # Status / situational awareness
     # -----------------------------------------------------------------
 
@@ -102,6 +124,21 @@ def build_mcp() -> FastMCP:
         before triggering any new run — Subtitlarr only allows one at a
         time."""
         return run.get_current(runner=state.get_runner())
+
+    @mcp.tool(annotations=MUTATING)
+    async def subtitlarr_poll_now() -> dict:
+        """Refreshes queue counts from Bazarr's wanted list WITHOUT
+        starting any translation — lets you see accurate current
+        numbers before deciding whether/what to run. Check
+        subtitlarr_get_poll_status afterward (it runs in the
+        background) for when it finishes."""
+        return await run.poll_now(runner=state.get_runner())
+
+    @mcp.tool(annotations=READ_ONLY)
+    def subtitlarr_get_poll_status() -> dict:
+        """Whether the background refresh started by subtitlarr_poll_now
+        is still running, and any error from the last one."""
+        return run.poll_status()
 
     @mcp.tool(annotations=READ_ONLY)
     def subtitlarr_get_jobs_status() -> dict:
@@ -160,10 +197,36 @@ def build_mcp() -> FastMCP:
         )
 
     @mcp.tool(annotations=READ_ONLY)
+    def subtitlarr_list_used_models() -> dict:
+        """Every distinct model_used value seen across all items — e.g.
+        to find everything translated by a specific (possibly weaker
+        fallback) model, for subtitlarr_list_queue's model filter."""
+        return queue.list_used_models(conn=state.get_conn())
+
+    @mcp.tool(annotations=READ_ONLY)
+    def subtitlarr_get_current_run_items() -> dict:
+        """Every item touched by the currently-active run, in any status
+        (queued/translating/done/failed) — the whole batch at once,
+        rather than only whatever subtitlarr_list_queue's status filter
+        happens to show. Returns active=false with no data if no run is
+        active."""
+        return queue.get_current_run_items(conn=state.get_conn(), runner=state.get_runner())
+
+    @mcp.tool(annotations=READ_ONLY)
     def subtitlarr_list_history(page: int = 1, page_size: int = 20) -> dict:
         """Past translation runs — start/finish time, items
         processed/failed."""
         return history.list_history(page=page, page_size=page_size, conn=state.get_conn())
+
+    @mcp.tool(annotations=READ_ONLY)
+    @_catch_http_errors
+    def subtitlarr_get_history_run_items(run_id: int) -> dict:
+        """Every item that was part of one specific past run (by the id
+        from subtitlarr_list_history) — for "why did run #42 fail on
+        these items" after the fact, as opposed to
+        subtitlarr_get_current_run_items which only covers a run that's
+        active right now."""
+        return history.get_history_run_items(run_id, conn=state.get_conn())
 
     @mcp.tool(annotations=READ_ONLY)
     def subtitlarr_get_run_events(since: int = 0) -> dict:
@@ -171,6 +234,33 @@ def build_mcp() -> FastMCP:
         fallbacks, per-item failures) — pass the highest id you've
         already seen to get only newer events."""
         return run.get_run_events(since=since)
+
+    @mcp.tool(annotations=READ_ONLY)
+    def subtitlarr_get_history_events(
+        after_id: int = 0,
+        limit: int = 200,
+        item_id: int | None = None,
+        event_type: str | None = None,
+        engine: str | None = None,
+    ) -> dict:
+        """The DURABLE per-item event log (survives restarts, unlike
+        subtitlarr_get_run_events' in-memory live feed) — every retry,
+        fallback, and failure ever recorded, optionally filtered to one
+        item, one event_type, or one engine. Use this to investigate a
+        specific item's full history, not just what's happening in a
+        currently-active run."""
+        return history.get_events(
+            after_id=after_id, limit=limit, item_id=item_id, event_type=event_type, engine=engine,
+        )
+
+    @mcp.tool(annotations=READ_ONLY)
+    def subtitlarr_get_job_events(limit: int = 100) -> dict:
+        """Start/finish log of every scheduled job — Bazarr sync, source
+        prefetch, upload push, language check, backup, stale audit, and
+        scheduled translation runs — with status (running/done/failed)
+        and result/error. Broader history than
+        subtitlarr_get_jobs_status's live snapshot."""
+        return history.get_job_events(limit=limit, conn=state.get_conn())
 
     @mcp.tool(annotations=READ_ONLY)
     def subtitlarr_list_language_mismatches(limit: int = 100) -> dict:
@@ -354,6 +444,23 @@ def build_mcp() -> FastMCP:
         translated_pending_upload to Bazarr in one pass."""
         return await jobs.push_uploads(conn=state.get_conn(), client=state.get_client())
 
+    @mcp.tool(annotations=READ_ONLY)
+    def subtitlarr_get_language_check_settings() -> dict:
+        """Which engine instance (by id) the language check job uses,
+        and how many completed items are still not yet checked. None
+        means the check is disabled — it never runs until an instance
+        is picked."""
+        return jobs.get_language_check_settings(conn=state.get_conn())
+
+    @mcp.tool(annotations=MUTATING)
+    async def subtitlarr_set_language_check_instance(instance_id: int | None) -> dict:
+        """Sets which engine instance the language check job uses — get
+        the id from subtitlarr_list_engine_instances. Pass None to
+        disable the check entirely (it will never run until an instance
+        is set again)."""
+        req = jobs.LanguageCheckSettings(instance_id=instance_id)
+        return await jobs.set_language_check_settings(req, conn=state.get_conn())
+
     @mcp.tool(annotations=MUTATING)
     async def subtitlarr_run_language_check() -> dict:
         """Audits completed translations' actual output language
@@ -371,6 +478,27 @@ def build_mcp() -> FastMCP:
         return await jobs.run_stale_audit_now(
             conn=state.get_conn(), client=state.get_client(), runner=state.get_runner()
         )
+
+    @mcp.tool(annotations=MUTATING)
+    @_catch_http_errors
+    async def subtitlarr_close_stale_runs() -> dict:
+        """Closes out run_history rows left stuck "in progress" by a
+        process that was killed mid-batch — marks them finished with
+        their item counts backfilled, does not delete or change any
+        item or its history. Also runs automatically on every server
+        startup; this triggers it on demand. Blocked while a
+        translation run is currently active."""
+        return await jobs.close_stale_runs(conn=state.get_conn(), runner=state.get_runner())
+
+    @mcp.tool(annotations=MUTATING)
+    async def subtitlarr_clear_engine_rate_limits() -> dict:
+        """Immediately un-flags every engine instance currently in a
+        rate-limit/auth cooldown, all at once. Use after confirming
+        (e.g. on the provider's own usage dashboard) an engine
+        genuinely has headroom again, rather than waiting out the full
+        cooldown — a still-exhausted engine just re-trips its cooldown
+        after a few more failures, so this is safe to try speculatively."""
+        return await jobs.clear_engine_rate_limits(conn=state.get_conn())
 
     # -----------------------------------------------------------------
     # Engine instances — list/reorder only, deliberately no credential
@@ -463,6 +591,24 @@ def build_mcp() -> FastMCP:
         return schedule.set_schedule_config(
             payload, scheduler=state.get_scheduler(), conn=state.get_conn(), runner=state.get_runner()
         )
+
+    # -----------------------------------------------------------------
+    # Language rules — read-only. No target-language allowlist/source-
+    # priority WRITE tool: those change what a scheduled run considers
+    # translatable at all, closer to a deliberate configuration decision
+    # than a routine action worth automating over MCP for now.
+    # -----------------------------------------------------------------
+
+    @mcp.tool(annotations=READ_ONLY)
+    def subtitlarr_get_language_config() -> dict:
+        """Current language rules: source_priority (which existing
+        subtitle language to translate FROM when more than one is
+        available), catalan_vegeta_insults (a Catalan-target-only
+        toggle), language_variants (e.g. regional Spanish/Portuguese
+        preferences), and target_language_allowlist (empty = no
+        restriction; non-empty limits which of Bazarr's wanted target
+        languages Subtitlarr will actually translate into)."""
+        return languages.get_language_config(conn=state.get_conn())
 
     return mcp
 

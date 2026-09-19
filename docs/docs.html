@@ -246,12 +246,14 @@
     <h3>What it can do</h3>
     <p>Every tool calls the exact same code path the web UI itself uses — nothing is possible over MCP that isn't already possible by clicking around the app.</p>
     <ul>
-      <li><strong>Status</strong> — dashboard stats, current run progress, combined job/sync status, queue listing/filtering, item detail, run history, live run events, language mismatches, aggregate stats.</li>
+      <li><strong>Documentation</strong> — links to Subtitlarr's own README, full docs site, install guide, and changelog, so the assistant answers "how do I configure X" from the real current docs instead of guessing.</li>
+      <li><strong>Status</strong> — dashboard stats, current run progress and items, combined job/sync status, queue listing/filtering, item detail, run history (both the live in-run event feed and the durable per-item event log), job event log, language mismatches, used models, aggregate stats.</li>
       <li><strong>Manual translation</strong> — fetch an item's source dialogue and submit a translation done by the connecting assistant itself, for items a configured engine can't handle (content-filter refusals, exhausted quota, a dead credential) — see <a href="#pass-strategy">the manual-translation workflow</a> for the underlying mechanism.</li>
-      <li><strong>Run control</strong> — start/cancel a run, run a filtered set of items, run an explicit list of item ids, re-run a single item.</li>
-      <li><strong>Sync/jobs</strong> — trigger media/subtitle sync, push queued uploads, run the language check, run the stale audit.</li>
+      <li><strong>Run control</strong> — start/cancel a run, run a filtered set of items, run an explicit list of item ids, re-run a single item, refresh from Bazarr without translating.</li>
+      <li><strong>Sync/jobs</strong> — trigger media/subtitle sync, push queued uploads, run the language check (and set which engine it uses), run the stale audit, close stuck runs, clear engine rate limits.</li>
       <li><strong>Engine cascade</strong> — list configured engine instances (API keys always masked) and reorder the cascade. Adding or editing an instance's credentials stays a Translation Engine page action, not available over MCP.</li>
       <li><strong>Schedule/cutoff</strong> — read and update the age threshold, daily translation limit, cron expression, and pause between items.</li>
+      <li><strong>Language rules</strong> — read source-language priority, target-language allowlist, and regional variant preferences (read-only).</li>
     </ul>
 
     <h3>The non-retry safety rule</h3>

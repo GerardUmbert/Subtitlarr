@@ -91,18 +91,26 @@
         isn't already possible by clicking around this UI. Tools are grouped as:
       </p>
       <ul style="margin:8px 0 8px 20px; padding:0; color:var(--muted);">
-        <li><strong>Status</strong> — queue, current run, job/sync status, history, language mismatches.</li>
+        <li><strong>Documentation</strong> — links to Subtitlarr's own README, full docs site, install guide, and
+          changelog, so the assistant can answer "how do I configure X" from the real current docs instead of
+          guessing.</li>
+        <li><strong>Status</strong> — dashboard/queue/job status, current-run progress and items, run history (both
+          live and durable event logs), language mismatches, used models.</li>
         <li><strong>Manual translation</strong> — fetch an item's source text and submit a translation done by the
           connecting assistant itself, for items a configured engine can't handle (content-filter refusals,
           exhausted quota, a dead credential).</li>
-        <li><strong>Run control</strong> — start/cancel runs, run a filtered set or an explicit list of item ids.</li>
-        <li><strong>Sync/jobs</strong> — trigger media/subtitle sync, push queued uploads, language check, stale audit.</li>
+        <li><strong>Run control</strong> — start/cancel runs, run a filtered set or an explicit list of item ids,
+          refresh from Bazarr without translating.</li>
+        <li><strong>Sync/jobs</strong> — trigger media/subtitle sync, push queued uploads, language check (and its
+          engine setting), stale audit, close stuck runs, clear engine rate limits.</li>
         <li><strong>Engine cascade</strong> — list configured engine instances (API keys always masked) and reorder
           the cascade. Adding/editing an instance's credentials stays a Translation Engine page action, not
           available over MCP.</li>
         <li><strong>Schedule/cutoff</strong> — read and update the age threshold ("cutoff" — how long an item must
           have been missing a subtitle before a scheduled run touches it), daily translation limit, cron
           expression, and pause between items.</li>
+        <li><strong>Language rules</strong> — read source-language priority, target-language allowlist, and regional
+          variant preferences (read-only).</li>
       </ul>
       <p class="field-hint">
         <strong>Safety rule built into every run-control tool's description:</strong> an item already <span class="mono">failed</span>

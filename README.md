@@ -265,10 +265,12 @@ expose). Open the **MCP Server** page from the sidebar for your instance's
 connection URL, a bearer token, and a ready-to-copy `claude mcp add`
 command.
 
-Tools cover queue/job/history status, manual translation (for items a
-configured engine can't handle — content-filter refusals, exhausted quota,
-a dead credential), run control, sync jobs, engine-cascade reordering
-(never credential writes), and the schedule/age-threshold cutoff. See the
+Tools cover its own documentation (so the assistant answers "how do I
+configure X" from the real current docs), queue/job/history status, manual
+translation (for items a configured engine can't handle — content-filter
+refusals, exhausted quota, a dead credential), run control, sync jobs,
+engine-cascade reordering (never credential writes), the schedule/age-
+threshold cutoff, and language rules (read-only). See the
 [docs site](https://gerardumbert.github.io/Subtitlarr/docs.html#mcp-server)
 for the full tool list and the non-retry safety rule that keeps a
 content-blocked item from being resubmitted to the same engine.
