@@ -291,21 +291,34 @@ def build_mcp() -> FastMCP:
 
     @mcp.tool(annotations=READ_ONLY)
     def subtitlarr_classify_failure(error_message: str) -> dict:
-        """Classifies a failed item's error_message as "retryable" (a
-        transient provider-side hiccup — rate limit, timeout, 5xx — safe
-        to resubmit via subtitlarr_run_by_ids/subtitlarr_run_item),
-        "non_retryable" (content-blocked, quota-exhausted, or a
-        dead/revoked credential — resubmitting to the SAME engine risks
-        that provider's abuse enforcement against the account, up to
-        suspension; must instead go through
-        subtitlarr_get_manual_translation_source /
-        subtitlarr_submit_manual_translation), or "unknown" (couldn't
-        tell — MUST be treated the same as non_retryable: don't guess
-        and resubmit)."""
+        """Classifies a failed item's error_message as one of:
+
+        - "retryable": a transient provider-side or parsing hiccup —
+          rate limit, timeout, 5xx, unexpected response shape — safe to
+          resubmit via subtitlarr_run_by_ids/subtitlarr_run_item as-is.
+        - "content_blocked": the provider made a judgment about the
+          CONTENT itself (safety filter, prohibited content). Never
+          resubmit this to the same engine, no matter what else has
+          changed — go through subtitlarr_get_manual_translation_source
+          / subtitlarr_submit_manual_translation instead.
+        - "credential_or_infra": a dead/revoked credential or exhausted
+          quota — NOT a content judgment, so it does not carry the same
+          "never resubmit" rule. The same credential will fail the same
+          way again, but if the calling human has confirmed the
+          underlying cause no longer applies (e.g. the API key was
+          rotated since this failure), it's safe to resubmit through
+          the normal cascade. Do not assume this on your own — ask the
+          user to confirm the credential/quota issue is actually
+          resolved before retrying.
+        - "unknown": couldn't tell from the text — MUST be treated the
+          same as content_blocked (refuse by default) unless a human
+          has separately confirmed it's safe."""
         verdict = classify_failure(error_message)
         return {
             "verdict": verdict,
             "safe_to_retry_same_engine": verdict == "retryable",
+            "requires_manual_translation": verdict in ("content_blocked", "unknown"),
+            "requires_human_confirmation_to_retry": verdict == "credential_or_infra",
         }
 
     # -----------------------------------------------------------------
@@ -338,7 +351,8 @@ def build_mcp() -> FastMCP:
     @mcp.tool(annotations=MUTATING)
     @_catch_http_errors
     async def subtitlarr_submit_manual_translation(
-        item_id: int, translated_text: str, model_name: str = "claude-code"
+        item_id: int, translated_text: str | None = None,
+        translated_text_file: str | None = None, model_name: str = "claude-code",
     ) -> dict:
         """Submits a translation produced by the calling model itself
         (NOT a configured provider) — runs it through the same
@@ -346,12 +360,39 @@ def build_mcp() -> FastMCP:
         real provider's output goes through. No LLM call happens on the
         Subtitlarr side.
 
-        translated_text must be the FULL combined output for every cue
-        (all chunks concatenated), in the same "<index>\\n<content>"
-        format returned by subtitlarr_get_manual_translation_source —
-        one submission per item, not one call per chunk. engine_used is
-        recorded as "manual" so this stays honestly distinguishable
-        from a real API-driven translation everywhere in the UI."""
+        Give EITHER translated_text (inline string) OR
+        translated_text_file (an absolute path this server process can
+        read — e.g. a scratchpad file), not both. For anything past a
+        few hundred cues, prefer translated_text_file: the calling
+        model already has this content in its own generated output
+        (from writing translation chunks to that file) or a prior file
+        read, and re-typing/re-pasting the whole thing again as a
+        single inline string argument is exactly the failure mode this
+        parameter exists to avoid — that reproduction step, not the
+        actual translation work, is where large submissions have
+        previously stalled. Read the file server-side instead of
+        routing it back through the calling model's own output.
+
+        Either way, the content must be the FULL combined output for
+        every cue (all chunks concatenated), in the same
+        "<index>\\n<content>" format returned by
+        subtitlarr_get_manual_translation_source — one submission per
+        item, not one call per chunk. engine_used is recorded as
+        "manual" so this stays honestly distinguishable from a real
+        API-driven translation everywhere in the UI."""
+        if (translated_text is None) == (translated_text_file is None):
+            raise HTTPException(
+                status_code=422,
+                detail="Give exactly one of translated_text or translated_text_file, not both/neither.",
+            )
+        if translated_text_file is not None:
+            try:
+                with open(translated_text_file, "r", encoding="utf-8") as f:
+                    translated_text = f.read()
+            except OSError as exc:
+                raise HTTPException(
+                    status_code=422, detail=f"Could not read translated_text_file: {exc}",
+                ) from exc
         req = queue.ManualTranslationRequest(translated_text=translated_text, model_name=model_name)
         return await queue.submit_manual_translation(
             item_id, req, conn=state.get_conn(), client=state.get_client(), runner=state.get_runner()
@@ -384,10 +425,12 @@ def build_mcp() -> FastMCP:
         HARD RULE: if status='failed' is part of this filter, first
         check each matching item's error_message with
         subtitlarr_classify_failure. Do not use this to blanket-retry a
-        filtered set of failed items — a non_retryable item resubmitted
-        here goes right back to the same engine that already rejected
-        it. Prefer subtitlarr_run_by_ids with an explicitly vetted id
-        list when any of the matches might be non-retryable."""
+        filtered set of failed items — a content_blocked item
+        resubmitted here goes right back to the same engine that
+        already rejected it on content grounds. Prefer
+        subtitlarr_run_by_ids with an explicitly vetted id list when
+        any of the matches might be content_blocked or
+        credential_or_infra."""
         return await queue.run_filtered(
             status=status, item_type=item_type, search=search, model=model,
             runner=state.get_runner(),
@@ -399,15 +442,19 @@ def build_mcp() -> FastMCP:
         normal configured engine cascade.
 
         HARD RULE: never include an id whose current status is 'failed'
-        with a non_retryable error_message (per
-        subtitlarr_classify_failure) — resubmitting content a provider
-        already content-blocked, or hitting an already-exhausted/dead
-        credential again, risks that provider's abuse enforcement
+        with a content_blocked (or unknown) error_message per
+        subtitlarr_classify_failure — resubmitting content a provider
+        already content-blocked risks that provider's abuse enforcement
         against the account (up to suspension/termination), not just
-        another failed item. Only rate-limited/transient failures are
-        safe to include here. Non-retryable items belong in
+        another failed item. Those belong in
         subtitlarr_get_manual_translation_source /
-        subtitlarr_submit_manual_translation instead."""
+        subtitlarr_submit_manual_translation instead.
+
+        A credential_or_infra verdict (dead key, quota, 5xx) is
+        different: it's safe to include here ONLY after the user has
+        explicitly confirmed the underlying cause no longer applies
+        (e.g. "the API key was rotated"). Don't infer that on your own
+        from the error text alone — ask first, then retry."""
         req = queue.RunByIdsRequest(item_ids=item_ids)
         return await queue.run_by_ids(req, runner=state.get_runner())
 
@@ -416,9 +463,11 @@ def build_mcp() -> FastMCP:
     async def subtitlarr_run_item(item_id: int, force: bool = False) -> dict:
         """Runs a single item. Same hard rule as subtitlarr_run_by_ids:
         don't call this on an item whose last failure was classified
-        non_retryable — use manual translation for those instead.
-        force=true bypasses the normal "already done" skip, not the
-        retry-safety rule above."""
+        content_blocked (or unknown) — use manual translation for those
+        instead. A credential_or_infra failure needs explicit user
+        confirmation that the underlying cause is fixed before
+        retrying. force=true bypasses the normal "already done" skip,
+        not the retry-safety rule above."""
         return await queue.run_item(
             item_id, force=force, conn=state.get_conn(), runner=state.get_runner(),
             client=state.get_client(),

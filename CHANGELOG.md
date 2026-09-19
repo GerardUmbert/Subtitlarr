@@ -6,6 +6,24 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 ## [dev]
 
 ### Fixed
+- **`subtitlarr_classify_failure` lumped dead credentials and quota
+  errors in with genuine content-safety blocks**, both labeled
+  `non_retryable` — so a rotated API key still couldn't be retried
+  without overriding the tool's own guardrail, even though a dead-key
+  401 carries none of the "never resubmit, risks provider abuse
+  enforcement" reasoning that applies to an actual content-filter
+  refusal. Split into three verdicts: `content_blocked` (the only one
+  that still hard-blocks retry), `credential_or_infra` (dead key/quota/
+  5xx — retryable once a human confirms the underlying cause no longer
+  applies), and `retryable`.
+- **`subtitlarr_submit_manual_translation` only accepted the translated
+  text inline**, with no way to point it at a file — for anything past
+  a few hundred cues, that forced the calling assistant to reproduce
+  the entire translation as literal tool-call output a second time
+  (after already generating it once), which reliably stalled on
+  anything movie-length. Added an alternate `translated_text_file`
+  parameter (an absolute path the server process can read) so the
+  content never has to be re-emitted as generated text at all.
 - **The MCP server rejected every connection from a client not on
   localhost** (`421 Invalid Host header`) — its DNS-rebinding
   protection defaulted to allowing only `localhost`/`127.0.0.1`, which
