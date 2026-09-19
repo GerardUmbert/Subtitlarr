@@ -5,6 +5,17 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [dev]
 
+### Fixed
+- **The MCP server rejected every connection from a client not on
+  localhost** (`421 Invalid Host header`) — its DNS-rebinding
+  protection defaulted to allowing only `localhost`/`127.0.0.1`, which
+  broke the normal case of connecting from another machine on the LAN
+  to an instance running on a NAS. That protection guards against a
+  browser tab reaching a local service via DNS rebinding; it's
+  redundant here since every request already needs the bearer token,
+  and there's no fixed IP to allowlist since it varies per install.
+  Disabled rather than reworked into a guess.
+
 ### Changed
 - **The MCP Server page's connection command now uses `claude mcp add
   --scope user`** instead of the default `local` scope, so it's

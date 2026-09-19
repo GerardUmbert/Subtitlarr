@@ -20,6 +20,7 @@ import inspect
 
 from fastapi import HTTPException
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
 
 from app import state
@@ -66,6 +67,14 @@ def build_mcp() -> FastMCP:
     across lifespans, see module docstring."""
     mcp = FastMCP(
         name="subtitlarr",
+        # The SDK's default Host-header allowlist (localhost/127.0.0.1 only)
+        # guards against DNS-rebinding attacks from a browser tab — not
+        # relevant here, since every request already needs the bearer token
+        # BearerAuthMiddleware checks before this ever runs (see
+        # mcp_server/auth.py), and this server is reached over the LAN by
+        # whatever IP each install happens to have, which can't be
+        # allowlisted in advance. Disable it rather than guess hosts.
+        transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
         instructions=(
             "Tools for Subtitlarr, a Bazarr-connected subtitle translation "
             "queue manager. Use the status/list tools to understand current "
