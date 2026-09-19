@@ -116,6 +116,7 @@
     <a href="#queue-uploads">Queue uploads explained</a>
 
     <div class="docs-sidebar-group">Reference</div>
+    <a href="#mcp-server">AI assistant access (MCP)</a>
     <a href="#troubleshooting">Troubleshooting</a>
     <a href="#limitations">Known limitations</a>
   </aside>
@@ -234,6 +235,28 @@
     </div>
 
     <!-- ── TROUBLESHOOTING ── -->
+    <h2 id="mcp-server" class="reveal-scroll">AI assistant access (MCP)</h2>
+    <p>Subtitlarr exposes an <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">MCP</a> server so Claude Code, Claude Desktop, or another MCP-aware assistant can check queue/job status and drive translations directly, instead of you clicking through the UI. It's mounted on the app itself at <code>/mcp</code> — same host and port as the web UI, nothing extra to expose or map.</p>
+
+    <h3>Connecting</h3>
+    <p>Open the <strong>MCP Server</strong> page from the sidebar — it shows your server URL, a bearer token (auto-generated on first visit, regeneratable), and a ready-to-copy connection command for Claude Code:</p>
+    <pre><code>claude mcp add --transport http subtitlarr http://&lt;your-instance&gt;/mcp --header "Authorization: Bearer &lt;token&gt;"</code></pre>
+    <p>Anyone with the token can trigger translation runs and jobs on that instance — treat it like the Bazarr API key. Only reachable behind whatever already protects access to the instance itself (VPN, reverse proxy, LAN-only); never expose it directly to the internet.</p>
+
+    <h3>What it can do</h3>
+    <p>Every tool calls the exact same code path the web UI itself uses — nothing is possible over MCP that isn't already possible by clicking around the app.</p>
+    <ul>
+      <li><strong>Status</strong> — dashboard stats, current run progress, combined job/sync status, queue listing/filtering, item detail, run history, live run events, language mismatches, aggregate stats.</li>
+      <li><strong>Manual translation</strong> — fetch an item's source dialogue and submit a translation done by the connecting assistant itself, for items a configured engine can't handle (content-filter refusals, exhausted quota, a dead credential) — see <a href="#pass-strategy">the manual-translation workflow</a> for the underlying mechanism.</li>
+      <li><strong>Run control</strong> — start/cancel a run, run a filtered set of items, run an explicit list of item ids, re-run a single item.</li>
+      <li><strong>Sync/jobs</strong> — trigger media/subtitle sync, push queued uploads, run the language check, run the stale audit.</li>
+      <li><strong>Engine cascade</strong> — list configured engine instances (API keys always masked) and reorder the cascade. Adding or editing an instance's credentials stays a Translation Engine page action, not available over MCP.</li>
+      <li><strong>Schedule/cutoff</strong> — read and update the age threshold, daily translation limit, cron expression, and pause between items.</li>
+    </ul>
+
+    <h3>The non-retry safety rule</h3>
+    <p>An item already <code>failed</code> with a content-blocked, quota-exhausted, or dead-credential error should never be resubmitted to the same engine — repeating that risks the provider's own abuse enforcement against the account (up to suspension), not just another failed item. This rule is written directly into the run-control tools' own descriptions: the assistant is expected to classify a failure first and route non-retryable ones to manual translation instead of retrying them. It's guidance the assistant follows, not a hard block enforced by the server today.</p>
+
     <h2 id="troubleshooting" class="reveal-scroll">Troubleshooting</h2>
 
     <h3>Translations come back mostly untranslated, or with low cue recovery</h3>

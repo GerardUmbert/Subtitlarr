@@ -255,6 +255,24 @@ Useful before adding a new engine instance to your cascade, after changing a
 model or temperature, or when deciding whether a paid/cloud engine is
 actually worth it over a local one for your content.
 
+## AI assistant access (MCP)
+
+Subtitlarr exposes an [MCP](https://modelcontextprotocol.io) server so
+Claude Code, Claude Desktop, or another MCP-aware assistant can check
+queue/job status and drive translations directly — mounted on the app
+itself at `/mcp` (same host and port as the web UI, nothing extra to
+expose). Open the **MCP Server** page from the sidebar for your instance's
+connection URL, a bearer token, and a ready-to-copy `claude mcp add`
+command.
+
+Tools cover queue/job/history status, manual translation (for items a
+configured engine can't handle — content-filter refusals, exhausted quota,
+a dead credential), run control, sync jobs, engine-cascade reordering
+(never credential writes), and the schedule/age-threshold cutoff. See the
+[docs site](https://gerardumbert.github.io/Subtitlarr/docs.html#mcp-server)
+for the full tool list and the non-retry safety rule that keeps a
+content-blocked item from being resubmitted to the same engine.
+
 ## Requirements
 
 - A running Bazarr instance and its API key (Bazarr → Settings → General).
