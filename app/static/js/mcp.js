@@ -51,7 +51,7 @@ createApp({
       return `${window.location.origin}${this.mcpPath}`;
     },
     claudeCodeCommand() {
-      return `claude mcp add --transport http subtitlarr ${this.serverUrl} --header "Authorization: Bearer ${this.mcpToken}"`;
+      return `claude mcp add --scope user --transport http subtitlarr ${this.serverUrl} --header "Authorization: Bearer ${this.mcpToken}"`;
     },
     mcpJsonSnippet() {
       const config = {

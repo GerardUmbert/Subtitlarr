@@ -5,6 +5,16 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [dev]
 
+### Changed
+- **The MCP Server page's connection command now uses `claude mcp add
+  --scope user`** instead of the default `local` scope, so it's
+  registered once for every project directory instead of silently only
+  showing up in whichever single folder the command happened to be run
+  from. The page also now clearly separates the Claude Code quick-add
+  command from a plain `mcpServers` JSON block for any other MCP client
+  (Claude Desktop, Cursor, etc.), instead of implying MCP support while
+  only actually showing Claude Code-specific instructions.
+
 ### Added
 - **An MCP server** lets Claude Code or another MCP-aware assistant
   connect (e.g. from a desktop, to an instance running on a NAS) to

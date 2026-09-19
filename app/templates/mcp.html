@@ -63,18 +63,35 @@
     <div class="panel-title">Connect from Claude Code</div>
     <div class="panel-title-sub">Add this as a project or user-scoped MCP server</div>
 
-      <p class="field-hint">Run this once from a terminal (adjust the URL/token if different from above):</p>
+      <p class="field-hint">
+        Run this once from a terminal (adjust the URL/token if different from above). Uses
+        <span class="mono">--scope user</span> so it's available from every project directory, not just whichever
+        one you happen to run it from:
+      </p>
       <div class="field-row">
         <input type="text" class="mono" readonly :value="claudeCodeCommand" style="flex:1;">
         <button class="btn" @click="copyValue(claudeCodeCommand, 'cmd')">{% raw %}{{ cmdCopied ? 'Copied!' : 'Copy' }}{% endraw %}</button>
       </div>
       <p class="field-hint">
         Or add it by hand to <span class="mono">.mcp.json</span> (project-scoped) or your global Claude Code config
-        (user-scoped):
+        (user-scoped) — this is the same JSON shown below for other clients.
+      </p>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px;">
+    <div class="panel-body">
+    <div class="panel-title">Connect from any other MCP client</div>
+    <div class="panel-title-sub">Claude Desktop, Cursor, or anything else that speaks MCP over HTTP</div>
+
+      <p class="field-hint">
+        This is a standard streamable-HTTP MCP server — paste this JSON into whichever config file your client
+        reads (e.g. Claude Desktop's <span class="mono">claude_desktop_config.json</span>), adjusting the key name
+        your client expects if it isn't <span class="mono">mcpServers</span>:
       </p>
       <pre class="mono" style="background:var(--panel-2); padding:12px; border-radius:6px; overflow-x:auto; white-space:pre;">{% raw %}{{ mcpJsonSnippet }}{% endraw %}</pre>
       <p class="field-hint">
-        Once connected, ask Claude Code things like "what's in the Subtitlarr queue right now" or
+        Once connected, ask it things like "what's in the Subtitlarr queue right now" or
         "translate everything that failed on Gemini for The Wire" — it will use these tools to check status,
         classify failures, and (for content-blocked/quota/dead-credential failures specifically) translate the
         item itself rather than resubmitting it to the same engine.

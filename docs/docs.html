@@ -240,7 +240,9 @@
 
     <h3>Connecting</h3>
     <p>Open the <strong>MCP Server</strong> page from the sidebar — it shows your server URL, a bearer token (auto-generated on first visit, regeneratable), and a ready-to-copy connection command for Claude Code:</p>
-    <pre><code>claude mcp add --transport http subtitlarr http://&lt;your-instance&gt;/mcp --header "Authorization: Bearer &lt;token&gt;"</code></pre>
+    <pre><code>claude mcp add --scope user --transport http subtitlarr http://&lt;your-instance&gt;/mcp --header "Authorization: Bearer &lt;token&gt;"</code></pre>
+    <p><code>--scope user</code> registers it once for every project directory — with the default <code>local</code> scope instead, the server only shows up in whichever single project folder you happened to run the command from.</p>
+    <p>For Claude Desktop, Cursor, or any other MCP-aware client, the same page also shows a plain <code>mcpServers</code> JSON block (streamable HTTP transport) to paste into that client's own config file.</p>
     <p>Anyone with the token can trigger translation runs and jobs on that instance — treat it like the Bazarr API key. Only reachable behind whatever already protects access to the instance itself (VPN, reverse proxy, LAN-only); never expose it directly to the internet.</p>
 
     <h3>What it can do</h3>
