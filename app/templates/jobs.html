@@ -225,44 +225,6 @@
     </div>
   </div>
 
-  <div class="panel" style="margin-top:16px;" id="mcp-server">
-    <div class="panel-body">
-    <div class="panel-title">MCP server (AI agent access)</div>
-    <div class="panel-title-sub">Lets Claude Code or another MCP-aware assistant connect remotely to monitor progress, translate items itself when a configured engine fails, and trigger runs/jobs</div>
-
-      <p class="field-hint">
-        Runs as a separate process alongside this app, listening on its own port ({% raw %}{{ mcpPort }}{% endraw %}).
-        Point your MCP client (e.g. Claude Code's <span class="mono">.mcp.json</span>) at this
-        instance's address on that port, using the token below as a Bearer token.
-      </p>
-      <div class="field-row">
-        <div class="field" style="max-width:520px;">
-          <label>Auth token</label>
-          <div class="field-row">
-            <input type="text" class="mono" readonly :value="mcpTokenVisible ? mcpToken : '••••••••••••••••••••••••••••••••'" style="flex:1;">
-            <button class="btn" @click="mcpTokenVisible = !mcpTokenVisible">{% raw %}{{ mcpTokenVisible ? 'Hide' : 'Show' }}{% endraw %}</button>
-            <button class="btn" @click="copyMcpToken">{% raw %}{{ mcpTokenCopied ? 'Copied!' : 'Copy' }}{% endraw %}</button>
-          </div>
-        </div>
-      </div>
-      <p class="field-hint">
-        Anyone with this token can trigger translation runs and jobs on this instance — treat it like
-        the Bazarr API key. Only reachable behind whatever already protects access to this instance
-        (VPN/reverse proxy) — never expose this port directly to the internet.
-      </p>
-      <div class="field-row" v-if="!confirmingMcpRegenerate">
-        <button class="btn" @click="confirmingMcpRegenerate = true">Regenerate token</button>
-      </div>
-      <div class="field-row" v-else>
-        <span class="field-hint" style="margin:0;">Regenerate? Any already-connected MCP client will need the new token.</span>
-        <button class="btn" style="border-color:var(--bad); color:var(--bad);" @click="regenerateMcpToken" :disabled="regeneratingMcpToken">
-          {% raw %}{{ regeneratingMcpToken ? 'Regenerating…' : 'Yes, regenerate' }}{% endraw %}
-        </button>
-        <button class="btn" @click="confirmingMcpRegenerate = false" :disabled="regeneratingMcpToken">Cancel</button>
-      </div>
-    </div>
-  </div>
-
   <div class="panel" style="margin-top:16px;">
     <div class="panel-body">
     <div class="panel-title">Reset local data</div>

@@ -37,6 +37,12 @@ createApp({
       restoringFilename: null,
       restoreResult: null,
       restoreError: "",
+      mcpToken: "",
+      mcpPort: 7778,
+      mcpTokenVisible: false,
+      mcpTokenCopied: false,
+      confirmingMcpRegenerate: false,
+      regeneratingMcpToken: false,
     };
   },
   methods: {
@@ -61,6 +67,13 @@ createApp({
         this.backupActive = !!(status.backup && status.backup.active);
       } catch (_) {
         // endpoint not reachable yet — ignore
+      }
+      try {
+        const mcpStatus = await Api.getMcpStatus();
+        this.mcpToken = mcpStatus.token;
+        this.mcpPort = mcpStatus.port;
+      } catch (_) {
+        // keep last known state on transient failure
       }
     },
     async loadNextRun() {
@@ -188,6 +201,29 @@ createApp({
         this.restoreError = err.message;
       } finally {
         this.restoringFilename = null;
+      }
+    },
+    async copyMcpToken() {
+      try {
+        await navigator.clipboard.writeText(this.mcpToken);
+        this.mcpTokenCopied = true;
+        setTimeout(() => (this.mcpTokenCopied = false), 2000);
+      } catch (_) {
+        // clipboard API unavailable (non-HTTPS context, permissions) — the
+        // token is already shown/copyable by hand via the Show toggle
+      }
+    },
+    async regenerateMcpToken() {
+      this.regeneratingMcpToken = true;
+      this.error = "";
+      try {
+        const result = await Api.regenerateMcpToken();
+        this.mcpToken = result.token;
+        this.confirmingMcpRegenerate = false;
+      } catch (err) {
+        this.error = err.message;
+      } finally {
+        this.regeneratingMcpToken = false;
       }
     },
   },
