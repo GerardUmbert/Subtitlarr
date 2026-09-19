@@ -14,17 +14,31 @@ RUN apt-get update \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# The MCP server (mcp_server/) is a deliberately separate process (see
+# plans/mcp-server.md) — it needs its own venv, not just its own
+# directory, because the `mcp` SDK pulls in a starlette version that
+# conflicts with the main app's pinned FastAPI/starlette (confirmed
+# during development: installing `mcp` into the main environment
+# upgraded starlette and broke FastAPI's version constraint). Two
+# isolated venvs in one image is the only way to run both without one
+# breaking the other's dependencies.
+COPY mcp_server/requirements.txt ./mcp_server-requirements.txt
+RUN python -m venv /opt/mcp_venv \
+    && /opt/mcp_venv/bin/pip install --no-cache-dir -r mcp_server-requirements.txt
+
 COPY app ./app
+COPY mcp_server ./mcp_server
 
 RUN useradd --uid 1000 --create-home --shell /usr/sbin/nologin subtitlarr \
     && mkdir -p /data \
-    && chown -R subtitlarr:subtitlarr /app /data
+    && chown -R subtitlarr:subtitlarr /app /data /opt/mcp_venv
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 ENV DB_PATH=/data/subtitlarr.db
 EXPOSE 7777
+EXPOSE 7778
 
 # Baked in at build time (see docker-release.yml) so anonymous telemetry
 # works out of the box for anyone pulling the published image, with no

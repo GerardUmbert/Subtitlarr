@@ -101,6 +101,9 @@ const Api = (() => {
     restoreBackup: (filename) => request("POST", "/api/jobs/backups/restore", { filename }),
     getSyncStatus: () => request("GET", "/api/jobs/sync-status"),
 
+    getMcpStatus: () => request("GET", "/api/mcp/status"),
+    regenerateMcpToken: () => request("POST", "/api/mcp/regenerate-token"),
+
     getHistory: (params = {}) => {
       const qs = new URLSearchParams(params).toString();
       return request("GET", `/api/history${qs ? "?" + qs : ""}`);

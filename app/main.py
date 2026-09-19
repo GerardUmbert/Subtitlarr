@@ -20,6 +20,7 @@ from app.api import (
     history,
     jobs,
     languages,
+    mcp,
     queue,
     run,
     schedule,
@@ -133,6 +134,7 @@ app.include_router(jobs.router)
 app.include_router(history.router)
 app.include_router(compare.router)
 app.include_router(debug.router)
+app.include_router(mcp.router)
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 

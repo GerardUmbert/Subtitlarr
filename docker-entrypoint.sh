@@ -14,7 +14,19 @@ if [ "$(id -u)" = "0" ]; then
     groupmod -o -g "$PGID" subtitlarr
     usermod -o -u "$PUID" subtitlarr
     chown -R subtitlarr:subtitlarr /data
-    exec gosu subtitlarr "$@"
+    exec gosu subtitlarr "$0" "$@"
+fi
+
+# The MCP server (see mcp_server/, plans/mcp-server.md) runs as a sibling
+# background process in its own venv (/opt/mcp_venv) — deliberately
+# separate from the main app's dependencies (see Dockerfile's comment on
+# why) and from the main app's own process/event loop, so a bug or a
+# hung tool call in it can never stall or crash live translation runs.
+# MCP_ENABLED lets it be turned off entirely (e.g. no MCP_AUTH_TOKEN set
+# and the operator doesn't want an unauthenticated listener at all).
+if [ "${MCP_ENABLED:-true}" = "true" ]; then
+    SUBTITLARR_BASE_URL="${SUBTITLARR_BASE_URL:-http://127.0.0.1:7777}" \
+        /opt/mcp_venv/bin/python -m mcp_server &
 fi
 
 exec "$@"

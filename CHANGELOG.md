@@ -6,6 +6,18 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 ## [dev]
 
 ### Added
+- **An MCP server** lets Claude Code or another MCP-aware assistant
+  connect remotely (e.g. from a desktop, to an instance running on a
+  NAS) to monitor queue/job status and trigger translation runs and
+  jobs. It runs as a separate process alongside the main app, secured
+  with a bearer token shown on the Jobs page (auto-generated on first
+  use, regeneratable). Includes a hard safety rule enforced in the
+  tool descriptions: a `failed` item whose error is content-blocked,
+  quota-exhausted, or a dead credential is never resubmitted to the
+  same engine (risking that provider's abuse enforcement against the
+  account) — those items are meant to be classified and, when
+  appropriate, translated by the connecting assistant itself via the
+  existing manual-translation endpoints. See `plans/mcp-server.md`.
 - **Items a cloud provider's safety filter blocks outright** (e.g.
   period-accurate slurs or violence in serious historical drama) **can
   now be translated by hand and submitted through a new manual

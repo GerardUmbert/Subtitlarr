@@ -3,6 +3,11 @@ services:
     build: .
     ports:
       - "7777:7777"
+      # The MCP server (see mcp_server/, plans/mcp-server.md) — lets an
+      # MCP-aware assistant (e.g. Claude Code) connect remotely to
+      # monitor progress and trigger translations/jobs. Set
+      # MCP_ENABLED=false below to disable it entirely.
+      - "7778:7778"
     environment:
       - SCHEDULE_CRON=${SCHEDULE_CRON:-0 3 * * *}
       - AGE_THRESHOLD_DAYS=${AGE_THRESHOLD_DAYS:-14}
@@ -12,6 +17,11 @@ services:
       - SYNC_MEDIA_CRON=${SYNC_MEDIA_CRON:-40 9 * * *}
       - SYNC_SUBS_CRON=${SYNC_SUBS_CRON:-40 9 * * *}
       - DB_PATH=/data/subtitlarr.db
+      # The MCP server's auth token is fetched automatically from this
+      # app's own /api/mcp/status at startup — no need to set
+      # MCP_AUTH_TOKEN by hand. Set MCP_ENABLED=false to turn the MCP
+      # server off entirely (e.g. if you never intend to use it).
+      - MCP_ENABLED=${MCP_ENABLED:-true}
       # The container starts as root, chowns /data to PUID:PGID, then
       # drops to that user before running the app — set these to match
       # whatever owns ./data on THIS host if you hit permission errors

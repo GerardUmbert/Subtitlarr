@@ -127,6 +127,20 @@ runs automatically on deploy:
   and the chunking/verification workflow — don't translate a whole
   large file in one pass; a long single generation is where cue-index
   alignment mistakes happen.
+- **An MCP server (`mcp_server/`) exposes this same API to MCP-aware
+  assistants** (Claude Code, Claude Desktop, etc.) as typed tools —
+  see `plans/mcp-server.md` for the design. It is a deliberately
+  separate process with its own venv (`mcp_server/requirements.txt`),
+  never imported into `app/` — the `mcp` SDK pulls in a `starlette`
+  version that conflicts with this app's pinned FastAPI, confirmed
+  live when it was first installed into the main venv. To run it
+  locally: `python -m venv mcp_server/.venv && mcp_server/.venv/Scripts/pip
+  install -r mcp_server/requirements.txt`, then with the main dev
+  server already running, `SUBTITLARR_BASE_URL=http://127.0.0.1:8412
+  mcp_server/.venv/Scripts/python -m mcp_server` — it fetches its auth
+  token automatically from the main app's `GET /api/mcp/status`
+  (also shown on the Jobs page). Never install `mcp` into the main
+  app's `.venv`.
 
 ## What NOT to do without being asked
 
