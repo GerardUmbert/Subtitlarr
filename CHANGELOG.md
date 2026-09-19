@@ -5,6 +5,23 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [dev]
 
+### Changed
+- **`subtitlarr_get_manual_translation_source`'s docstring now guides
+  parallel chunk translation for large items** — confirmed live that
+  splitting a 1640-cue movie into 4 chunks translated by parallel
+  workers finished in ~100 seconds total versus several minutes
+  sequential, with no shared context needed between chunks. Also
+  documents a real, twice-reproduced failure mode: concatenating
+  separately-written chunk files without ensuring a blank-line
+  separator at each boundary silently merges the last line of one
+  chunk with the next chunk's first index, dropping that boundary cue.
+  The guidance now tells the calling assistant to join chunks with an
+  explicit blank line and check index parity specifically at chunk
+  boundaries, not just the overall count. This lives in the tool
+  description itself (not a skill file) so it reaches any MCP client
+  connecting to this server, not just sessions with this repo checked
+  out.
+
 ### Fixed
 - **`subtitlarr_classify_failure` lumped dead credentials and quota
   errors in with genuine content-safety blocks**, both labeled

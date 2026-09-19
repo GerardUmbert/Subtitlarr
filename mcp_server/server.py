@@ -336,14 +336,40 @@ def build_mcp() -> FastMCP:
         its failure was classified non_retryable — see
         subtitlarr_classify_failure.
 
-        Translate in chunks of ~250-350 cues for anything long, not the
+        Translate in chunks of ~250-450 cues for anything long, not the
         whole file in one pass. Every <index> in the source must appear
         exactly once in your output with the SAME index number —
         reassembly matches by index, not position, and a missing index
         silently falls back to the original-language text rather than
-        erroring. Verify index parity (every 1..cue_count present
-        exactly once) before calling
-        subtitlarr_submit_manual_translation."""
+        erroring.
+
+        For an item with more than ~500 cues, prefer translating chunks
+        in PARALLEL (e.g. one subagent/worker per chunk, each writing
+        its chunk's translated output to its own file) over one long
+        sequential pass — this cuts wall-clock time roughly in
+        proportion to the number of chunks, confirmed live on a
+        1640-cue movie split into 4 parallel chunks finishing in ~100
+        seconds total vs. several minutes sequential. Each chunk worker
+        needs no context from the others — just its own slice of
+        dialogue_text and the item's source/target language.
+
+        When concatenating separately-written chunk files back into one
+        submission, make sure each chunk file ends with a blank line
+        (i.e. join chunks with two newlines between them, not
+        whatever a plain `cat`/simple concatenation happens to
+        produce) — a missing separator at a chunk boundary merges the
+        last line of one chunk with the first index number of the
+        next, silently dropping that boundary cue from the index count.
+        This is a real, reproducible failure mode (hit on two separate
+        real translations before being caught) — after merging, always
+        run the parity check below before submitting, specifically
+        checking indices right at each chunk boundary, not just the
+        overall count.
+
+        Verify index parity (every 1..cue_count present exactly once)
+        before calling subtitlarr_submit_manual_translation — see that
+        tool's own docstring for how to submit large results without
+        pasting them into the tool call."""
         return await queue.get_manual_translation_source(
             item_id, conn=state.get_conn(), client=state.get_client()
         )
