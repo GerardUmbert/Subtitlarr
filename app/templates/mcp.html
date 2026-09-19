@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}MCP Server{% endblock %}
+{% block content %}
+<div id="mcp-app">
+  <div class="page-head">
+    <div>
+      <h1>MCP Server</h1>
+      <p class="page-sub">Lets Claude Code, Claude Desktop, or another MCP-aware assistant connect to this instance to check queue/job status, translate items itself when a configured engine fails, and trigger runs and jobs.</p>
+    </div>
+  </div>
+
+  <div class="panel-loading" v-if="pageLoading">
+    <div class="loading-spinner"></div>
+    <p>Loading…</p>
+  </div>
+
+  <template v-else>
+  <div class="panel">
+    <div class="panel-body">
+    <div class="panel-title">Connection</div>
+    <div class="panel-title-sub">Mounted directly on this app — same host and port as the web UI, nothing extra to expose</div>
+
+      <div class="field">
+        <label>Server URL</label>
+        <div class="field-row">
+          <input type="text" class="mono" readonly :value="serverUrl" style="flex:1;">
+          <button class="btn" @click="copyValue(serverUrl, 'url')">{% raw %}{{ urlCopied ? 'Copied!' : 'Copy' }}{% endraw %}</button>
+        </div>
+        <p class="field-hint">Built from this page's own address — if you're reaching this instance through a different hostname/IP from where your MCP client runs (e.g. a NAS on your LAN, or through a VPN/Tailscale hostname), use that address instead of what's shown here.</p>
+      </div>
+
+      <div class="field">
+        <label>Auth token</label>
+        <div class="field-row">
+          <input type="text" class="mono" readonly :value="tokenVisible ? mcpToken : '••••••••••••••••••••••••••••••••'" style="flex:1;">
+          <button class="btn" @click="tokenVisible = !tokenVisible">{% raw %}{{ tokenVisible ? 'Hide' : 'Show' }}{% endraw %}</button>
+          <button class="btn" @click="copyValue(mcpToken, 'token')">{% raw %}{{ tokenCopied ? 'Copied!' : 'Copy' }}{% endraw %}</button>
+        </div>
+        <p class="field-hint">
+          Sent as an <span class="mono">Authorization: Bearer &lt;token&gt;</span> header on every request. Anyone with
+          this token can trigger translation runs and jobs on this instance — treat it like the Bazarr API key.
+          Only reachable behind whatever already protects access to this instance (VPN/reverse proxy/LAN-only) —
+          never expose it directly to the internet.
+        </p>
+      </div>
+
+      <div class="field-row" v-if="!confirmingRegenerate">
+        <button class="btn" @click="confirmingRegenerate = true">Regenerate token</button>
+      </div>
+      <div class="field-row" v-else>
+        <span class="field-hint" style="margin:0;">Regenerate? Any already-connected MCP client will start getting 401s until it's given the new token.</span>
+        <button class="btn" style="border-color:var(--bad); color:var(--bad);" @click="regenerateToken" :disabled="regenerating">
+          {% raw %}{{ regenerating ? 'Regenerating…' : 'Yes, regenerate' }}{% endraw %}
+        </button>
+        <button class="btn" @click="confirmingRegenerate = false" :disabled="regenerating">Cancel</button>
+      </div>
+      <p class="field-hint error" v-if="error">● {% raw %}{{ error }}{% endraw %}</p>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px;">
+    <div class="panel-body">
+    <div class="panel-title">Connect from Claude Code</div>
+    <div class="panel-title-sub">Add this as a project or user-scoped MCP server</div>
+
+      <p class="field-hint">Run this once from a terminal (adjust the URL/token if different from above):</p>
+      <div class="field-row">
+        <input type="text" class="mono" readonly :value="claudeCodeCommand" style="flex:1;">
+        <button class="btn" @click="copyValue(claudeCodeCommand, 'cmd')">{% raw %}{{ cmdCopied ? 'Copied!' : 'Copy' }}{% endraw %}</button>
+      </div>
+      <p class="field-hint">
+        Or add it by hand to <span class="mono">.mcp.json</span> (project-scoped) or your global Claude Code config
+        (user-scoped):
+      </p>
+      <pre class="mono" style="background:var(--panel-2); padding:12px; border-radius:6px; overflow-x:auto; white-space:pre;">{% raw %}{{ mcpJsonSnippet }}{% endraw %}</pre>
+      <p class="field-hint">
+        Once connected, ask Claude Code things like "what's in the Subtitlarr queue right now" or
+        "translate everything that failed on Gemini for The Wire" — it will use these tools to check status,
+        classify failures, and (for content-blocked/quota/dead-credential failures specifically) translate the
+        item itself rather than resubmitting it to the same engine.
+      </p>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px;">
+    <div class="panel-body">
+    <div class="panel-title">What it can do</div>
+
+      <p class="field-hint">
+        Every tool calls the exact same code path this app's own web UI uses — nothing is possible over MCP that
+        isn't already possible by clicking around this UI. Tools are grouped as:
+      </p>
+      <ul style="margin:8px 0 8px 20px; padding:0; color:var(--muted);">
+        <li><strong>Status</strong> — queue, current run, job/sync status, history, language mismatches.</li>
+        <li><strong>Manual translation</strong> — fetch an item's source text and submit a translation done by the
+          connecting assistant itself, for items a configured engine can't handle (content-filter refusals,
+          exhausted quota, a dead credential).</li>
+        <li><strong>Run control</strong> — start/cancel runs, run a filtered set or an explicit list of item ids.</li>
+        <li><strong>Sync/jobs</strong> — trigger media/subtitle sync, push queued uploads, language check, stale audit.</li>
+      </ul>
+      <p class="field-hint">
+        <strong>Safety rule built into every run-control tool's description:</strong> an item already <span class="mono">failed</span>
+        with a content-blocked, quota-exhausted, or dead-credential error is never meant to be resubmitted to the
+        same engine — repeating that risks the provider's own abuse enforcement against the account. The assistant
+        is instructed to classify the failure first and route those specifically to manual translation instead.
+      </p>
+    </div>
+  </div>
+  </template>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/mcp.js?v={{ asset_version }}"></script>
+{% endblock %}

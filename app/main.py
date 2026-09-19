@@ -33,6 +33,8 @@ from app.logging_conf import configure_logging
 from app.providers import languages as language_names
 from app.scheduler.cron import CronScheduler
 from app import telemetry
+from mcp_server.auth import wrap as wrap_mcp_auth
+from mcp_server.server import create_mcp_asgi_app
 
 configure_logging()
 
@@ -113,7 +115,27 @@ async def lifespan(app: FastAPI):
             job_id="telemetry",
         )
 
-    yield
+    # A fresh MCP tool server (and therefore a fresh session manager) is
+    # built and mounted on every lifespan start, not once at import time
+    # — the mcp SDK's StreamableHTTPSessionManager can only ever be
+    # run() once per instance, but this lifespan itself can start more
+    # than once in the same process (every integration test's
+    # `with TestClient(app):` re-enters it). Replacing the mount here
+    # each time keeps the app importable as a true module-level
+    # singleton everywhere else while still giving MCP a clean session
+    # manager per run. Mounted at "" (ASGI root) rather than "/mcp" — the
+    # sub-app's own default internal path IS "/mcp", so mounting at ""
+    # lets that produce the final "/mcp" endpoint directly; mounting at
+    # "/mcp" too would either double up to "/mcp/mcp" or (with the inner
+    # path overridden to "/") trigger a 307 redirect from "/mcp" to
+    # "/mcp/". Identified for removal by name, not by path, since the
+    # mount's path is "" here. See mcp_server/server.py's module
+    # docstring for the session-manager constraint driving all of this.
+    app.router.routes = [r for r in app.router.routes if getattr(r, "name", None) != "mcp"]
+    mcp_asgi_app = create_mcp_asgi_app()
+    app.mount("", wrap_mcp_auth(mcp_asgi_app), name="mcp")
+    async with mcp_asgi_app.router.lifespan_context(mcp_asgi_app):
+        yield
 
     state.cron_scheduler.shutdown()
     await state.bazarr_client.aclose()
@@ -137,6 +159,8 @@ app.include_router(debug.router)
 app.include_router(mcp.router)
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+# The /mcp mount itself is (re-)created inside lifespan() above, not
+# here — see that function's comment for why.
 
 
 @app.get("/healthz")
@@ -168,3 +192,4 @@ app.get("/settings", response_class=HTMLResponse)(_page("settings", "settings"))
 app.get("/jobs", response_class=HTMLResponse)(_page("jobs", "jobs"))
 app.get("/history", response_class=HTMLResponse)(_page("history", "history"))
 app.get("/compare", response_class=HTMLResponse)(_page("compare", "engines"))
+app.get("/mcp-server", response_class=HTMLResponse)(_page("mcp", "mcp-server"))

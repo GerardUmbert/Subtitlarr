@@ -3,12 +3,15 @@ import secrets
 from fastapi import APIRouter, Depends
 
 from app import state
-from app.config import settings
 from app.db import repository
 
 router = APIRouter(prefix="/api/mcp", tags=["mcp"])
 
 _TOKEN_CONFIG_KEY = "mcp.auth_token"
+
+# Path where the MCP server is mounted in app/main.py — same host/port as
+# the web UI itself, no separate port to map (see plans/mcp-server.md).
+MCP_PATH = "/mcp"
 
 
 def get_or_create_token(conn) -> str:
@@ -26,13 +29,13 @@ def get_or_create_token(conn) -> str:
 
 @router.get("/status")
 def get_mcp_status(conn=Depends(state.get_conn)):
-    """Connection info for the Jobs page's MCP section — the token is
+    """Connection info for the Settings page's MCP section — the token is
     shown in full here deliberately (same trust level as the Bazarr API
     key already shown in Settings): this is a local-admin-only page, not
     a multi-user product with different privilege levels."""
     return {
         "token": get_or_create_token(conn),
-        "port": settings.mcp_port,
+        "path": MCP_PATH,
     }
 
 

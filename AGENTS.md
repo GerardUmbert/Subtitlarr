@@ -128,19 +128,19 @@ runs automatically on deploy:
   large file in one pass; a long single generation is where cue-index
   alignment mistakes happen.
 - **An MCP server (`mcp_server/`) exposes this same API to MCP-aware
-  assistants** (Claude Code, Claude Desktop, etc.) as typed tools —
-  see `plans/mcp-server.md` for the design. It is a deliberately
-  separate process with its own venv (`mcp_server/requirements.txt`),
-  never imported into `app/` — the `mcp` SDK pulls in a `starlette`
-  version that conflicts with this app's pinned FastAPI, confirmed
-  live when it was first installed into the main venv. To run it
-  locally: `python -m venv mcp_server/.venv && mcp_server/.venv/Scripts/pip
-  install -r mcp_server/requirements.txt`, then with the main dev
-  server already running, `SUBTITLARR_BASE_URL=http://127.0.0.1:8412
-  mcp_server/.venv/Scripts/python -m mcp_server` — it fetches its auth
-  token automatically from the main app's `GET /api/mcp/status`
-  (also shown on the Jobs page). Never install `mcp` into the main
-  app's `.venv`.
+  assistants** (Claude Code, Claude Desktop, etc.) as typed tools,
+  mounted directly into the main app at `/mcp` — same process, same
+  port, no separate service to run or port to map. See
+  `plans/mcp-server.md` for the design and why an earlier
+  separate-process version was reverted (an Unraid container's port
+  mappings can't be added to an already-running install without the
+  user manually re-editing it, which made a second port a real
+  deployment problem for existing users). `mcp` is pinned to `1.27.2`
+  in `requirements.txt` specifically because a newer `mcp` pulls in a
+  `starlette` version that conflicts with this app's pinned FastAPI —
+  confirmed live; don't bump it without re-checking that. Auth token
+  is shown on the Settings page and required as a Bearer token on
+  every request to `/mcp`.
 
 ## What NOT to do without being asked
 

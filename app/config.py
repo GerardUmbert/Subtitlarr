@@ -107,13 +107,5 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     port: int = 7777
 
-    # MCP server (see mcp_server/, plans/mcp-server.md) — a separate
-    # process, but this app needs to know its port to display accurate
-    # connection info on the Jobs page. Must match MCP_PORT in the MCP
-    # server's own environment; not read by mcp_server itself (that
-    # process reads MCP_PORT directly via mcp_server/config.py) — kept
-    # here purely so the UI has something authoritative to show.
-    mcp_port: int = 7778
-
 
 settings = Settings()
