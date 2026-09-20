@@ -3,73 +3,7 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [dev]
-
-### Changed
-- **`subtitlarr_get_manual_translation_source`'s docstring now guides
-  parallel chunk translation for large items** — confirmed live that
-  splitting a 1640-cue movie into 4 chunks translated by parallel
-  workers finished in ~100 seconds total versus several minutes
-  sequential, with no shared context needed between chunks. Also
-  documents a real, twice-reproduced failure mode: concatenating
-  separately-written chunk files without ensuring a blank-line
-  separator at each boundary silently merges the last line of one
-  chunk with the next chunk's first index, dropping that boundary cue.
-  The guidance now tells the calling assistant to join chunks with an
-  explicit blank line and check index parity specifically at chunk
-  boundaries, not just the overall count. This lives in the tool
-  description itself (not a skill file) so it reaches any MCP client
-  connecting to this server, not just sessions with this repo checked
-  out.
-
-### Fixed
-- **`subtitlarr_classify_failure` lumped dead credentials and quota
-  errors in with genuine content-safety blocks**, both labeled
-  `non_retryable` — so a rotated API key still couldn't be retried
-  without overriding the tool's own guardrail, even though a dead-key
-  401 carries none of the "never resubmit, risks provider abuse
-  enforcement" reasoning that applies to an actual content-filter
-  refusal. Split into three verdicts: `content_blocked` (the only one
-  that still hard-blocks retry), `credential_or_infra` (dead key/quota/
-  5xx — retryable once a human confirms the underlying cause no longer
-  applies), and `retryable`.
-- **`subtitlarr_submit_manual_translation` had no way to submit a
-  translation without pasting the full text into the tool call** —
-  since the calling assistant already generated that text once, the
-  tool-call argument made it reproduce the entire thing as literal
-  output a second time, which reliably stalled on anything
-  movie-length (confirmed live: 1461 cues reproduced correctly via a
-  plain scripted HTTP POST to the existing REST endpoint, but
-  repeatedly failed to complete as an inline MCP tool-call argument).
-  A file-path parameter was tried first but doesn't actually work here
-  — this MCP server and the calling assistant don't share a
-  filesystem when Subtitlarr runs on a NAS, so a local path is
-  meaningless to the remote process. The real fix is procedural: the
-  tool's own description now tells the calling model to always use the
-  plain REST endpoint (`POST /api/queue/{item_id}/manual-translation`,
-  same host/port as the MCP connection minus `/mcp`) from a script
-  instead, for every submission regardless of size — a script reads
-  the file and builds the request body directly, so the content never
-  passes through the model's generated output more than once.
-- **The MCP server rejected every connection from a client not on
-  localhost** (`421 Invalid Host header`) — its DNS-rebinding
-  protection defaulted to allowing only `localhost`/`127.0.0.1`, which
-  broke the normal case of connecting from another machine on the LAN
-  to an instance running on a NAS. That protection guards against a
-  browser tab reaching a local service via DNS rebinding; it's
-  redundant here since every request already needs the bearer token,
-  and there's no fixed IP to allowlist since it varies per install.
-  Disabled rather than reworked into a guess.
-
-### Changed
-- **The MCP Server page's connection command now uses `claude mcp add
-  --scope user`** instead of the default `local` scope, so it's
-  registered once for every project directory instead of silently only
-  showing up in whichever single folder the command happened to be run
-  from. The page also now clearly separates the Claude Code quick-add
-  command from a plain `mcpServers` JSON block for any other MCP client
-  (Claude Desktop, Cursor, etc.), instead of implying MCP support while
-  only actually showing Claude Code-specific instructions.
+## [0.13.0]
 
 ### Added
 - **An MCP server** lets Claude Code or another MCP-aware assistant
@@ -116,20 +50,6 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   separate from `latest` and versioned tags — lets a test deployment
   track in-progress work without disturbing what everyone else's
   Docker installs pull.
-
-### Changed
-- **The system prompt sent to translation providers no longer describes
-  the content as "licensed film and television content"** — it now
-  states plainly that this is a private, non-commercial translation of
-  a subtitle file the requester already owns a personal copy of, for
-  their own viewing, not redistribution or a commercial product. The
-  old framing didn't help and may have made some providers' safety
-  filters more cautious rather than less; the new framing better
-  matches what's actually true of the request.
-
-## [0.13.0]
-
-### Added
 - **The AI disclaimer line now names which model produced the
   translation** — e.g. "... Espereu errors ocasionals.
   [gemini-3.5-flash-lite]" — appended in English after the (possibly
@@ -144,7 +64,77 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   completed item whose model is known. Manual/opt-in only, never runs
   on a schedule, since it's a real write per item, not a read.
 
+### Changed
+- **`subtitlarr_get_manual_translation_source`'s docstring now guides
+  parallel chunk translation for large items** — confirmed live that
+  splitting a 1640-cue movie into 4 chunks translated by parallel
+  workers finished in ~100 seconds total versus several minutes
+  sequential, with no shared context needed between chunks. Also
+  documents a real, twice-reproduced failure mode: concatenating
+  separately-written chunk files without ensuring a blank-line
+  separator at each boundary silently merges the last line of one
+  chunk with the next chunk's first index, dropping that boundary cue.
+  The guidance now tells the calling assistant to join chunks with an
+  explicit blank line and check index parity specifically at chunk
+  boundaries, not just the overall count. This lives in the tool
+  description itself (not a skill file) so it reaches any MCP client
+  connecting to this server, not just sessions with this repo checked
+  out.
+- **The MCP Server page's connection command now uses `claude mcp add
+  --scope user`** instead of the default `local` scope, so it's
+  registered once for every project directory instead of silently only
+  showing up in whichever single folder the command happened to be run
+  from. The page also now clearly separates the Claude Code quick-add
+  command from a plain `mcpServers` JSON block for any other MCP client
+  (Claude Desktop, Cursor, etc.), instead of implying MCP support while
+  only actually showing Claude Code-specific instructions.
+- **The system prompt sent to translation providers no longer describes
+  the content as "licensed film and television content"** — it now
+  states plainly that this is a private, non-commercial translation of
+  a subtitle file the requester already owns a personal copy of, for
+  their own viewing, not redistribution or a commercial product. The
+  old framing didn't help and may have made some providers' safety
+  filters more cautious rather than less; the new framing better
+  matches what's actually true of the request.
+
 ### Fixed
+- **`subtitlarr_classify_failure` lumped dead credentials and quota
+  errors in with genuine content-safety blocks**, both labeled
+  `non_retryable` — so a rotated API key still couldn't be retried
+  without overriding the tool's own guardrail, even though a dead-key
+  401 carries none of the "never resubmit, risks provider abuse
+  enforcement" reasoning that applies to an actual content-filter
+  refusal. Split into three verdicts: `content_blocked` (the only one
+  that still hard-blocks retry), `credential_or_infra` (dead key/quota/
+  5xx — retryable once a human confirms the underlying cause no longer
+  applies), and `retryable`.
+- **`subtitlarr_submit_manual_translation` had no way to submit a
+  translation without pasting the full text into the tool call** —
+  since the calling assistant already generated that text once, the
+  tool-call argument made it reproduce the entire thing as literal
+  output a second time, which reliably stalled on anything
+  movie-length (confirmed live: 1461 cues reproduced correctly via a
+  plain scripted HTTP POST to the existing REST endpoint, but
+  repeatedly failed to complete as an inline MCP tool-call argument).
+  A file-path parameter was tried first but doesn't actually work here
+  — this MCP server and the calling assistant don't share a
+  filesystem when Subtitlarr runs on a NAS, so a local path is
+  meaningless to the remote process. The real fix is procedural: the
+  tool's own description now tells the calling model to always use the
+  plain REST endpoint (`POST /api/queue/{item_id}/manual-translation`,
+  same host/port as the MCP connection minus `/mcp`) from a script
+  instead, for every submission regardless of size — a script reads
+  the file and builds the request body directly, so the content never
+  passes through the model's generated output more than once.
+- **The MCP server rejected every connection from a client not on
+  localhost** (`421 Invalid Host header`) — its DNS-rebinding
+  protection defaulted to allowing only `localhost`/`127.0.0.1`, which
+  broke the normal case of connecting from another machine on the LAN
+  to an instance running on a NAS. That protection guards against a
+  browser tab reaching a local service via DNS rebinding; it's
+  redundant here since every request already needs the bearer token,
+  and there's no fixed IP to allowlist since it varies per install.
+  Disabled rather than reworked into a guess.
 - **The NVIDIA engine no longer defaults new instances to
   `deepseek-ai/deepseek-v4-flash`** — that model is dead. A new
   instance now starts with an empty model field instead of silently
