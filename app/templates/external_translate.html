@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}External Translate{% endblock %}
+{% block content %}
+<div id="external-translate-app">
+  <div class="page-head">
+    <div>
+      <h1>External Translate</h1>
+      <p class="page-sub">Lets a third-party tool (Bazarr's own webhook, another app, a script) submit subtitle content directly for translation by this instance's configured engine cascade, with no Bazarr wanted-list item involved.</p>
+    </div>
+  </div>
+
+  <div class="panel-loading" v-if="pageLoading">
+    <div class="loading-spinner"></div>
+    <p>Loading…</p>
+  </div>
+
+  <template v-else>
+  <div class="panel">
+    <div class="panel-body">
+    <div class="panel-title">Auth token</div>
+    <div class="panel-title-sub">Copy this into whatever you're configuring to call the endpoint below — it is never fetched by a caller itself</div>
+
+      <div class="field">
+        <div class="field-row">
+          <input type="text" class="mono" readonly :value="tokenVisible ? token : '••••••••••••••••••••••••••••••••'" style="flex:1;">
+          <button class="btn" @click="tokenVisible = !tokenVisible">{% raw %}{{ tokenVisible ? 'Hide' : 'Show' }}{% endraw %}</button>
+          <button class="btn" @click="copyValue(token, 'token')">{% raw %}{{ tokenCopied ? 'Copied!' : 'Copy' }}{% endraw %}</button>
+        </div>
+        <p class="field-hint">
+          Sent as an <span class="mono">Authorization: Bearer &lt;token&gt;</span> header on every request to
+          <span class="mono">/api/external-translate</span>. Anyone with this token can submit translation jobs
+          against this instance's configured engines — treat it like the Bazarr API key or the MCP token.
+          Only reachable behind whatever already protects access to this instance (VPN/reverse proxy/LAN-only) —
+          never expose it directly to the internet.
+        </p>
+      </div>
+
+      <div class="field-row" v-if="!confirmingRegenerate">
+        <button class="btn" @click="confirmingRegenerate = true">Regenerate token</button>
+      </div>
+      <div class="field-row" v-else>
+        <span class="field-hint" style="margin:0;">Regenerate? Any caller still using the old token will start getting 401s until it's given the new one.</span>
+        <button class="btn" style="border-color:var(--bad); color:var(--bad);" @click="regenerateToken" :disabled="regenerating">
+          {% raw %}{{ regenerating ? 'Regenerating…' : 'Yes, regenerate' }}{% endraw %}
+        </button>
+        <button class="btn" @click="confirmingRegenerate = false" :disabled="regenerating">Cancel</button>
+      </div>
+      <p class="field-hint error" v-if="error">● {% raw %}{{ error }}{% endraw %}</p>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px;">
+    <div class="panel-body">
+    <div class="panel-title">Using it</div>
+
+      <p class="field-hint">
+        <span class="mono">POST /api/external-translate</span> with <span class="mono">source_language</span>,
+        <span class="mono">target_language</span>, and exactly one of <span class="mono">srt_content</span> (a raw
+        <span class="mono">.srt</span> file's text) or <span class="mono">cues</span> (Bazarr's own already-parsed
+        cue JSON, the same shape <span class="mono">GET /api/subtitles/contents</span> returns) — returns a
+        <span class="mono">job_id</span> immediately since a full file can take minutes.
+        <span class="mono">GET /api/external-translate/{job_id}</span> polls for the result
+        (<span class="mono">status</span>, and once done, <span class="mono">result_srt</span>).
+      </p>
+      <p class="field-hint">
+        Every attempt also shows up on the <a href="/history">History page</a>'s Jobs tab
+        (<span class="mono">external_translate</span>) with a pass/fail summary, even though the job itself has no
+        other page in this app.
+      </p>
+      <p class="field-hint">
+        Full request/response shapes: see the
+        <a href="https://gerardumbert.github.io/Subtitlarr/docs.html#external-translate" target="_blank" rel="noopener">docs site</a>.
+      </p>
+    </div>
+  </div>
+  </template>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/external_translate.js?v={{ asset_version }}"></script>
+{% endblock %}

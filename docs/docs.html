@@ -266,9 +266,7 @@
     <p>A plain REST endpoint for any third-party tool — Bazarr, another *arr-adjacent app, a script — to submit subtitle content directly for translation by Subtitlarr's own configured engine cascade, with no Bazarr wanted-list item involved at all. This is separate from the queue/run endpoints the web UI itself uses: nothing submitted here appears on the Queue or Dashboard, since there's no Bazarr item behind it.</p>
 
     <h3>Authentication</h3>
-    <p>Its own bearer token, independent of both the MCP server's token and Bazarr's own API key:</p>
-    <pre><code>GET  /api/external-translate/status           -&gt; {"token": "..."}
-POST /api/external-translate/regenerate-token -&gt; {"token": "..."}</code></pre>
+    <p>Its own bearer token, independent of both the MCP server's token and Bazarr's own API key. Open the <strong>External Translate</strong> page from the sidebar to view it (and regenerate it if it's ever leaked) — it's shown there the same way the MCP Server page shows its own token, not something a caller fetches programmatically. Copy it from that page into whatever you're configuring (Bazarr's webhook, a script, another tool).</p>
     <p>Send it as <code>Authorization: Bearer &lt;token&gt;</code> on every request below.</p>
 
     <h3>Submitting content</h3>

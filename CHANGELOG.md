@@ -6,6 +6,18 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 ## [dev]
 
 ### Added
+- **A new "External Translate" sidebar page** shows the external-translate
+  bearer token (with a regenerate action), the same pattern the MCP Server
+  page already uses — previously the only way to get the token at all was
+  calling `GET /api/external-translate/status` directly with no UI, so
+  nobody configuring a third-party integration (e.g. a "Translate with
+  Subtitlarr" Bazarr webhook) had a real way to obtain it. The docs/README
+  were also corrected to point at this page as where you get the token
+  from, instead of describing that GET endpoint as the intended way for a
+  caller to fetch it — the endpoint itself is unchanged (same trust model
+  as the MCP token and the Bazarr API key already shown in Settings: this
+  app has no login anywhere, so every page is already reachable by
+  anything that can reach the app's network address regardless).
 - **A standalone translate endpoint** (`POST /api/external-translate`) lets
   any third-party caller — Bazarr or otherwise — submit subtitle content
   directly for translation, with no Bazarr wanted-list item behind it at

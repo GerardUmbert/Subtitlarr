@@ -287,9 +287,10 @@ with no Bazarr wanted-list item involved. Accepts either a raw `.srt`
 file's text or Bazarr's own already-parsed cue JSON (the same shape `GET
 /api/subtitles/contents` returns), returns a job id immediately since a
 full file can take minutes, and `GET /api/external-translate/{job_id}`
-polls for the result. Gated by its own bearer token (`GET
-/api/external-translate/status`), separate from both the MCP server's
-token and Bazarr's own API key. See the
+polls for the result. Gated by its own bearer token, separate from both
+the MCP server's token and Bazarr's own API key — shown on the
+**External Translate** sidebar page (regeneratable), not something a
+caller fetches programmatically. See the
 [docs site](https://gerardumbert.github.io/Subtitlarr/docs.html#external-translate)
 for the full request/response shapes.
 

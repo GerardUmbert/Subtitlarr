@@ -104,6 +104,9 @@ const Api = (() => {
     getMcpStatus: () => request("GET", "/api/mcp/status"),
     regenerateMcpToken: () => request("POST", "/api/mcp/regenerate-token"),
 
+    getExternalTranslateStatus: () => request("GET", "/api/external-translate/status"),
+    regenerateExternalTranslateToken: () => request("POST", "/api/external-translate/regenerate-token"),
+
     getHistory: (params = {}) => {
       const qs = new URLSearchParams(params).toString();
       return request("GET", `/api/history${qs ? "?" + qs : ""}`);
