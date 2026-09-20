@@ -8,10 +8,14 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 
 from app import state
+from app.auth.session import require_session_or_mcp_token
 from app.bazarr.client import BazarrClient
 from app.db import engine_instances_repo
 
-router = APIRouter(prefix="/api/debug", tags=["debug"])
+router = APIRouter(
+    prefix="/api/debug", tags=["debug"],
+    dependencies=[Depends(require_session_or_mcp_token)],
+)
 
 
 @router.get("/gemini/{instance_id}/models")
@@ -26,7 +30,8 @@ async def list_gemini_models(
     case-insensitive substring) narrows the result — e.g. filter=gemma.
     Reads the key server-side; never echoes it back. Safe to delete once
     no longer needed."""
-    instance = engine_instances_repo.get_instance(conn, instance_id)
+    with state.db_lock:
+        instance = engine_instances_repo.get_instance(conn, instance_id)
     if instance is None or instance["provider_type"] != "gemini":
         raise HTTPException(status_code=404, detail="Gemini instance not found")
     api_key = instance["config"].get("api_key")

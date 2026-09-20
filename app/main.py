@@ -1,16 +1,19 @@
 import functools
 import logging
+import secrets
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
 
 from app import __version__, state
 from app.api import (
+    auth as auth_routes,
     bazarr_conn,
     compare,
     dashboard,
@@ -26,6 +29,7 @@ from app.api import (
     run,
     schedule,
 )
+from app.auth.session import NeedsLoginRedirect, ensure_admin_seeded, require_session_page
 from app.bazarr.client import BazarrClient
 from app.config import settings
 from app.db import database, repository, settings_store
@@ -56,6 +60,12 @@ templates.env.globals["app_version"] = __version__
 async def lifespan(app: FastAPI):
     state.db_conn = database.connect(settings.db_path)
     database.apply_migrations(state.db_conn)
+    # Must run before anything starts enforcing require_session/
+    # require_session_page — if the admin_credentials row didn't exist yet
+    # when a request first hit one of those dependencies, the app would be
+    # unreachable with no recovery path (no account to log in with at all).
+    ensure_admin_seeded(state.db_conn)
+    auth_routes.reset_rate_limit_state()
     settings_store.load_into(state.db_conn, settings)
     reset_count = repository.reset_stuck_translating_items(state.db_conn)
     if reset_count:
@@ -143,8 +153,33 @@ async def lifespan(app: FastAPI):
     state.db_conn.close()
 
 
-app = FastAPI(title="Subtitlarr", lifespan=lifespan)
+def _get_or_create_session_secret() -> str:
+    """SessionMiddleware needs its signing key at app-construction time,
+    before lifespan() has opened the DB connection this app otherwise uses
+    for every other persisted secret (the MCP/external-translate tokens
+    live in app_config) — middleware can't be added inside lifespan once
+    the app has started. Stored as a plain file next to the DB instead;
+    same file survives restarts the same way app_config would, just one
+    layer earlier in startup than the DB is available."""
+    secret_path = Path(settings.db_path).parent / ".session_secret"
+    if secret_path.exists():
+        return secret_path.read_text(encoding="utf-8").strip()
+    secret_path.parent.mkdir(parents=True, exist_ok=True)
+    secret = secrets.token_urlsafe(32)
+    secret_path.write_text(secret, encoding="utf-8")
+    return secret
 
+
+app = FastAPI(title="Subtitlarr", lifespan=lifespan)
+app.add_middleware(SessionMiddleware, secret_key=_get_or_create_session_secret(), same_site="lax")
+
+
+@app.exception_handler(NeedsLoginRedirect)
+async def _needs_login_redirect_handler(request: Request, exc: NeedsLoginRedirect):
+    return RedirectResponse(exc.location, status_code=303)
+
+
+app.include_router(auth_routes.router)
 app.include_router(dashboard.router)
 app.include_router(run.router)
 app.include_router(queue.router)
@@ -171,7 +206,7 @@ async def healthz():
 
 
 def _page(name: str, active_page: str):
-    async def handler(request: Request):
+    async def handler(request: Request, _auth=Depends(require_session_page)):
         response = templates.TemplateResponse(
             request, f"{name}.html", {"active_page": active_page}
         )

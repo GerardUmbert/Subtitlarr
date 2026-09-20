@@ -2,11 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app import state, telemetry
+from app.auth.session import require_session_or_mcp_token
 from app.config import settings
 from app.db import database, engine_instances_repo, repository
 from app.engine import backup, disclaimer_backfill, language_check, stale_audit, upload_queue
 
-router = APIRouter(prefix="/api/jobs", tags=["jobs"])
+router = APIRouter(
+    prefix="/api/jobs", tags=["jobs"],
+    dependencies=[Depends(require_session_or_mcp_token)],
+)
 
 
 @router.get("")

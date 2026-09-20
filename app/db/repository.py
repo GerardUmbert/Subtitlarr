@@ -1040,3 +1040,40 @@ def get_external_translate_job(conn: sqlite3.Connection, job_id: int) -> dict | 
         "SELECT * FROM external_translate_jobs WHERE id = ?", (job_id,)
     ).fetchone()
     return dict(row) if row is not None else None
+
+
+def get_admin_credentials(conn: sqlite3.Connection) -> dict | None:
+    """The single admin_credentials row (see
+    0027_add_admin_credentials.sql) — None only before
+    auth.session.ensure_admin_seeded() has ever run."""
+    row = conn.execute("SELECT * FROM admin_credentials WHERE id = 1").fetchone()
+    return dict(row) if row is not None else None
+
+
+def create_admin_credentials(
+    conn: sqlite3.Connection, username: str, password_hash: str, must_change_password: bool,
+) -> None:
+    now = _now()
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO admin_credentials (id, username, password_hash, must_change_password, created_at, updated_at)
+            VALUES (1, ?, ?, ?, ?, ?)
+            """,
+            (username, password_hash, must_change_password, now, now),
+        )
+
+
+def update_admin_password(
+    conn: sqlite3.Connection, password_hash: str, must_change_password: bool = False,
+) -> None:
+    now = _now()
+    with conn:
+        conn.execute(
+            """
+            UPDATE admin_credentials
+            SET password_hash = ?, must_change_password = ?, updated_at = ?
+            WHERE id = 1
+            """,
+            (password_hash, must_change_password, now),
+        )

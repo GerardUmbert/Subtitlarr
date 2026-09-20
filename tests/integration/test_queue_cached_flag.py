@@ -6,6 +6,8 @@ from app.db import database, repository
 from app.engine import prefetch
 from app.main import app
 
+from tests.integration.conftest import log_in
+
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
@@ -40,6 +42,7 @@ def client(tmp_path, monkeypatch):
     )
 
     with TestClient(app) as c:
+        log_in(c)
         yield c
 
 

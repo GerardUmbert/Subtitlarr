@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Subtitlarr — Log in</title>
+  <link rel="icon" href="/static/icon.svg?v={{ asset_version }}" />
+  <link rel="stylesheet" href="/static/css/tokens.css?v={{ asset_version }}" />
+  <link rel="stylesheet" href="/static/css/base.css?v={{ asset_version }}" />
+  <link rel="stylesheet" href="/static/css/components.css?v={{ asset_version }}" />
+  <script src="/static/js/vue.global.prod.js?v={{ asset_version }}"></script>
+</head>
+<body>
+  <div class="auth-page">
+    <div id="login-app" class="panel auth-panel">
+      <div class="panel-body">
+        <div class="panel-title">Subtitlarr</div>
+        <div class="panel-title-sub">Log in to continue</div>
+        {% if show_default_hint %}
+        <p class="field-hint">First time here? Default login is <span class="mono">admin</span> / <span class="mono">admin</span> — you'll be asked to set a real password right after.</p>
+        {% endif %}
+
+        <form @submit.prevent="submit">
+          <div class="field">
+            <label>Username</label>
+            <input type="text" v-model="username" autocomplete="username" autofocus required>
+          </div>
+          <div class="field">
+            <label>Password</label>
+            <input type="password" v-model="password" autocomplete="current-password" required>
+          </div>
+          <p class="field-hint error" v-if="error">● {% raw %}{{ error }}{% endraw %}</p>
+          <button class="btn" type="submit" :disabled="loading">{% raw %}{{ loading ? 'Logging in…' : 'Log in' }}{% endraw %}</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return { username: "", password: "", error: "", loading: false };
+      },
+      methods: {
+        async submit() {
+          this.loading = true;
+          this.error = "";
+          try {
+            const resp = await fetch("/api/auth/login", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ username: this.username, password: this.password }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+              this.error = data.detail || "Login failed.";
+              return;
+            }
+            window.location.href = data.redirect;
+          } catch (err) {
+            this.error = "Could not reach the server.";
+          } finally {
+            this.loading = false;
+          }
+        },
+      },
+    }).mount("#login-app");
+  </script>
+</body>
+</html>

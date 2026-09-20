@@ -5,6 +5,8 @@ from app.config import settings
 from app.engine import run_events
 from app.main import app
 
+from tests.integration.conftest import log_in
+
 
 @pytest.fixture(autouse=True)
 def clear_events():
@@ -19,6 +21,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "bazarr_base_url", "http://bazarr.test:6767")
     monkeypatch.setattr(settings, "bazarr_api_key", "testkey")
     with TestClient(app) as c:
+        log_in(c)
         yield c
 
 

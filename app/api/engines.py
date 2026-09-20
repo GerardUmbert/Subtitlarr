@@ -1,12 +1,16 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app import state
+from app.auth.session import require_session_or_mcp_token
 from app.providers import pull_state
 from app.providers.llamacpp_provider import LlamaCppProvider
 from app.providers.ollama_provider import OllamaProvider
 
-router = APIRouter(prefix="/api/config/engines", tags=["engines"])
+router = APIRouter(
+    prefix="/api/config/engines", tags=["engines"],
+    dependencies=[Depends(require_session_or_mcp_token)],
+)
 
 # Only the Ollama-specific model-management endpoints live here now —
 # model listing/pulling talks to a specific Ollama SERVER, which isn't

@@ -2,10 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app import state
+from app.auth.session import require_session_or_mcp_token
 from app.db import engine_instances_repo
 from app.providers import registry
 
-router = APIRouter(prefix="/api/config/engine-instances", tags=["engine-instances"])
+router = APIRouter(
+    prefix="/api/config/engine-instances", tags=["engine-instances"],
+    dependencies=[Depends(require_session_or_mcp_token)],
+)
 
 _SECRET_FIELDS_BY_TYPE = {
     "gemini": ["api_key"],
@@ -42,7 +46,8 @@ def _public_instance(instance: dict) -> dict:
 
 @router.get("")
 def list_engine_instances(conn=Depends(state.get_conn)):
-    instances = engine_instances_repo.list_instances(conn)
+    with state.db_lock:
+        instances = engine_instances_repo.list_instances(conn)
     return {"data": [_public_instance(i) for i in instances]}
 
 
@@ -78,9 +83,10 @@ def create_engine_instance(req: CreateInstanceRequest, conn=Depends(state.get_co
             registry.validate_temperature(config.get("temperature"))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-    instance = engine_instances_repo.create_instance(
-        conn, name=req.name, provider_type=req.provider_type, config=config, enabled=req.enabled
-    )
+    with state.db_lock:
+        instance = engine_instances_repo.create_instance(
+            conn, name=req.name, provider_type=req.provider_type, config=config, enabled=req.enabled
+        )
     return _public_instance(instance)
 
 
@@ -94,7 +100,8 @@ class UpdateInstanceRequest(BaseModel):
 def update_engine_instance(
     instance_id: int, req: UpdateInstanceRequest, conn=Depends(state.get_conn)
 ):
-    existing = engine_instances_repo.get_instance(conn, instance_id)
+    with state.db_lock:
+        existing = engine_instances_repo.get_instance(conn, instance_id)
     if existing is None:
         raise HTTPException(status_code=404, detail="Engine instance not found")
 
@@ -115,18 +122,21 @@ def update_engine_instance(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    updated = engine_instances_repo.update_instance(
-        conn, instance_id, name=req.name, config=merged_config, enabled=req.enabled
-    )
+    with state.db_lock:
+        updated = engine_instances_repo.update_instance(
+            conn, instance_id, name=req.name, config=merged_config, enabled=req.enabled
+        )
     return _public_instance(updated)
 
 
 @router.delete("/{instance_id}")
 def delete_engine_instance(instance_id: int, conn=Depends(state.get_conn)):
-    existing = engine_instances_repo.get_instance(conn, instance_id)
+    with state.db_lock:
+        existing = engine_instances_repo.get_instance(conn, instance_id)
     if existing is None:
         raise HTTPException(status_code=404, detail="Engine instance not found")
-    engine_instances_repo.delete_instance(conn, instance_id)
+    with state.db_lock:
+        engine_instances_repo.delete_instance(conn, instance_id)
     return {"deleted": True}
 
 
@@ -136,8 +146,11 @@ class ReorderRequest(BaseModel):
 
 @router.post("/reorder")
 def reorder_engine_instances(req: ReorderRequest, conn=Depends(state.get_conn)):
-    engine_instances_repo.reorder_instances(conn, req.ids)
-    return {"data": [_public_instance(i) for i in engine_instances_repo.list_instances(conn)]}
+    with state.db_lock:
+        engine_instances_repo.reorder_instances(conn, req.ids)
+    with state.db_lock:
+        instances = engine_instances_repo.list_instances(conn)
+    return {"data": [_public_instance(i) for i in instances]}
 
 
 class TestInstanceRequest(BaseModel):
@@ -152,7 +165,8 @@ class TestInstanceRequest(BaseModel):
 async def test_engine_instance(
     instance_id: int, req: TestInstanceRequest | None = None, conn=Depends(state.get_conn)
 ):
-    instance = engine_instances_repo.get_instance(conn, instance_id)
+    with state.db_lock:
+        instance = engine_instances_repo.get_instance(conn, instance_id)
     if instance is None:
         raise HTTPException(status_code=404, detail="Engine instance not found")
     if instance["provider_type"] == engine_instances_repo.SEPARATOR_TYPE:
@@ -185,6 +199,7 @@ async def test_engine_instance(
         # A successful manual test is strong evidence the underlying issue
         # (bad key, unreachable local server) is resolved — clear an early
         # cooldown instead of making the user wait out the full 24h.
-        engine_instances_repo.clear_rate_limit(conn, instance_id)
+        with state.db_lock:
+            engine_instances_repo.clear_rate_limit(conn, instance_id)
 
     return {"ok": status.ok, "detail": status.detail}

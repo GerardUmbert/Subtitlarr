@@ -3,10 +3,14 @@ from dataclasses import asdict
 from fastapi import APIRouter, Depends, HTTPException
 
 from app import state
+from app.auth.session import require_session_or_mcp_token
 from app.db import repository
 from app.engine import log_events, stats
 
-router = APIRouter(prefix="/api/history", tags=["history"])
+router = APIRouter(
+    prefix="/api/history", tags=["history"],
+    dependencies=[Depends(require_session_or_mcp_token)],
+)
 
 
 @router.get("")
@@ -17,18 +21,22 @@ def list_history(
     sort_dir: str = "desc",
     conn=Depends(state.get_conn),
 ):
-    runs, total = repository.list_run_history(
-        conn, page=page, page_size=page_size, sort_by=sort_by, sort_dir=sort_dir
-    )
+    with state.db_lock:
+        runs, total = repository.list_run_history(
+            conn, page=page, page_size=page_size, sort_by=sort_by, sort_dir=sort_dir
+        )
     return {"data": runs, "total": total, "page": page, "page_size": page_size}
 
 
 @router.get("/{run_id}/items")
 def get_history_run_items(run_id: int, conn=Depends(state.get_conn)):
-    row = conn.execute("SELECT id FROM run_history WHERE id = ?", (run_id,)).fetchone()
+    with state.db_lock:
+        row = conn.execute("SELECT id FROM run_history WHERE id = ?", (run_id,)).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="Run not found")
-    return {"data": repository.get_run_items(conn, run_id)}
+    with state.db_lock:
+        items = repository.get_run_items(conn, run_id)
+    return {"data": items}
 
 
 @router.get("/events")
@@ -54,7 +62,8 @@ def get_job_events(limit: int = 100, conn=Depends(state.get_conn)):
     source prefetch, upload push, language check, backup, and scheduled
     translation runs (merged in from run_history; see
     repository.list_job_events)."""
-    return {"data": repository.list_job_events(conn, limit=limit)}
+    with state.db_lock:
+        return {"data": repository.list_job_events(conn, limit=limit)}
 
 
 @router.get("/language-mismatches")
@@ -66,7 +75,9 @@ def get_language_mismatches(limit: int = 100, conn=Depends(state.get_conn)):
     was_uploaded distinguishes "already sent to Bazarr wrong" from
     "caught before it ever reached Bazarr" (still translated_pending_upload
     at detection time)."""
-    return {"data": [dict(row) for row in repository.list_language_mismatches(conn, limit=limit)]}
+    with state.db_lock:
+        rows = repository.list_language_mismatches(conn, limit=limit)
+    return {"data": [dict(row) for row in rows]}
 
 
 @router.get("/stats")
