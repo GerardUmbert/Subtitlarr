@@ -17,6 +17,7 @@ from app.api import (
     debug,
     engine_instances,
     engines,
+    external_translate,
     history,
     jobs,
     languages,
@@ -157,6 +158,7 @@ app.include_router(history.router)
 app.include_router(compare.router)
 app.include_router(debug.router)
 app.include_router(mcp.router)
+app.include_router(external_translate.router)
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 # The /mcp mount itself is (re-)created inside lifespan() above, not

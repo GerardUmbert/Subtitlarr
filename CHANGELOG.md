@@ -3,6 +3,32 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [dev]
+
+### Added
+- **A standalone translate endpoint** (`POST /api/external-translate`) lets
+  any third-party caller — Bazarr or otherwise — submit subtitle content
+  directly for translation, with no Bazarr wanted-list item behind it at
+  all. Accepts either raw `.srt` text (`srt_content`) or Bazarr's own
+  already-parsed cue JSON (`cues`, the exact shape `GET
+  /api/subtitles/contents` returns — lets Bazarr hand over what it already
+  has without re-serializing to a flat file first), converts either input
+  to the same internal representation, and reuses the existing chunking/
+  engine-cascade-translation/reassembly/disclaimer pipeline
+  (`engine.translator._translate_batches`) — the same one every normal
+  Bazarr-sourced run already goes through, including its hardened
+  response-parsing and fallback logic. A full file can take minutes, so
+  this returns a `job_id` immediately instead of blocking; poll `GET
+  /api/external-translate/{job_id}` for status/result. Backed by a new
+  `external_translate_jobs` table, deliberately separate from
+  `run_history`/`item_run_log` since those are both keyed to a Bazarr
+  `items.id` this input never has. Auth is a new, separate bearer token
+  (`GET /api/external-translate/status`, `POST .../regenerate-token`) —
+  not the MCP server's token (scoped for run-control/engine-cascade tools
+  this surface doesn't need) and not Bazarr's own API key (that's Bazarr's
+  outbound credential to itself, not something Subtitlarr issues, so it
+  can't authenticate an incoming caller here).
+
 ## [0.13.0]
 
 ### Added

@@ -990,3 +990,53 @@ def set_config(conn: sqlite3.Connection, key: str, value) -> None:
             """,
             (key, json.dumps(value), now),
         )
+
+
+def create_external_translate_job(
+    conn: sqlite3.Connection, source_lang: str, target_lang: str,
+) -> int:
+    """Starts a new standalone translate job (see
+    0025_add_external_translate_jobs.sql) — no items.id involved, since this
+    input never came from Bazarr's wanted list."""
+    now = _now()
+    with conn:
+        cur = conn.execute(
+            """
+            INSERT INTO external_translate_jobs (status, source_lang, target_lang, created_at)
+            VALUES ('pending', ?, ?, ?)
+            """,
+            (source_lang, target_lang, now),
+        )
+        return cur.lastrowid
+
+
+def mark_external_translate_job_running(conn: sqlite3.Connection, job_id: int) -> None:
+    with conn:
+        conn.execute(
+            "UPDATE external_translate_jobs SET status = 'running' WHERE id = ?", (job_id,)
+        )
+
+
+def finish_external_translate_job(
+    conn: sqlite3.Connection, job_id: int, *,
+    status: str, result_srt: str | None = None,
+    engine_used: str | None = None, model_used: str | None = None,
+    error: str | None = None,
+) -> None:
+    now = _now()
+    with conn:
+        conn.execute(
+            """
+            UPDATE external_translate_jobs
+            SET status = ?, result_srt = ?, engine_used = ?, model_used = ?, error = ?, finished_at = ?
+            WHERE id = ?
+            """,
+            (status, result_srt, engine_used, model_used, error, now, job_id),
+        )
+
+
+def get_external_translate_job(conn: sqlite3.Connection, job_id: int) -> dict | None:
+    row = conn.execute(
+        "SELECT * FROM external_translate_jobs WHERE id = ?", (job_id,)
+    ).fetchone()
+    return dict(row) if row is not None else None
