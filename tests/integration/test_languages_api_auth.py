@@ -11,6 +11,8 @@ from app import state
 from app.config import settings
 from app.main import app
 
+from tests.integration.conftest import log_in as _log_in_and_change_password
+
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
@@ -19,14 +21,6 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "bazarr_api_key", "testkey")
     with TestClient(app) as c:
         yield c
-
-
-def _log_in_and_change_password(client):
-    client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
-    client.post(
-        "/api/auth/change-password",
-        json={"current_password": "admin", "new_password": "realpassword123"},
-    )
 
 
 def test_languages_api_rejects_anonymous_request(client):

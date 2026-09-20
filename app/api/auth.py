@@ -107,6 +107,14 @@ def login_submit(req: LoginRequest, request: Request, conn=Depends(state.get_con
 
 @router.post("/api/auth/logout")
 def logout_submit(request: Request):
+    # Not behind require_session (see module docstring — would redirect-
+    # loop), so its CSRF check is applied directly here instead. Logout
+    # acts on an existing session, so it's exactly the kind of mutating,
+    # session-authenticated action CSRF targets — unlike login, which
+    # only ever establishes a session, never acts on one.
+    csrf_error = auth_session.check_csrf(request)
+    if csrf_error is not None:
+        raise HTTPException(status_code=403, detail=csrf_error)
     auth_session.log_out(request)
     return {"redirect": "/login"}
 
@@ -124,6 +132,9 @@ def change_password_page(request: Request):
 def change_password_submit(req: ChangePasswordRequest, request: Request, conn=Depends(state.get_conn)):
     if not auth_session.is_logged_in(request):
         raise HTTPException(status_code=401, detail="Not logged in")
+    csrf_error = auth_session.check_csrf(request)
+    if csrf_error is not None:
+        raise HTTPException(status_code=403, detail=csrf_error)
 
     creds = repository.get_admin_credentials(conn)
     if creds is None or not auth_session.verify_login(conn, creds["username"], req.current_password):

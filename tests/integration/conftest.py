@@ -8,7 +8,16 @@ def log_in(client) -> None:
     """Completes the full login + forced-password-change flow so the
     client's session cookie is fully authenticated (not just logged in
     but still must_change_password=True, which require_session_or_mcp_token
-    would still reject)."""
+    would still reject).
+
+    Also sets a same-origin Origin header on the client for every request
+    from here on — app.auth.session.check_csrf now rejects a mutating,
+    session-authenticated request with no Origin/Referer at all (or one
+    that doesn't match the request's own Host), and TestClient sends
+    neither header by default. TestClient always uses Host: testserver
+    (its fixed base_url), so this is the one Origin value that will ever
+    look same-origin to it."""
+    client.headers["Origin"] = "http://testserver"
     client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
     client.post(
         "/api/auth/change-password",

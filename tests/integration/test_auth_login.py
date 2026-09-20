@@ -11,6 +11,15 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "bazarr_base_url", "http://bazarr.test:6767")
     monkeypatch.setattr(settings, "bazarr_api_key", "testkey")
     with TestClient(app) as c:
+        # app.auth.session.check_csrf rejects a mutating, session-
+        # authenticated request with no Origin/Referer (or a mismatched
+        # one) — TestClient sends neither by default, and always uses
+        # Host: testserver (its fixed base_url), so this is the one
+        # Origin value that will ever look same-origin to it. This file
+        # tests the login flow's own individual steps directly rather
+        # than going through the shared conftest.log_in helper, so it
+        # sets this itself instead of importing that helper.
+        c.headers["Origin"] = "http://testserver"
         yield c
 
 

@@ -119,6 +119,58 @@ def _check_session(request: Request, conn) -> str | None:
     return None
 
 
+_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+def check_csrf(request: Request) -> str | None:
+    """Returns an error string if this request looks CSRF-forged, else
+    None. Only meaningful for SESSION-cookie auth — a cookie is attached
+    automatically by the browser to a cross-site request, which is
+    exactly what CSRF exploits; an explicit Authorization: Bearer header
+    (MCP/external-translate) can't be forged the same way by a page on
+    another origin, so bearer-authenticated requests never call this at
+    all (see both call sites below).
+
+    Only checked for mutating methods — a GET is not supposed to change
+    state, so there's nothing for a forged GET to exploit here.
+
+    Validates Origin (falling back to Referer's origin if Origin is
+    absent, which some older/plain clients omit on same-origin requests)
+    against the REQUEST'S OWN Host header — deliberately not a fixed
+    configured hostname or allowlist. This app is commonly reached via a
+    Tailscale IP (100.x.x.x) or a MagicDNS hostname that differs per
+    device, or a plain LAN IP — a hardcoded expected-origin would break
+    every one of those in favor of whichever single hostname happened to
+    be configured. Comparing against the incoming request's own Host
+    works correctly for all of them, since a genuine same-origin request
+    always has Origin's host equal to Host, regardless of what that host
+    actually is."""
+    if request.method.upper() in _SAFE_METHODS:
+        return None
+
+    origin = request.headers.get("origin")
+    if not origin:
+        referer = request.headers.get("referer")
+        if not referer:
+            # No Origin AND no Referer at all on a mutating request — most
+            # real browsers always send at least one on a same-origin
+            # fetch/form POST; a request with neither is unusual enough
+            # to treat as suspicious rather than silently allow. A bearer-
+            # token caller never reaches this function in the first
+            # place (see call sites), so this only ever runs for
+            # session-cookie requests, where a real browser is the only
+            # expected caller.
+            return "Missing Origin/Referer header on a state-changing request."
+        origin = referer
+
+    from urllib.parse import urlsplit
+    origin_host = urlsplit(origin).netloc
+    request_host = request.headers.get("host", "")
+    if origin_host != request_host:
+        return f"Origin/Referer host {origin_host!r} does not match request Host {request_host!r}."
+    return None
+
+
 def require_session(request: Request, conn=Depends(state.get_conn)) -> None:
     """API-route dependency (app/api/*.py) — a plain HTTPException with a
     real status code and JSON body, for a fetch()/script caller to branch
@@ -128,13 +180,17 @@ def require_session(request: Request, conn=Depends(state.get_conn)) -> None:
         raise HTTPException(status_code=401, detail="Not logged in")
     if target == "/change-password":
         raise HTTPException(status_code=403, detail="Password change required")
+    csrf_error = check_csrf(request)
+    if csrf_error is not None:
+        raise HTTPException(status_code=403, detail=csrf_error)
 
 
 def require_session_page(request: Request, conn=Depends(state.get_conn)) -> None:
     """Page-route dependency (main.py's _page() routes) — raises
     NeedsLoginRedirect instead of a JSON error, since a browser loading an
     HTML page should be redirected to /login or /change-password, not
-    shown a raw JSON error body."""
+    shown a raw JSON error body. No CSRF check here — every page route is
+    a GET (a safe method), never a state-changing request."""
     target = _check_session(request, conn)
     if target is not None:
         raise NeedsLoginRedirect(target)
@@ -153,7 +209,10 @@ def require_session_or_mcp_token(request: Request, conn=Depends(state.get_conn))
 
     A valid session still must not have must_change_password pending
     (same as require_session) — a bearer token bypasses that check
-    entirely, since a script has no password to change."""
+    entirely, since a script has no password to change. The CSRF check
+    ONLY runs on the session path — a bearer-token request never reaches
+    it, since Authorization headers aren't auto-attached cross-site the
+    way cookies are, so there's nothing for CSRF to exploit there."""
     # Local import: app.api.mcp doesn't import this module, so there's no
     # real cycle, but keeping it local avoids coupling this module's
     # import-time behavior to app.api's internal structure.
@@ -168,3 +227,6 @@ def require_session_or_mcp_token(request: Request, conn=Depends(state.get_conn))
         raise HTTPException(status_code=401, detail="Not logged in")
     if target == "/change-password":
         raise HTTPException(status_code=403, detail="Password change required")
+    csrf_error = check_csrf(request)
+    if csrf_error is not None:
+        raise HTTPException(status_code=403, detail=csrf_error)
