@@ -81,7 +81,10 @@ async def submit_external_translate(
     internal representation, and runs it through the normal chunking/
     cascade-translation pipeline as a background job. Full-file translation
     can take minutes, so this returns a job id immediately rather than
-    blocking — poll GET /{job_id} for the result."""
+    blocking — poll GET /{job_id} for the full result/error. Also starts a
+    job_events row (job='external_translate', triggered_by='api') so the
+    attempt (pass/fail, short summary) shows up on the History page's Jobs
+    tab even for a caller with no other visibility into this table."""
     _require_auth(conn, authorization)
 
     if req.cues is not None:
@@ -99,9 +102,13 @@ async def submit_external_translate(
         job_id = repository.create_external_translate_job(
             conn, req.source_language, req.target_language,
         )
+    with state.db_lock:
+        job_event_id = repository.start_job_event(conn, "external_translate", triggered_by="api")
 
     state.spawn_background_task(
-        run_external_translate_job(conn, job_id, source_subs, req.source_language, req.target_language),
+        run_external_translate_job(
+            conn, job_id, source_subs, req.source_language, req.target_language, job_event_id,
+        ),
         description=f"external-translate-job({job_id})",
     )
     return {"job_id": job_id, "status": "pending"}

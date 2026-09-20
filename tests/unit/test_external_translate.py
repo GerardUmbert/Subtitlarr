@@ -62,8 +62,9 @@ async def test_run_external_translate_job_success(conn, monkeypatch):
         [_cue(1, "Hello there.", 1, 3), _cue(2, "How are you?", 4, 6)]
     )
     job_id = repository.create_external_translate_job(conn, "en", "ca")
+    job_event_id = repository.start_job_event(conn, "external_translate", triggered_by="api")
 
-    await run_external_translate_job(conn, job_id, source_subs, "en", "ca")
+    await run_external_translate_job(conn, job_id, source_subs, "en", "ca", job_event_id)
 
     job = repository.get_external_translate_job(conn, job_id)
     assert job["status"] == "done"
@@ -74,6 +75,15 @@ async def test_run_external_translate_job_success(conn, monkeypatch):
     # Disclaimer cue prepended, same as a normal Bazarr-sourced run.
     assert "Subtitlarr used AI" in job["result_srt"] or "[fake-model]" in job["result_srt"]
 
+    # Shows up on the History page's Jobs tab, same mechanism as
+    # sync/backup/language-check jobs — see repository.list_job_events.
+    events = repository.list_job_events(conn)
+    matching = [e for e in events if e["id"] == job_event_id]
+    assert len(matching) == 1
+    assert matching[0]["job"] == "external_translate"
+    assert matching[0]["status"] == "done"
+    assert matching[0]["triggered_by"] == "api"
+
 
 @pytest.mark.asyncio
 async def test_run_external_translate_job_no_engine_configured(conn, monkeypatch):
@@ -82,12 +92,18 @@ async def test_run_external_translate_job_no_engine_configured(conn, monkeypatch
     )
     source_subs = external_translate_module.srt_io.cues_from_bazarr([_cue(1, "Hi.", 0, 1)])
     job_id = repository.create_external_translate_job(conn, "en", "ca")
+    job_event_id = repository.start_job_event(conn, "external_translate", triggered_by="api")
 
-    await run_external_translate_job(conn, job_id, source_subs, "en", "ca")
+    await run_external_translate_job(conn, job_id, source_subs, "en", "ca", job_event_id)
 
     job = repository.get_external_translate_job(conn, job_id)
     assert job["status"] == "failed"
     assert "No enabled" in job["error"]
+
+    events = repository.list_job_events(conn)
+    matching = [e for e in events if e["id"] == job_event_id]
+    assert matching[0]["status"] == "failed"
+    assert "No enabled" in matching[0]["error"]
 
 
 def test_translate_request_rejects_neither_input():

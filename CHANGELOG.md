@@ -27,7 +27,12 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   not the MCP server's token (scoped for run-control/engine-cascade tools
   this surface doesn't need) and not Bazarr's own API key (that's Bazarr's
   outbound credential to itself, not something Subtitlarr issues, so it
-  can't authenticate an incoming caller here).
+  can't authenticate an incoming caller here). Also logs a `job_events` row
+  (`external_translate`, `triggered_by='api'`) per attempt, so it shows up
+  on the History page's Jobs tab with a pass/fail status and a short
+  result/error summary — otherwise a caller with no UI access to
+  `external_translate_jobs` would have no way to even tell a translation
+  was attempted, let alone whether it succeeded.
 
 ## [0.13.0]
 

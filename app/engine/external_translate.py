@@ -21,13 +21,19 @@ class NoEngineConfiguredError(Exception):
     pass
 
 
-async def run_external_translate_job(conn, job_id: int, source_subs: list, source_lang: str, target_lang: str) -> None:
+async def run_external_translate_job(
+    conn, job_id: int, source_subs: list, source_lang: str, target_lang: str, job_event_id: int,
+) -> None:
     """Background task body — mirrors translate_item's own shape (chunk,
     translate, verify, disclaim, compose) but writes its outcome to
     external_translate_jobs instead of items/item_run_log, and never
     touches Bazarr. Any exception is caught and recorded as a failed job
     rather than propagating, since nothing awaits this task directly (see
-    state.spawn_background_task)."""
+    state.spawn_background_task). job_event_id is a job_events row (started
+    by the caller before spawning this task) so the attempt shows up on
+    the History page's Jobs tab — external_translate_jobs alone is
+    invisible anywhere in the UI, and a caller with no way to browse it
+    would otherwise have no way to even know a translation was attempted."""
     with state.db_lock:
         repository.mark_external_translate_job_running(conn, job_id)
 
@@ -73,7 +79,14 @@ async def run_external_translate_job(conn, job_id: int, source_subs: list, sourc
                 result_srt=srt_bytes.decode("utf-8"),
                 engine_used=engine_used, model_used=model_used,
             )
+        with state.db_lock:
+            repository.finish_job_event(
+                conn, job_event_id, status="done",
+                result=f"{source_lang}->{target_lang} via {engine_used}/{model_used}, {len(translated_subs)} cues",
+            )
     except Exception as exc:
         logger.exception("External translate job %s failed", job_id)
         with state.db_lock:
             repository.finish_external_translate_job(conn, job_id, status="failed", error=str(exc))
+        with state.db_lock:
+            repository.finish_job_event(conn, job_event_id, status="failed", error=str(exc))
