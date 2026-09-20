@@ -117,6 +117,7 @@
 
     <div class="docs-sidebar-group">Reference</div>
     <a href="#mcp-server">AI assistant access (MCP)</a>
+    <a href="#external-translate">External translate API</a>
     <a href="#troubleshooting">Troubleshooting</a>
     <a href="#limitations">Known limitations</a>
   </aside>
@@ -260,6 +261,53 @@
 
     <h3>The non-retry safety rule</h3>
     <p>An item already <code>failed</code> with a content-blocked, quota-exhausted, or dead-credential error should never be resubmitted to the same engine — repeating that risks the provider's own abuse enforcement against the account (up to suspension), not just another failed item. This rule is written directly into the run-control tools' own descriptions: the assistant is expected to classify a failure first and route non-retryable ones to manual translation instead of retrying them. It's guidance the assistant follows, not a hard block enforced by the server today.</p>
+
+    <h2 id="external-translate" class="reveal-scroll">External translate API</h2>
+    <p>A plain REST endpoint for any third-party tool — Bazarr, another *arr-adjacent app, a script — to submit subtitle content directly for translation by Subtitlarr's own configured engine cascade, with no Bazarr wanted-list item involved at all. This is separate from the queue/run endpoints the web UI itself uses: nothing submitted here appears on the Queue or Dashboard, since there's no Bazarr item behind it.</p>
+
+    <h3>Authentication</h3>
+    <p>Its own bearer token, independent of both the MCP server's token and Bazarr's own API key:</p>
+    <pre><code>GET  /api/external-translate/status           -&gt; {"token": "..."}
+POST /api/external-translate/regenerate-token -&gt; {"token": "..."}</code></pre>
+    <p>Send it as <code>Authorization: Bearer &lt;token&gt;</code> on every request below.</p>
+
+    <h3>Submitting content</h3>
+    <p><code>source_language</code>/<code>target_language</code> are normalized to their bare language subtag before translation — <code>"es-ES"</code>, <code>"pt_BR"</code>, and <code>"EN"</code> are all accepted and treated the same as <code>"es"</code>, <code>"pt"</code>, and <code>"en"</code> respectively (only the part before a <code>-</code>/<code>_</code> is used, lowercased). This matches the bare-code convention Bazarr itself uses (even its own non-standard codes like <code>"pb"</code> for Brazilian Portuguese are flat, never hyphenated) and protects against any other caller's convention differing.</p>
+    <pre><code>POST /api/external-translate
+{
+  "source_language": "en",
+  "target_language": "ca",
+
+  // exactly one of:
+  "srt_content": "1\n00:00:01,000 --&gt; 00:00:03,000\nHello there.\n",
+  "cues": [ { "index": 1, "content": "Hello there.", "proprietary": "",
+              "start": {"hours":0,"minutes":0,"seconds":1,"total_seconds":1,"microseconds":0},
+              "end":   {"hours":0,"minutes":0,"seconds":3,"total_seconds":3,"microseconds":0} } ]
+}</code></pre>
+    <p><code>cues</code> is the exact shape Bazarr's own <code>GET /api/subtitles/contents</code> already returns — a caller that got its source subtitle from Bazarr can hand that response straight through without re-serializing it to a flat <code>.srt</code> file first. Anyone else without that shape on hand just sends <code>srt_content</code>, a plain raw <code>.srt</code> file's text.</p>
+    <p>A full file can take minutes to translate — this returns immediately:</p>
+    <pre><code>{"job_id": 42, "status": "pending"}</code></pre>
+
+    <h3>Polling for the result</h3>
+    <pre><code>GET /api/external-translate/42
+
+{
+  "id": 42,
+  "status": "done",              // pending | running | done | failed
+  "source_lang": "en",
+  "target_lang": "ca",
+  "result_srt": "1\n00:00:00,000 --&gt; 00:00:10,000\nSubtitlarr used AI...\n\n2\n...",
+  "engine_used": "gemini",
+  "model_used": "gemini-3.5-flash-lite",
+  "error": null,
+  "created_at": "...",
+  "finished_at": "..."
+}</code></pre>
+    <p>There is no push/callback mechanism yet — the caller is responsible for polling until <code>status</code> is <code>done</code> or <code>failed</code>, then doing whatever it needs with <code>result_srt</code> (e.g. uploading it to Bazarr itself, since Subtitlarr never does that on this path).</p>
+    <p>Every attempt also logs a <code>job_events</code> row (visible on the History page's Jobs tab as <code>external_translate</code>) with a short pass/fail summary, so there's at least a visible trail in the app even though the job itself has no other UI.</p>
+
+    <h3>From an MCP-connected assistant</h3>
+    <p>The same capability is exposed as two MCP tools — <code>subtitlarr_submit_external_translate</code> and <code>subtitlarr_get_external_translate_job</code> — for an assistant that wants Subtitlarr's own configured engine to do the translating (as opposed to the <a href="#mcp-server">manual-translation tools</a>, where the assistant translates it itself). These reuse the MCP session's own bearer token; no separate external-translate token is needed when calling through MCP.</p>
 
     <h2 id="troubleshooting" class="reveal-scroll">Troubleshooting</h2>
 

@@ -33,6 +33,37 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   result/error summary — otherwise a caller with no UI access to
   `external_translate_jobs` would have no way to even tell a translation
   was attempted, let alone whether it succeeded.
+- **The same capability, exposed to the MCP server** as
+  `subtitlarr_submit_external_translate`/
+  `subtitlarr_get_external_translate_job`, for an assistant that wants
+  Subtitlarr's own configured engine cascade to do the translating rather
+  than translating the content itself (contrast with the existing
+  manual-translation tools). Calls the same underlying functions the HTTP
+  endpoint uses, in-process, skipping that endpoint's own bearer-token
+  check — the MCP session's token already gates the whole connection, same
+  as every other MCP tool. Documented in a new "External translate API"
+  section on the docs site and in the README.
+- **`source_language`/`target_language` on the external-translate
+  endpoint/MCP tools are now normalized to their bare language subtag**
+  (`"es-ES"`, `"pt_BR"`, `"EN"` all become `"es"`, `"pt"`, `"en"`) instead
+  of passed straight through — everything downstream (`language_name`,
+  the disclaimer-translation lookup, `language_variants`) is keyed on
+  bare codes only, matching the bare-code convention Bazarr itself uses
+  (even Bazarr's own non-standard codes like `"pb"` are flat, never
+  hyphenated). Without this, a caller sending a hyphenated/underscored
+  code would silently get an unrecognized-language prompt and an
+  English-only disclaimer instead of an error, rather than a working
+  translation.
+
+### Fixed
+- **A CI-flaky integration test** (`test_run_item_force_query_param_reaches_run_single_item`)
+  asserted on a value only set by a fire-and-forget background task,
+  immediately after the triggering request returned — the endpoint
+  responds as soon as the task is *scheduled* via
+  `state.spawn_background_task`, not once it has actually *run*, so the
+  assertion raced the task's own event loop. Now synchronizes on a
+  `threading.Event` set from inside the task instead of relying on
+  request-completion timing.
 
 ## [0.13.0]
 

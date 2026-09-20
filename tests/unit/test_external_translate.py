@@ -133,3 +133,18 @@ def test_translate_request_accepts_cues_only():
         source_language="en", target_language="ca", cues=[_cue(1, "Hi.", 0, 1)],
     )
     assert req.srt_content is None
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("es-ES", "es"), ("pt_BR", "pt"), ("EN", "en"), ("fr-CA", "fr"), ("ca", "ca"),
+])
+def test_translate_request_normalizes_regional_codes(raw, expected):
+    req = TranslateRequest(
+        source_language=raw, target_language="ca", cues=[_cue(1, "Hi.", 0, 1)],
+    )
+    assert req.source_language == expected
+
+
+def test_translate_request_rejects_empty_language():
+    with pytest.raises(ValueError):
+        TranslateRequest(source_language="", target_language="ca", cues=[_cue(1, "Hi.", 0, 1)])

@@ -270,10 +270,28 @@ configure X" from the real current docs), queue/job/history status, manual
 translation (for items a configured engine can't handle — content-filter
 refusals, exhausted quota, a dead credential), run control, sync jobs,
 engine-cascade reordering (never credential writes), the schedule/age-
-threshold cutoff, and language rules (read-only). See the
+threshold cutoff, language rules (read-only), and submitting raw subtitle
+content for translation by Subtitlarr's own engine cascade with no Bazarr
+item involved (see [External translate API](#external-translate-api)
+below). See the
 [docs site](https://gerardumbert.github.io/Subtitlarr/docs.html#mcp-server)
 for the full tool list and the non-retry safety rule that keeps a
 content-blocked item from being resubmitted to the same engine.
+
+## External translate API
+
+A plain REST endpoint (`POST /api/external-translate`) lets any
+third-party tool — Bazarr, another app, a script — submit subtitle content
+directly for translation by Subtitlarr's own configured engine cascade,
+with no Bazarr wanted-list item involved. Accepts either a raw `.srt`
+file's text or Bazarr's own already-parsed cue JSON (the same shape `GET
+/api/subtitles/contents` returns), returns a job id immediately since a
+full file can take minutes, and `GET /api/external-translate/{job_id}`
+polls for the result. Gated by its own bearer token (`GET
+/api/external-translate/status`), separate from both the MCP server's
+token and Bazarr's own API key. See the
+[docs site](https://gerardumbert.github.io/Subtitlarr/docs.html#external-translate)
+for the full request/response shapes.
 
 ## Requirements
 

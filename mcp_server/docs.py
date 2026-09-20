@@ -32,8 +32,10 @@ DOC_LINKS = [
             "The deep-reference page: the recommended multi-pass workflow "
             "in depth, how the engine cascade and content-block bisection "
             "actually behave, rate limits/cooldown, every setting with its "
-            "default, queue-uploads explained, MCP tool reference, "
-            "troubleshooting, and known limitations."
+            "default, queue-uploads explained, MCP tool reference, the "
+            "external translate API (submit raw subtitle content for "
+            "translation with no Bazarr item involved), troubleshooting, "
+            "and known limitations."
         ),
     },
     {

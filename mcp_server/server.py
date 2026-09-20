@@ -24,7 +24,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
 
 from app import state
-from app.api import dashboard, engine_instances, history, jobs, languages, queue, run, schedule
+from app.api import dashboard, engine_instances, external_translate, history, jobs, languages, queue, run, schedule
 from mcp_server.docs import DOC_LINKS
 from mcp_server.safety import classify_failure
 
@@ -697,6 +697,60 @@ def build_mcp() -> FastMCP:
         restriction; non-empty limits which of Bazarr's wanted target
         languages Subtitlarr will actually translate into)."""
         return languages.get_language_config(conn=state.get_conn())
+
+    # -----------------------------------------------------------------
+    # Standalone translate (no Bazarr item involved) — lets THIS
+    # assistant hand over subtitle content it already has (read from a
+    # local file, fetched from somewhere else, whatever) and get back a
+    # translation done by Subtitlarr's OWN configured engine cascade,
+    # instead of the assistant translating it itself (contrast with the
+    # manual-translation tools above, where the calling model IS the
+    # translator). No Bazarr wanted-list item is created or touched.
+    # -----------------------------------------------------------------
+
+    @mcp.tool(annotations=MUTATING)
+    @_catch_http_errors
+    async def subtitlarr_submit_external_translate(
+        source_language: str, target_language: str,
+        srt_content: str | None = None, cues: list[dict] | None = None,
+    ) -> dict:
+        """Submits subtitle content for translation by Subtitlarr's own
+        configured engine cascade (whatever's set up on the Engines
+        page) — not by the calling model itself. Provide EXACTLY ONE of
+        srt_content (a raw .srt file's text) or cues (Bazarr's own
+        already-parsed cue format: a list of {index, content,
+        proprietary, start: {hours,minutes,seconds,total_seconds,
+        microseconds}, end: {...}}).
+
+        Runs through the same chunking/cascade-translation/reassembly/
+        disclaimer pipeline a normal Bazarr-sourced run uses. Full-file
+        translation can take minutes, so this returns {job_id, status:
+        "pending"} immediately — poll subtitlarr_get_external_translate_job
+        with that job_id for the result. No Bazarr item is created;
+        nothing here shows up on the Queue page, only as a job_events
+        row on the History page's Jobs tab.
+
+        For a large file, prefer reading it into srt_content/cues from a
+        variable already in your context rather than re-typing it — this
+        tool doesn't ask you to reproduce output you already generated
+        (unlike subtitlarr_submit_manual_translation), but a very large
+        payload as a tool-call argument is still slower and costlier than
+        it needs to be. There is no REST-script workaround needed here
+        the way there is for manual-translation submission."""
+        req = external_translate.TranslateRequest(
+            source_language=source_language, target_language=target_language,
+            srt_content=srt_content, cues=cues,
+        )
+        return await external_translate.submit_external_translate(req, conn=state.get_conn())
+
+    @mcp.tool(annotations=READ_ONLY)
+    @_catch_http_errors
+    def subtitlarr_get_external_translate_job(job_id: int) -> dict:
+        """Status/result for a job started by
+        subtitlarr_submit_external_translate: {status: pending|running|
+        done|failed, result_srt (the finished .srt text, once done),
+        engine_used, model_used, error (once failed)}."""
+        return external_translate.get_external_translate_job(job_id, conn=state.get_conn())
 
     return mcp
 

@@ -66,6 +66,8 @@ def test_run_item_force_query_param_reaches_run_single_item(client, monkeypatch)
     marked done via the pre-existing-subtitle skip (source_is_external),
     where the file sitting on Bazarr was never actually verified/
     translated by Subtitlarr and needs to be overwritten deliberately."""
+    import threading
+
     from app.api import queue as queue_module
     from app.engine.runner import RunController
 
@@ -77,13 +79,25 @@ def test_run_item_force_query_param_reaches_run_single_item(client, monkeypatch)
     monkeypatch.setattr(queue_module.selector, "build_source_map", fake_build_source_map)
 
     received = {}
+    # run_single_item is fired via state.spawn_background_task, so the
+    # endpoint returns 200 as soon as the task is SCHEDULED, not once it
+    # has actually run — asserting on `received` right after the request
+    # races the background task's own event loop (TestClient runs the app
+    # in a separate thread, so there's no task handle this test can await
+    # directly). A threading.Event, set from inside the faked coroutine,
+    # gives a real synchronization point instead of relying on timing —
+    # confirmed live as the cause of this test's intermittent CI failures
+    # (KeyError: 'force_translate' when the task hadn't run yet).
+    done = threading.Event()
 
     async def fake_run_single_item(self, item_id, force_translate=False):
         received["force_translate"] = force_translate
+        done.set()
         return None
 
     monkeypatch.setattr(RunController, "run_single_item", fake_run_single_item)
 
     resp = client.post(f"/api/queue/{item['id']}/run?force=true")
     assert resp.status_code == 200
+    assert done.wait(timeout=5), "run_single_item was never called"
     assert received["force_translate"] is True
