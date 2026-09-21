@@ -1,6 +1,8 @@
 import functools
 import logging
+import os
 import secrets
+import tempfile
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -160,8 +162,27 @@ def _get_or_create_session_secret() -> str:
     live in app_config) — middleware can't be added inside lifespan once
     the app has started. Stored as a plain file next to the DB instead;
     same file survives restarts the same way app_config would, just one
-    layer earlier in startup than the DB is available."""
-    secret_path = Path(settings.db_path).parent / ".session_secret"
+    layer earlier in startup than the DB is available.
+
+    Reads DB_PATH straight from the environment rather than trusting
+    `settings.db_path` — this whole function runs at MODULE IMPORT TIME
+    (app.add_middleware() below, right after `app = FastAPI(...)`), before
+    any test's `monkeypatch.setattr(settings, "db_path", ...)` has had a
+    chance to run, so `settings.db_path` here is always whatever the
+    Settings class's bare default is, never a per-test override. That
+    default is the absolute `/data/subtitlarr.db` (see AGENTS.md's own
+    warning about this exact default) — real and correctly writable
+    inside the actual Docker container, but not on a bare CI runner or a
+    dev machine with no DB_PATH set, which is exactly what broke CI here
+    (PermissionError: [Errno 13] Permission denied: '/data'). Falling
+    back to a temp-directory path when DB_PATH truly isn't set avoids
+    ever touching a hardcoded absolute path this process doesn't own."""
+    db_path = os.environ.get("DB_PATH")
+    if db_path:
+        secret_dir = Path(db_path).parent
+    else:
+        secret_dir = Path(tempfile.gettempdir()) / "subtitlarr"
+    secret_path = secret_dir / ".session_secret"
     if secret_path.exists():
         return secret_path.read_text(encoding="utf-8").strip()
     secret_path.parent.mkdir(parents=True, exist_ok=True)
