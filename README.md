@@ -305,6 +305,14 @@ for the full request/response shapes.
 See the [Install guide](https://gerardumbert.github.io/Subtitlarr/install.html)
 for the full walkthrough; the essentials are below.
 
+> Every install seeds a default `admin`/`admin` account and forces a real
+> password on first login. Change your username/password anytime from the
+> **Account** page (User menu at the bottom of the sidebar). Locked out?
+> Run `subtitlarr --reset-admin` from the container's console — on
+> Unraid, the Docker tab's container icon → **Console** button; from a
+> shell, `docker exec -it subtitlarr subtitlarr --reset-admin` — to reset
+> both back to `admin`/`admin`, forcing a password change on next login.
+
 ### Docker (published image)
 
 ```bash
@@ -315,20 +323,10 @@ docker run -d \
   ghcr.io/gerardumbert/subtitlarr:latest
 ```
 
-Open `http://localhost:7777` — you'll be asked to log in. First boot
-seeds a default `admin`/`admin` account and forces you to set a real
-password before continuing (existing installs updating from an older
-version get the same seeded account on their next start). From there,
-set your Bazarr connection from **Settings** and add at least one engine
-instance from the **Translation Engine** page before running a
-translation.
-
-You can change the username/password anytime from the **Account** page
-(User menu at the bottom of the sidebar). If you ever get locked out, run
-`subtitlarr --reset-admin` from the container's console — on Unraid, the
-Docker tab's container icon → **Console** button; from a shell, `docker
-exec -it subtitlarr subtitlarr --reset-admin` — to reset both back to
-`admin`/`admin`, forcing a password change on next login.
+Open `http://localhost:7777` — you'll be asked to log in with the default
+credentials above, then set a real password. From there, set your Bazarr
+connection from **Settings** and add at least one engine instance from
+the **Translation Engine** page before running a translation.
 
 ### Docker Compose (local dev, or if you don't already run Ollama)
 

@@ -47,6 +47,10 @@
     <a href="#config">Configuration</a>
   </div>
 
+  <div class="callout reveal">
+    Every install seeds a default <code>admin</code>/<code>admin</code> account and forces a real password on first login. Change your username/password anytime from the <strong>Account</strong> page (User menu at the bottom of the sidebar). Locked out? Run <code>subtitlarr --reset-admin</code> from the container's console — Unraid: Docker tab → container icon → <strong>Console</strong>; shell: <code>docker exec -it subtitlarr subtitlarr --reset-admin</code> — to reset both back to <code>admin</code>/<code>admin</code>.
+  </div>
+
   <h2 id="docker" class="reveal-scroll">Docker (published image)</h2>
   <p class="reveal-scroll">The fastest path if you already run other containers by hand:</p>
   <pre class="reveal-scroll"><code>docker run -d \
@@ -54,7 +58,7 @@
   -p 7777:7777 \
   -v ./data:/data \
   ghcr.io/gerardumbert/subtitlarr:latest</code></pre>
-  <p>Open <code>http://localhost:7777</code> — you'll be asked to log in. First boot seeds a default <code>admin</code>/<code>admin</code> account and forces you to set a real password before continuing (existing installs updating from an older version get the same seeded account on their next start). From there, set your Bazarr connection from <strong>Settings</strong> and add at least one engine instance from the <strong>Translation Engine</strong> page before running a translation. You can change the username/password anytime from the <strong>Account</strong> page (User menu at the bottom of the sidebar); if you ever get locked out, run <code>subtitlarr --reset-admin</code> from the container's console — on Unraid, the Docker tab's container icon → <strong>Console</strong> button; from a shell, <code>docker exec -it subtitlarr subtitlarr --reset-admin</code> — to reset both back to <code>admin</code>/<code>admin</code>.</p>
+  <p>Open <code>http://localhost:7777</code> — you'll be asked to log in with the default credentials above, then set a real password. From there, set your Bazarr connection from <strong>Settings</strong> and add at least one engine instance from the <strong>Translation Engine</strong> page before running a translation.</p>
 
   <h2 id="compose" class="reveal-scroll">Docker Compose</h2>
   <p class="reveal-scroll">Good for local dev, or if you don't already run Ollama:</p>
