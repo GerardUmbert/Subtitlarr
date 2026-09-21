@@ -4,6 +4,8 @@ from fastapi.testclient import TestClient
 from app.config import settings
 from app.main import app
 
+from tests.integration.conftest import log_in
+
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
@@ -11,6 +13,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "bazarr_base_url", "http://bazarr.test:6767")
     monkeypatch.setattr(settings, "bazarr_api_key", "testkey")
     with TestClient(app) as c:
+        log_in(c)
         yield c
 
 

@@ -6,11 +6,14 @@ from fastapi.testclient import TestClient
 from app.config import settings
 from app.main import app
 
+from tests.integration.conftest import log_in
+
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "db_path", str(tmp_path / "test.db"))
     with TestClient(app) as c:
+        log_in(c)
         yield c
 
 

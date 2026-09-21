@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app import state
+from app.auth.session import require_session_or_mcp_token
 from app.engine.compare import (
     CompareError,
     is_library_cached,
@@ -14,7 +15,10 @@ from app.providers import languages as language_names
 from app.providers import registry
 from app.subtitles import srt_io
 
-router = APIRouter(prefix="/api/compare", tags=["compare"])
+router = APIRouter(
+    prefix="/api/compare", tags=["compare"],
+    dependencies=[Depends(require_session_or_mcp_token)],
+)
 
 
 @router.get("/languages")

@@ -31,4 +31,17 @@
     <span class="label">bazarr</span>
     <span class="mono">checking…</span>
   </div>
+
+  <button type="button" class="nav-item" id="logout-button" title="Log out" style="width:100%; border:none; background:none; cursor:pointer;">
+    <span class="dot"></span><span class="icon">⏻</span><span class="label">Log out</span>
+  </button>
+  <script>
+    document.getElementById("logout-button").addEventListener("click", async function () {
+      try {
+        await fetch("/api/auth/logout", { method: "POST" });
+      } finally {
+        window.location.href = "/login";
+      }
+    });
+  </script>
 </aside>

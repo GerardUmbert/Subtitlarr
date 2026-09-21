@@ -5,10 +5,14 @@ from pydantic import BaseModel
 
 from app import state
 from app.api import jobs as jobs_api
+from app.auth.session import require_session_or_mcp_token
 from app.config import settings
 from app.db import settings_store
 
-router = APIRouter(prefix="/api", tags=["schedule"])
+router = APIRouter(
+    prefix="/api", tags=["schedule"],
+    dependencies=[Depends(require_session_or_mcp_token)],
+)
 
 
 class ScheduleConfig(BaseModel):
@@ -102,31 +106,43 @@ def set_schedule_config(
         raise HTTPException(status_code=422, detail=f"Invalid cron expression: {exc}") from exc
 
     settings.schedule_cron = config.cron_expression
-    settings_store.save_one(conn, "schedule_cron", config.cron_expression)
+    with state.db_lock:
+        settings_store.save_one(conn, "schedule_cron", config.cron_expression)
     settings.age_threshold_days = config.age_threshold_days
-    settings_store.save_one(conn, "age_threshold_days", config.age_threshold_days)
+    with state.db_lock:
+        settings_store.save_one(conn, "age_threshold_days", config.age_threshold_days)
     settings.daily_translation_limit = config.daily_translation_limit
-    settings_store.save_one(conn, "daily_translation_limit", config.daily_translation_limit)
+    with state.db_lock:
+        settings_store.save_one(conn, "daily_translation_limit", config.daily_translation_limit)
     settings.pause_between_items_seconds = config.pause_between_items_seconds
-    settings_store.save_one(conn, "pause_between_items_seconds", config.pause_between_items_seconds)
+    with state.db_lock:
+        settings_store.save_one(conn, "pause_between_items_seconds", config.pause_between_items_seconds)
     settings.clear_rate_limits_before_scheduled_run = config.clear_rate_limits_before_scheduled_run
-    settings_store.save_one(
-        conn, "clear_rate_limits_before_scheduled_run", config.clear_rate_limits_before_scheduled_run
-    )
+    with state.db_lock:
+        settings_store.save_one(
+            conn, "clear_rate_limits_before_scheduled_run", config.clear_rate_limits_before_scheduled_run
+        )
     settings.queue_uploads_enabled = config.queue_uploads_enabled
-    settings_store.save_one(conn, "queue_uploads_enabled", config.queue_uploads_enabled)
+    with state.db_lock:
+        settings_store.save_one(conn, "queue_uploads_enabled", config.queue_uploads_enabled)
     settings.push_uploads_cron = config.push_uploads_cron
-    settings_store.save_one(conn, "push_uploads_cron", config.push_uploads_cron)
+    with state.db_lock:
+        settings_store.save_one(conn, "push_uploads_cron", config.push_uploads_cron)
     settings.sync_media_cron = config.sync_media_cron
-    settings_store.save_one(conn, "sync_media_cron", config.sync_media_cron)
+    with state.db_lock:
+        settings_store.save_one(conn, "sync_media_cron", config.sync_media_cron)
     settings.sync_subs_cron = config.sync_subs_cron
-    settings_store.save_one(conn, "sync_subs_cron", config.sync_subs_cron)
+    with state.db_lock:
+        settings_store.save_one(conn, "sync_subs_cron", config.sync_subs_cron)
     settings.language_check_cron = config.language_check_cron
-    settings_store.save_one(conn, "language_check_cron", config.language_check_cron)
+    with state.db_lock:
+        settings_store.save_one(conn, "language_check_cron", config.language_check_cron)
     settings.backup_cron = config.backup_cron
-    settings_store.save_one(conn, "backup_cron", config.backup_cron)
+    with state.db_lock:
+        settings_store.save_one(conn, "backup_cron", config.backup_cron)
     settings.telemetry_enabled = config.telemetry_enabled
-    settings_store.save_one(conn, "telemetry_enabled", config.telemetry_enabled)
+    with state.db_lock:
+        settings_store.save_one(conn, "telemetry_enabled", config.telemetry_enabled)
     return {"saved": True}
 
 

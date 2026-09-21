@@ -1,9 +1,13 @@
 from fastapi import APIRouter, Depends
 
 from app import state
+from app.auth.session import require_session_or_mcp_token
 from app.engine import run_events
 
-router = APIRouter(prefix="/api/run", tags=["run"])
+router = APIRouter(
+    prefix="/api/run", tags=["run"],
+    dependencies=[Depends(require_session_or_mcp_token)],
+)
 
 
 @router.post("/now")

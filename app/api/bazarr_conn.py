@@ -2,12 +2,16 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app import state
+from app.auth.session import require_session_or_mcp_token
 from app.bazarr.client import BazarrClient
 from app.config import settings
 from app.db import settings_store
 from app.providers.languages import refresh_bazarr_names
 
-router = APIRouter(prefix="/api/config/bazarr", tags=["bazarr"])
+router = APIRouter(
+    prefix="/api/config/bazarr", tags=["bazarr"],
+    dependencies=[Depends(require_session_or_mcp_token)],
+)
 
 
 def _mask(secret: str) -> str:
@@ -40,10 +44,12 @@ def get_bazarr_config():
 @router.post("")
 async def set_bazarr_config(config: BazarrConfig, conn=Depends(state.get_conn)):
     settings.bazarr_base_url = config.base_url
-    settings_store.save_one(conn, "bazarr_base_url", config.base_url)
+    with state.db_lock:
+        settings_store.save_one(conn, "bazarr_base_url", config.base_url)
     if config.api_key:
         settings.bazarr_api_key = config.api_key
-        settings_store.save_one(conn, "bazarr_api_key", config.api_key)
+        with state.db_lock:
+            settings_store.save_one(conn, "bazarr_api_key", config.api_key)
     if state.bazarr_client is not None:
         await state.bazarr_client.aclose()
     state.bazarr_client = BazarrClient(base_url=settings.bazarr_base_url, api_key=settings.bazarr_api_key)

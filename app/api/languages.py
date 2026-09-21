@@ -2,10 +2,14 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app import state
+from app.auth.session import require_session_or_mcp_token
 from app.db import repository
 from app.providers.prompts import DEFAULT_LANGUAGE_VARIANTS, LANGUAGE_VARIANTS
 
-router = APIRouter(prefix="/api/config/languages", tags=["languages"])
+router = APIRouter(
+    prefix="/api/config/languages", tags=["languages"],
+    dependencies=[Depends(require_session_or_mcp_token)],
+)
 
 
 class LanguageConfig(BaseModel):
@@ -24,11 +28,19 @@ class LanguageConfig(BaseModel):
 
 @router.get("")
 def get_language_config(conn=Depends(state.get_conn)):
+    with state.db_lock:
+        source_priority = repository.get_config(conn, "source_lang_priority", default=["en"])
+    with state.db_lock:
+        catalan_vegeta_insults = repository.get_config(conn, "catalan_vegeta_insults", default=False)
+    with state.db_lock:
+        language_variants = repository.get_config(conn, "language_variants", default={})
+    with state.db_lock:
+        target_language_allowlist = repository.get_config(conn, "target_lang_allowlist", default=[])
     return {
-        "source_priority": repository.get_config(conn, "source_lang_priority", default=["en"]),
-        "catalan_vegeta_insults": repository.get_config(conn, "catalan_vegeta_insults", default=False),
-        "language_variants": repository.get_config(conn, "language_variants", default={}),
-        "target_language_allowlist": repository.get_config(conn, "target_lang_allowlist", default=[]),
+        "source_priority": source_priority,
+        "catalan_vegeta_insults": catalan_vegeta_insults,
+        "language_variants": language_variants,
+        "target_language_allowlist": target_language_allowlist,
     }
 
 
@@ -49,8 +61,12 @@ def get_available_variants():
 
 @router.post("")
 def set_language_config(config: LanguageConfig, conn=Depends(state.get_conn)):
-    repository.set_config(conn, "source_lang_priority", config.source_priority)
-    repository.set_config(conn, "catalan_vegeta_insults", config.catalan_vegeta_insults)
-    repository.set_config(conn, "language_variants", config.language_variants)
-    repository.set_config(conn, "target_lang_allowlist", config.target_language_allowlist)
+    with state.db_lock:
+        repository.set_config(conn, "source_lang_priority", config.source_priority)
+    with state.db_lock:
+        repository.set_config(conn, "catalan_vegeta_insults", config.catalan_vegeta_insults)
+    with state.db_lock:
+        repository.set_config(conn, "language_variants", config.language_variants)
+    with state.db_lock:
+        repository.set_config(conn, "target_lang_allowlist", config.target_language_allowlist)
     return {"saved": True}

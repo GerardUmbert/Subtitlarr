@@ -1040,3 +1040,75 @@ def get_external_translate_job(conn: sqlite3.Connection, job_id: int) -> dict | 
         "SELECT * FROM external_translate_jobs WHERE id = ?", (job_id,)
     ).fetchone()
     return dict(row) if row is not None else None
+
+
+def get_admin_credentials(conn: sqlite3.Connection) -> dict | None:
+    """The single admin_credentials row (see
+    0027_add_admin_credentials.sql) — None only before
+    auth.session.ensure_admin_seeded() has ever run."""
+    row = conn.execute("SELECT * FROM admin_credentials WHERE id = 1").fetchone()
+    return dict(row) if row is not None else None
+
+
+def create_admin_credentials(
+    conn: sqlite3.Connection, username: str, password_hash: str, must_change_password: bool,
+) -> None:
+    now = _now()
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO admin_credentials (id, username, password_hash, must_change_password, created_at, updated_at)
+            VALUES (1, ?, ?, ?, ?, ?)
+            """,
+            (username, password_hash, must_change_password, now, now),
+        )
+
+
+def update_admin_password(
+    conn: sqlite3.Connection, password_hash: str, must_change_password: bool = False,
+) -> None:
+    now = _now()
+    with conn:
+        conn.execute(
+            """
+            UPDATE admin_credentials
+            SET password_hash = ?, must_change_password = ?, updated_at = ?
+            WHERE id = 1
+            """,
+            (password_hash, must_change_password, now),
+        )
+
+
+def create_manual_translation_upload_token(
+    conn: sqlite3.Connection, token: str, item_id: int, expires_at: str,
+) -> None:
+    now = _now()
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO manual_translation_upload_tokens (token, item_id, expires_at, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (token, item_id, expires_at, now),
+        )
+
+
+def consume_manual_translation_upload_token(conn: sqlite3.Connection, token: str, item_id: int) -> bool:
+    """Validates AND marks the token used in one atomic UPDATE — deliberately
+    not a separate SELECT-then-UPDATE, which would let two concurrent
+    requests both pass the check before either marks it used (a real
+    single-use bypass). Returns True only if the token existed, was for
+    THIS item_id specifically, was unused, and hadn't expired — the same
+    single UPDATE enforces all four conditions at once via its WHERE
+    clause, so rowcount tells the whole story."""
+    now = _now()
+    with conn:
+        cur = conn.execute(
+            """
+            UPDATE manual_translation_upload_tokens
+            SET used_at = ?
+            WHERE token = ? AND item_id = ? AND used_at IS NULL AND expires_at > ?
+            """,
+            (now, token, item_id, now),
+        )
+        return cur.rowcount > 0

@@ -11,6 +11,7 @@ import sqlite3
 import statistics
 from datetime import datetime, timedelta, timezone
 
+from app import state
 from app.engine import log_events
 
 _RANGE_DAYS = {"7d": 7, "30d": 30}
@@ -25,26 +26,28 @@ def _range_cutoff(range_: str) -> str | None:
 
 
 def _items_per_language(conn: sqlite3.Connection) -> list[dict]:
-    rows = conn.execute(
-        """
-        SELECT target_language, COUNT(*) AS n
-        FROM items
-        GROUP BY target_language
-        ORDER BY n DESC
-        """
-    ).fetchall()
+    with state.db_lock:
+        rows = conn.execute(
+            """
+            SELECT target_language, COUNT(*) AS n
+            FROM items
+            GROUP BY target_language
+            ORDER BY n DESC
+            """
+        ).fetchall()
     return [{"language": r["target_language"], "count": r["n"]} for r in rows]
 
 
 def _status_totals(conn: sqlite3.Connection) -> list[dict]:
-    rows = conn.execute(
-        """
-        SELECT status, COUNT(*) AS n
-        FROM items
-        GROUP BY status
-        ORDER BY n DESC
-        """
-    ).fetchall()
+    with state.db_lock:
+        rows = conn.execute(
+            """
+            SELECT status, COUNT(*) AS n
+            FROM items
+            GROUP BY status
+            ORDER BY n DESC
+            """
+        ).fetchall()
     return [{"status": r["status"], "count": r["n"]} for r in rows]
 
 
@@ -62,7 +65,8 @@ def _fail_ratio_per_engine(conn: sqlite3.Connection, cutoff: str | None) -> list
         query += " AND created_at >= ?"
         params = (cutoff,)
     query += " GROUP BY engine_used ORDER BY attempts DESC"
-    rows = conn.execute(query, params).fetchall()
+    with state.db_lock:
+        rows = conn.execute(query, params).fetchall()
     return [
         {
             "engine": r["engine"],
@@ -91,12 +95,11 @@ def _duration_and_fallback_stats(
     two in made percentiles read as nonsense (a provider retried instantly
     after a 4xx would show as sub-second alongside its real multi-second
     successful calls)."""
-    succeeded_item_ids = {
-        r["item_id"]
-        for r in conn.execute(
+    with state.db_lock:
+        succeeded_rows = conn.execute(
             "SELECT DISTINCT item_id FROM item_run_log WHERE status = 'done'"
         ).fetchall()
-    }
+    succeeded_item_ids = {r["item_id"] for r in succeeded_rows}
 
     events = log_events.read_events(limit=1_000_000)
     if cutoff is not None:

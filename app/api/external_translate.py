@@ -33,11 +33,18 @@ def get_or_create_token(conn) -> str:
     """Same generate-once-and-persist pattern as the MCP server's token
     (app.api.mcp) — a separate token, not shared with it, since this
     surface's only capability is submitting content and reading back a
-    result, a much narrower blast radius than the MCP tools."""
-    token = repository.get_config(conn, _TOKEN_CONFIG_KEY, default=None)
-    if token is None:
-        token = secrets.token_urlsafe(32)
-        repository.set_config(conn, _TOKEN_CONFIG_KEY, token)
+    result, a much narrower blast radius than the MCP tools.
+
+    Locks around the DB access — the shared sqlite3.Connection isn't safe
+    for concurrent cross-thread use without app.state.db_lock held around
+    each call (see app.api.mcp.get_or_create_token's docstring for the
+    live failure this was confirmed against: sqlite3.InterfaceError under
+    real concurrent request traffic without this lock)."""
+    with state.db_lock:
+        token = repository.get_config(conn, _TOKEN_CONFIG_KEY, default=None)
+        if token is None:
+            token = secrets.token_urlsafe(32)
+            repository.set_config(conn, _TOKEN_CONFIG_KEY, token)
     return token
 
 
@@ -58,7 +65,8 @@ def get_status(conn=Depends(state.get_conn)):
 @router.post("/regenerate-token")
 def regenerate_token(conn=Depends(state.get_conn)):
     token = secrets.token_urlsafe(32)
-    repository.set_config(conn, _TOKEN_CONFIG_KEY, token)
+    with state.db_lock:
+        repository.set_config(conn, _TOKEN_CONFIG_KEY, token)
     return {"token": token}
 
 

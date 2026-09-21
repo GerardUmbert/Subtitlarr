@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [dev]
+## [1.0.0]
 
 ### Added
 - **A new "External Translate" sidebar page** shows the external-translate
@@ -14,10 +14,7 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   Subtitlarr" Bazarr webhook) had a real way to obtain it. The docs/README
   were also corrected to point at this page as where you get the token
   from, instead of describing that GET endpoint as the intended way for a
-  caller to fetch it — the endpoint itself is unchanged (same trust model
-  as the MCP token and the Bazarr API key already shown in Settings: this
-  app has no login anywhere, so every page is already reachable by
-  anything that can reach the app's network address regardless).
+  caller to fetch it.
 - **A standalone translate endpoint** (`POST /api/external-translate`) lets
   any third-party caller — Bazarr or otherwise — submit subtitle content
   directly for translation, with no Bazarr wanted-list item behind it at
@@ -34,40 +31,82 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   /api/external-translate/{job_id}` for status/result. Backed by a new
   `external_translate_jobs` table, deliberately separate from
   `run_history`/`item_run_log` since those are both keyed to a Bazarr
-  `items.id` this input never has. Auth is a new, separate bearer token
-  (`GET /api/external-translate/status`, `POST .../regenerate-token`) —
+  `items.id` this input never has. Auth is its own separate bearer token —
   not the MCP server's token (scoped for run-control/engine-cascade tools
   this surface doesn't need) and not Bazarr's own API key (that's Bazarr's
   outbound credential to itself, not something Subtitlarr issues, so it
   can't authenticate an incoming caller here). Also logs a `job_events` row
   (`external_translate`, `triggered_by='api'`) per attempt, so it shows up
   on the History page's Jobs tab with a pass/fail status and a short
-  result/error summary — otherwise a caller with no UI access to
-  `external_translate_jobs` would have no way to even tell a translation
-  was attempted, let alone whether it succeeded.
-- **The same capability, exposed to the MCP server** as
+  result/error summary.
+- **The same external-translate capability, exposed to the MCP server** as
   `subtitlarr_submit_external_translate`/
   `subtitlarr_get_external_translate_job`, for an assistant that wants
   Subtitlarr's own configured engine cascade to do the translating rather
   than translating the content itself (contrast with the existing
-  manual-translation tools). Calls the same underlying functions the HTTP
-  endpoint uses, in-process, skipping that endpoint's own bearer-token
-  check — the MCP session's token already gates the whole connection, same
-  as every other MCP tool. Documented in a new "External translate API"
+  manual-translation tools). Documented in a new "External translate API"
   section on the docs site and in the README.
 - **`source_language`/`target_language` on the external-translate
-  endpoint/MCP tools are now normalized to their bare language subtag**
+  endpoint/MCP tools are normalized to their bare language subtag**
   (`"es-ES"`, `"pt_BR"`, `"EN"` all become `"es"`, `"pt"`, `"en"`) instead
   of passed straight through — everything downstream (`language_name`,
   the disclaimer-translation lookup, `language_variants`) is keyed on
   bare codes only, matching the bare-code convention Bazarr itself uses
   (even Bazarr's own non-standard codes like `"pb"` are flat, never
-  hyphenated). Without this, a caller sending a hyphenated/underscored
-  code would silently get an unrecognized-language prompt and an
-  English-only disclaimer instead of an error, rather than a working
-  translation.
+  hyphenated).
+- **A real login, for the first time this app has ever had one.** Every
+  page and every meaningful API route previously had zero authentication
+  — reachable by anyone who could reach the port, including the
+  endpoints that showed the MCP/external-translate bearer tokens
+  themselves. Adds a single-admin account (bcrypt-hashed password,
+  seeded `admin`/`admin` on first boot and forced to change before the
+  app is otherwise usable), a signed session cookie, per-IP login rate
+  limiting, a timing-safe credential check (a wrong username and a wrong
+  password for the real one take the same time), and session-fixation
+  defense (a fresh session is issued on every successful login). Session
+  lasts until logout or an app restart — no expiry timer, matching how
+  the *arr tools default.
+- **Every `/api/*.py` router that does something meaningful now requires
+  either that session or the existing MCP bearer token** — a browser's
+  own page JS and existing MCP tool calls both keep working unchanged.
+  The external-translate router keeps its own separate token,
+  deliberately not merged into this, since it's meant to stay a narrower
+  credential than the rest of the API. Confirmed by two dedicated
+  regression tests that this doesn't touch MCP at all: the ~42 MCP tools
+  call `app/api/*.py` functions directly in-process, never over real
+  HTTP, so none of them pass through this new dependency — one test
+  calls a real MCP tool with zero session/bearer present anywhere and
+  confirms it still works, the other stress-tests several of the
+  newly-authenticated routers concurrently to catch a deadlock, not just
+  an exception.
+- **CSRF protection** on every mutating, session-authenticated request —
+  validates `Origin` (falling back to `Referer`) against the request's
+  own `Host` header dynamically, never a fixed configured hostname,
+  since this app is commonly reached via a Tailscale IP or a MagicDNS
+  hostname that differs per device. A bearer-token request is exempt
+  from this check entirely, since an `Authorization` header can't be
+  auto-attached cross-site the way a cookie can.
+- **A short-lived, single-use, item-scoped upload token** for
+  `POST /api/queue/{item_id}/manual-translation` — the one route that
+  still had no auth at all after everything above, since it's meant to
+  be called by a plain script (per `subtitlarr_submit_manual_translation`'s
+  own docstring) that has no good reason to hold the standing MCP token.
+  Minted by `GET .../manual-translation/source` (what the MCP tool
+  actually calls), valid one hour, and consumed atomically on first
+  successful submission — so even if this token ends up echoed into an
+  AI assistant's tool-call transcript, it's worthless outside that one
+  submission, unlike a standing bearer token would be.
 
 ### Fixed
+- **A real, pre-existing concurrency bug**, found while building the
+  above: most route handlers never held `state.db_lock` around the
+  shared `sqlite3.Connection`, invisible until the new per-request auth
+  dependency made concurrent DB access from Starlette's worker
+  threadpool far more frequent — confirmed live as
+  `sqlite3.InterfaceError: bad parameter or other API misuse` under real
+  browser traffic. Fixed across roughly a dozen files, verified with
+  real multi-threaded stress tests, not just single-threaded unit tests,
+  since a race or a deadlock doesn't necessarily show up in one.
 - **A CI-flaky integration test** (`test_run_item_force_query_param_reaches_run_single_item`)
   asserted on a value only set by a fire-and-forget background task,
   immediately after the triggering request returned — the endpoint

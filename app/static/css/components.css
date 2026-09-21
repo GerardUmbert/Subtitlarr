@@ -1237,3 +1237,18 @@ th.sortable .sort-indicator {
     justify-content: flex-end;
   }
 }
+
+/* Standalone login/change-password pages — no sidebar, just one centered
+   panel reusing the existing .panel/.field/.btn styles. */
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--bg);
+}
+.auth-panel {
+  width: 100%;
+  max-width: 360px;
+}

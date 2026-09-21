@@ -369,7 +369,13 @@ def build_mcp() -> FastMCP:
         Verify index parity (every 1..cue_count present exactly once)
         before calling subtitlarr_submit_manual_translation — see that
         tool's own docstring for how to submit large results without
-        pasting them into the tool call."""
+        pasting them into the tool call.
+
+        The response also includes upload_token — a one-hour, single-use
+        credential scoped to THIS item, meant for the plain REST
+        submission script subtitlarr_submit_manual_translation's own
+        docstring describes. Pass it along to that script (as the
+        X-Upload-Token header); do not discard it."""
         return await queue.get_manual_translation_source(
             item_id, conn=state.get_conn(), client=state.get_client()
         )
@@ -409,17 +415,25 @@ def build_mcp() -> FastMCP:
         it directly.
 
         Endpoint: POST /api/queue/{item_id}/manual-translation
+        Headers: X-Upload-Token: <the upload_token from
+          subtitlarr_get_manual_translation_source's response for this
+          SAME item_id> — one-hour, single-use, item-scoped. This is a
+          deliberately disposable credential, not the MCP connection's
+          own bearer token — never pass that one to a plain script;
+          this upload token is worthless outside this one submission
+          even if it ends up visible somewhere it shouldn't (e.g.
+          logged in a transcript), whereas the real MCP token is a
+          standing credential for the whole connection.
         Body: {"translated_text": "...", "model_name": "..."}  (same
         shape as this tool's own arguments)
         Base URL: this MCP connection's own host and port, with the
         `/mcp` suffix replaced by nothing — e.g. if this session
         connected to http://<host>:<port>/mcp, the API root is
-        http://<host>:<port>/api. No separate auth token needed; the
-        REST API has no auth of its own beyond whatever network access
-        already let this MCP connection through.
+        http://<host>:<port>/api.
         Example (write the translation to a local file first, then):
           python -c "import json,requests; requests.post(
             'http://<host>:<port>/api/queue/<item_id>/manual-translation',
+            headers={'X-Upload-Token': '<upload_token from the source call>'},
             json={'translated_text': open('translated.txt', encoding='utf-8').read(),
                   'model_name': 'claude-code'})"
         """

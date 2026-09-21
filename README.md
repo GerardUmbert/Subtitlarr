@@ -315,9 +315,13 @@ docker run -d \
   ghcr.io/gerardumbert/subtitlarr:latest
 ```
 
-Open `http://localhost:7777`, then set your Bazarr connection from
-**Settings** and add at least one engine instance from the **Translation
-Engine** page before running a translation.
+Open `http://localhost:7777` — you'll be asked to log in. First boot
+seeds a default `admin`/`admin` account and forces you to set a real
+password before continuing (existing installs updating from an older
+version get the same seeded account on their next start). From there,
+set your Bazarr connection from **Settings** and add at least one engine
+instance from the **Translation Engine** page before running a
+translation.
 
 ### Docker Compose (local dev, or if you don't already run Ollama)
 
