@@ -1,0 +1,16 @@
+#!/bin/sh
+# Thin wrapper so operators run `subtitlarr --reset-admin` from the
+# container console instead of `python -m app.cli --reset-admin` — see
+# app/cli.py for what each flag actually does.
+#
+# `docker exec` defaults to root (no USER directive on this image — see
+# Dockerfile comment on ENTRYPOINT), unlike the app process itself, which
+# docker-entrypoint.sh always drops to the `subtitlarr` user via gosu
+# before uvicorn starts. Writing to /data/subtitlarr.db as root here would
+# leave root-owned files behind and break the running app's own write
+# access to them afterward, so this drops privilege the same way whenever
+# invoked as root; already-unprivileged invocations just run directly.
+if [ "$(id -u)" = "0" ]; then
+    exec gosu subtitlarr python -m app.cli "$@"
+fi
+exec python -m app.cli "$@"

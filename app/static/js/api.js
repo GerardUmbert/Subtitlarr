@@ -159,6 +159,14 @@ const Api = (() => {
       return data;
     },
     getCompareLanguages: () => request("GET", "/api/compare/languages"),
+
+    getAccount: () => request("GET", "/api/auth/account"),
+    updateAccount: (newUsername, currentPassword, newPassword) =>
+      request("POST", "/api/auth/account", {
+        new_username: newUsername,
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
     parseReferenceSubtitle: async (file) => {
       const form = new FormData();
       form.append("reference_file", file);

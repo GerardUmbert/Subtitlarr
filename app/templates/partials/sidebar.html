@@ -11,37 +11,78 @@
     <button type="button" class="collapse-toggle" id="collapse-toggle" aria-expanded="true" aria-label="Collapse sidebar">◂</button>
   </div>
 
-  <nav id="sidebar-nav">
-    <div class="nav-label">Overview</div>
-    <a class="nav-item {{ 'active' if active_page == 'dashboard' }}" href="/" title="Dashboard"><span class="dot"></span><span class="icon">⌂</span><span class="label">Dashboard</span></a>
-    <a class="nav-item {{ 'active' if active_page == 'queue' }}" href="/queue" title="Queue"><span class="dot"></span><span class="icon">☰</span><span class="label">Queue</span></a>
-    <a class="nav-item {{ 'active' if active_page == 'history' }}" href="/history" title="History"><span class="dot"></span><span class="icon">↻</span><span class="label">History</span></a>
-    <a class="nav-item {{ 'active' if active_page == 'jobs' }}" href="/jobs" title="Jobs"><span class="dot"></span><span class="icon">▶</span><span class="label">Jobs</span></a>
-    <a class="nav-item {{ 'active' if active_page == 'mcp-server' }}" href="/mcp-server" title="MCP Server"><span class="dot"></span><span class="icon">✦</span><span class="label">MCP Server</span></a>
-    <a class="nav-item {{ 'active' if active_page == 'external-translate' }}" href="/external-translate" title="External Translate API"><span class="dot"></span><span class="icon">⇄</span><span class="label">External Translate</span></a>
+  <div class="mobile-nav-panel" id="mobile-nav-panel">
+    <nav id="sidebar-nav">
+      <div class="nav-label">Overview</div>
+      <a class="nav-item {{ 'active' if active_page == 'dashboard' }}" href="/" title="Dashboard"><span class="dot"></span><span class="icon">⌂</span><span class="label">Dashboard</span></a>
+      <a class="nav-item {{ 'active' if active_page == 'queue' }}" href="/queue" title="Queue"><span class="dot"></span><span class="icon">☰</span><span class="label">Queue</span></a>
+      <a class="nav-item {{ 'active' if active_page == 'history' }}" href="/history" title="History"><span class="dot"></span><span class="icon">↻</span><span class="label">History</span></a>
+      <a class="nav-item {{ 'active' if active_page == 'jobs' }}" href="/jobs" title="Jobs"><span class="dot"></span><span class="icon">▶</span><span class="label">Jobs</span></a>
+      <a class="nav-item {{ 'active' if active_page == 'mcp-server' }}" href="/mcp-server" title="MCP Server"><span class="dot"></span><span class="icon">✦</span><span class="label">MCP Server</span></a>
+      <a class="nav-item {{ 'active' if active_page == 'external-translate' }}" href="/external-translate" title="External Translate API"><span class="dot"></span><span class="icon">⇄</span><span class="label">External Translate</span></a>
 
-    <div class="nav-label">Configure</div>
-    <a class="nav-item {{ 'active' if active_page == 'engines' }}" href="/engines" title="Translation Engine"><span class="dot"></span><span class="icon">⇄</span><span class="label">Translation Engine</span></a>
-    <a class="nav-item {{ 'active' if active_page == 'languages' }}" href="/languages" title="Language Rules"><span class="dot"></span><span class="icon">§</span><span class="label">Language Rules</span></a>
-    <a class="nav-item {{ 'active' if active_page == 'bazarr' }}" href="/bazarr" title="Bazarr Connection"><span class="dot"></span><span class="icon">⎇</span><span class="label">Bazarr Connection</span></a>
-    <a class="nav-item {{ 'active' if active_page == 'settings' }}" href="/settings" title="Settings"><span class="dot"></span><span class="icon">⚙</span><span class="label">Settings</span></a>
-  </nav>
+      <div class="nav-label">Configure</div>
+      <a class="nav-item {{ 'active' if active_page == 'engines' }}" href="/engines" title="Translation Engine"><span class="dot"></span><span class="icon">⇄</span><span class="label">Translation Engine</span></a>
+      <a class="nav-item {{ 'active' if active_page == 'languages' }}" href="/languages" title="Language Rules"><span class="dot"></span><span class="icon">§</span><span class="label">Language Rules</span></a>
+      <a class="nav-item {{ 'active' if active_page == 'bazarr' }}" href="/bazarr" title="Bazarr Connection"><span class="dot"></span><span class="icon">⎇</span><span class="label">Bazarr Connection</span></a>
+      <a class="nav-item {{ 'active' if active_page == 'settings' }}" href="/settings" title="Settings"><span class="dot"></span><span class="icon">⚙</span><span class="label">Settings</span></a>
+    </nav>
 
-  <div class="sidebar-foot" id="sidebar-bazarr-status">
-    <span class="label">bazarr</span>
-    <span class="mono">checking…</span>
+    <div class="user-menu" id="user-menu">
+      <button type="button" class="nav-item user-avatar-item" id="user-menu-toggle" title="Account" aria-haspopup="true" aria-expanded="false" style="width:100%; border:none; background:none; cursor:pointer;">
+        <span class="dot"></span>
+        <span class="user-avatar" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="8.5" r="3.5" fill="currentColor" />
+            <path d="M4.5 20c0-4.142 3.358-7 7.5-7s7.5 2.858 7.5 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none" />
+          </svg>
+        </span>
+        <span class="label">User</span>
+      </button>
+      <div class="user-menu-popup" id="user-menu-popup">
+        <a href="/account" class="user-menu-item"><span class="icon">☺</span><span class="label">Account</span></a>
+        <button type="button" class="user-menu-item" id="logout-button"><span class="icon">⏻</span><span class="label">Log out</span></button>
+      </div>
+    </div>
+
+    <div class="sidebar-foot" id="sidebar-bazarr-status">
+      <span class="label">bazarr</span>
+      <span class="mono">checking…</span>
+    </div>
   </div>
-
-  <button type="button" class="nav-item" id="logout-button" title="Log out" style="width:100%; border:none; background:none; cursor:pointer;">
-    <span class="dot"></span><span class="icon">⏻</span><span class="label">Log out</span>
-  </button>
   <script>
-    document.getElementById("logout-button").addEventListener("click", async function () {
-      try {
-        await fetch("/api/auth/logout", { method: "POST" });
-      } finally {
-        window.location.href = "/login";
+    (function () {
+      const menu = document.getElementById("user-menu");
+      const toggle = document.getElementById("user-menu-toggle");
+      const popup = document.getElementById("user-menu-popup");
+
+      function closeMenu() {
+        menu.classList.remove("open");
+        toggle.setAttribute("aria-expanded", "false");
       }
-    });
+
+      toggle.addEventListener("click", function (e) {
+        e.stopPropagation();
+        const open = menu.classList.toggle("open");
+        toggle.setAttribute("aria-expanded", open ? "true" : "false");
+      });
+      document.addEventListener("click", function (e) {
+        if (!menu.contains(e.target)) closeMenu();
+      });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") closeMenu();
+      });
+      popup.addEventListener("click", function (e) {
+        e.stopPropagation();
+      });
+
+      document.getElementById("logout-button").addEventListener("click", async function () {
+        try {
+          await fetch("/api/auth/logout", { method: "POST" });
+        } finally {
+          window.location.href = "/login";
+        }
+      });
+    })();
   </script>
 </aside>

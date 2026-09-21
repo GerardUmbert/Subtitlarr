@@ -19,6 +19,13 @@
   height: 100vh;
 }
 
+/* Transparent wrapper on desktop — nav/.user-menu/.sidebar-foot stay
+   direct flex children of .sidebar (needed for .user-menu's own
+   margin-top: auto to push it to the bottom of the column). Only
+   becomes a real, positioned box at the mobile breakpoint below,
+   where it's the floating dropdown panel instead. */
+.mobile-nav-panel { display: contents; }
+
 /* Character used as each nav item's collapsed-state icon — no icon
    library in this project, hidden in expanded mode (the .dot active-state
    indicator shows instead, unchanged from before). Confirmed live: the
@@ -161,8 +168,63 @@ nav { display: flex; flex-direction: column; gap: 2px; }
 }
 .nav-item.active .dot { background: var(--accent); opacity: 1; }
 
-.sidebar-foot {
+.user-menu {
+  position: relative;
   margin-top: auto;
+}
+.user-avatar-item .dot { display: none; }
+.user-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.user-menu-popup {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  z-index: 30;
+}
+.user-menu.open .user-menu-popup { display: flex; flex-direction: column; gap: 2px; }
+.user-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  color: var(--ink-dim);
+  text-decoration: none;
+  font-weight: 500;
+  border: none;
+  background: none;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+}
+.user-menu-item:hover { background: var(--surface-2); color: var(--ink); }
+.sidebar.collapsed .user-menu-popup {
+  left: 100%;
+  right: auto;
+  bottom: 0;
+  width: 160px;
+  margin-left: 6px;
+}
+.sidebar.collapsed .user-menu-item .label { display: inline; }
+
+.sidebar-foot {
   padding: 10px;
   border-top: 1px solid var(--border);
   font-size: 11.5px;
@@ -216,6 +278,11 @@ nav { display: flex; flex-direction: column; gap: 2px; }
     top: 0;
     height: auto;
     z-index: 20;
+    /* The base rule sets overflow: hidden (needed on desktop for the
+       icon-rail collapse) — left in place here, it would clip
+       .mobile-nav-panel, which is intentionally positioned OUTSIDE
+       .sidebar's own box (below the bar) once opened. */
+    overflow: visible;
   }
   .sidebar .brand { padding: 0; }
   .nav-toggle { display: flex; }
@@ -232,16 +299,60 @@ nav { display: flex; flex-direction: column; gap: 2px; }
   .sidebar.collapsed .brand { flex-direction: row; }
   .sidebar.collapsed .nav-item { width: auto; justify-content: flex-start; }
 
-  .sidebar nav,
-  .sidebar .sidebar-foot {
+  /* Floats over the page instead of pushing it down. .sidebar itself
+     stays sticky at a fixed (bar-only) height; this whole panel —
+     nav + user menu + bazarr status, wrapped in the template so they
+     lay out normally in flow relative to EACH OTHER — is positioned
+     absolute relative to .sidebar, directly under the bar, so opening
+     it never reflows the page content underneath. Needs its own
+     background/border/shadow and a scroll cap since it's no longer part
+     of .sidebar's own bordered box. */
+  .mobile-nav-panel {
     display: none;
   }
-  .sidebar.nav-open nav,
-  .sidebar.nav-open .sidebar-foot {
-    display: flex;
+  .sidebar.nav-open .mobile-nav-panel {
+    display: block;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    max-height: calc(100vh - 60px);
+    overflow-y: auto;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+    z-index: 19;
   }
-  .sidebar.nav-open nav { margin-top: 18px; }
-  .sidebar.nav-open .sidebar-foot { margin-top: 18px; }
+  .mobile-nav-panel nav {
+    display: flex;
+    padding: 18px 16px 8px;
+  }
+  .mobile-nav-panel .user-menu {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0 16px;
+  }
+  .mobile-nav-panel .sidebar-foot {
+    display: flex;
+    border-top: 1px solid var(--border);
+  }
+
+  /* The desktop popup (bottom: calc(100% + 6px), relying on .sidebar's
+     overflow: hidden being harmless there) doesn't work here: .user-menu
+     is now inside the in-flow mobile-nav-panel above, not pinned to the
+     bottom of the screen, so the popup is rendered inline, below the
+     button, like a normal expanding menu instead. */
+  .user-menu-popup {
+    display: none;
+    position: static;
+    box-shadow: none;
+    border: none;
+    padding: 0;
+    margin-top: 4px;
+  }
+  .user-menu.open .user-menu-popup { display: flex; flex-direction: column; }
+  .user-menu-item { padding-left: 20px; }
 }
 
 /* ---------- Buttons ---------- */
@@ -742,6 +853,27 @@ a.engine-card-line:hover { text-decoration: underline; }
 .field-hint { font-size: 11.5px; color: var(--ink-faint); margin-top: 10px; }
 .field-hint a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
 .field-hint a:hover, .field-hint a:focus-visible { text-decoration-thickness: 2px; }
+
+.password-field { position: relative; }
+.password-field input { padding-right: 34px; }
+.password-toggle {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--ink-faint);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.password-toggle:hover { color: var(--ink); }
 
 .field-row { display: flex; gap: 10px; align-items: center; margin-top: 12px; }
 .field-row .btn { flex-shrink: 0; padding: 8px 14px; font-size: 12.5px; }

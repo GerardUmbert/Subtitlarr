@@ -3,6 +3,39 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [dev]
+
+### Added
+- **An "Account" page**, reachable from a new User menu at the bottom of
+  the sidebar (replacing the old bare Log out button — the menu now pops
+  up "Account" and "Log out" together). Lets you change the admin
+  username (free text — a plain name or an email, whatever you'll
+  remember) and/or password after initial setup, not just during the
+  forced first-login change.
+- **A `subtitlarr --reset-admin` console command**, run via `docker exec
+  -it <container> subtitlarr --reset-admin`, for recovering from a
+  lockout (forgotten password, or a mistyped username saved from the new
+  Account page) — resets the admin username/password back to the
+  `admin`/`admin` defaults and flags the account to force a password
+  change on next login, without needing the running app to still be
+  reachable.
+
+### Fixed
+- **The Dashboard's "No language check engine configured" banner
+  flashing on and off** even with a check engine actually picked —
+  several routes (`/api/language-check/settings`, `/api/jobs`,
+  `/api/jobs/disclaimer-backfill/pending-count`,
+  `/api/jobs/close-stale-runs`, `/api/jobs/clear-engine-rate-limits`,
+  `/api/jobs/clear-database`, the stale-audit job-event bookkeeping, and
+  every route in `app/api/auth.py`) read or wrote the shared database
+  connection without holding the app's threading lock around it, a
+  pre-existing gap that went unnoticed until this release's app-wide
+  login made concurrent requests (session/CSRF checks on every call)
+  common enough to trigger it — confirmed live as the Dashboard's
+  10-second polling occasionally reading back a stale/incorrect
+  `instance_id: null` and flashing the banner. All call sites now match
+  the locking pattern already used everywhere else.
+
 ## [1.0.0]
 
 ### Added

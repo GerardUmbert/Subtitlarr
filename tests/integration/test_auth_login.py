@@ -109,6 +109,75 @@ def test_logout_clears_session(client):
     assert "Log in" in login_page.text
 
 
+def test_get_account_requires_login(client):
+    resp = client.get("/api/auth/account")
+    assert resp.status_code == 401
+
+
+def test_get_account_returns_current_username(client):
+    client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+    resp = client.get("/api/auth/account")
+    assert resp.status_code == 200
+    assert resp.json() == {"username": "admin"}
+
+
+def test_update_account_rejects_wrong_current_password(client):
+    client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+    resp = client.post(
+        "/api/auth/account",
+        json={"current_password": "wrong", "new_username": "someone@example.com", "new_password": ""},
+    )
+    assert resp.status_code == 401
+
+
+def test_update_account_rejects_new_password_same_as_default(client):
+    client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+    resp = client.post(
+        "/api/auth/account",
+        json={"current_password": "admin", "new_username": "admin", "new_password": "admin"},
+    )
+    assert resp.status_code == 422
+
+
+def test_update_account_changes_username_only(client):
+    client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+    resp = client.post(
+        "/api/auth/account",
+        json={"current_password": "admin", "new_username": "someone@example.com", "new_password": ""},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"username": "someone@example.com"}
+
+    # New username still logs in with the (unchanged) default password.
+    relogin = client.post(
+        "/api/auth/login", json={"username": "someone@example.com", "password": "admin"}
+    )
+    assert relogin.status_code == 200
+
+
+def test_update_account_changes_username_and_password_together(client):
+    client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+    resp = client.post(
+        "/api/auth/account",
+        json={
+            "current_password": "admin",
+            "new_username": "someone@example.com",
+            "new_password": "realpassword123",
+        },
+    )
+    assert resp.status_code == 200
+
+    stale = client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+    assert stale.status_code == 401
+
+    relogin = client.post(
+        "/api/auth/login",
+        json={"username": "someone@example.com", "password": "realpassword123"},
+    )
+    assert relogin.status_code == 200
+    assert relogin.json() == {"redirect": "/"}
+
+
 def test_login_rate_limited_after_repeated_failures(client):
     for _ in range(5):
         resp = client.post("/api/auth/login", json={"username": "admin", "password": "wrong"})

@@ -19,12 +19,14 @@ def get_jobs(
 ):
     next_run = scheduler.next_run_time()
     current = runner.current
+    with state.db_lock:
+        pending_upload_count = repository.count_items_by_status(conn, "translated_pending_upload")
     return {
         "cron_expression": settings.schedule_cron,
         "age_threshold_days": settings.age_threshold_days,
         "daily_translation_limit": settings.daily_translation_limit,
         "queue_uploads_enabled": settings.queue_uploads_enabled,
-        "pending_upload_count": repository.count_items_by_status(conn, "translated_pending_upload"),
+        "pending_upload_count": pending_upload_count,
         "next_run": next_run.isoformat() if next_run else None,
         "run_active": bool(current is not None and current.active),
         "sync_media_active": _sync_media_state["active"],
@@ -317,15 +319,16 @@ class LanguageCheckSettings(BaseModel):
 
 @router.get("/language-check/settings")
 def get_language_check_settings(conn=Depends(state.get_conn)):
-    return {
-        "instance_id": repository.get_config(conn, "language_check_instance_id", default=None),
-        "pending_count": repository.count_language_check_pending(conn),
-    }
+    with state.db_lock:
+        instance_id = repository.get_config(conn, "language_check_instance_id", default=None)
+        pending_count = repository.count_language_check_pending(conn)
+    return {"instance_id": instance_id, "pending_count": pending_count}
 
 
 @router.post("/language-check/settings")
 async def set_language_check_settings(req: LanguageCheckSettings, conn=Depends(state.get_conn)):
-    repository.set_config(conn, "language_check_instance_id", req.instance_id)
+    with state.db_lock:
+        repository.set_config(conn, "language_check_instance_id", req.instance_id)
     return {"saved": True}
 
 
@@ -359,7 +362,9 @@ async def _run_disclaimer_backfill(conn, client, triggered_by: str) -> None:
 
 @router.get("/disclaimer-backfill/pending-count")
 def get_disclaimer_backfill_pending_count(conn=Depends(state.get_conn)):
-    return {"pending_count": len(repository.get_items_for_disclaimer_model_backfill(conn))}
+    with state.db_lock:
+        pending = repository.get_items_for_disclaimer_model_backfill(conn)
+    return {"pending_count": len(pending)}
 
 
 @router.post("/disclaimer-backfill")
@@ -530,23 +535,26 @@ async def run_stale_audit_now(
         return {"started": False, "reason": "A translation run is already in progress"}
 
     async def _run():
-        event_id = repository.start_job_event(conn, "stale_audit", triggered_by="manual")
+        with state.db_lock:
+            event_id = repository.start_job_event(conn, "stale_audit", triggered_by="manual")
         _stale_audit_state["active"] = True
         _stale_audit_state["error"] = None
         _stale_audit_state["result"] = None
         try:
             result = await stale_audit.run_stale_audit(conn, client)
             _stale_audit_state["result"] = result
-            repository.finish_job_event(
-                conn, event_id, status="done",
-                result=(
-                    f"{result['checked']} checked, {result['ok']} ok, "
-                    f"{result['stale']} stale (reset), {result['inconclusive']} inconclusive"
-                ),
-            )
+            with state.db_lock:
+                repository.finish_job_event(
+                    conn, event_id, status="done",
+                    result=(
+                        f"{result['checked']} checked, {result['ok']} ok, "
+                        f"{result['stale']} stale (reset), {result['inconclusive']} inconclusive"
+                    ),
+                )
         except Exception as exc:  # noqa: BLE001 - surface to the UI, don't crash the app
             _stale_audit_state["error"] = str(exc)
-            repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
+            with state.db_lock:
+                repository.finish_job_event(conn, event_id, status="failed", error=str(exc))
         finally:
             _stale_audit_state["active"] = False
 
@@ -579,7 +587,8 @@ async def close_stale_runs(conn=Depends(state.get_conn), runner=Depends(state.ge
         raise HTTPException(
             status_code=409, detail="Cannot close stale runs while a run is in progress"
         )
-    closed = repository.close_stale_open_runs(conn)
+    with state.db_lock:
+        closed = repository.close_stale_open_runs(conn)
     return {"closed": closed}
 
 
@@ -591,7 +600,8 @@ async def clear_engine_rate_limits(conn=Depends(state.get_conn)):
     own usage dashboard showing real headroom) rather than genuine
     exhaustion, without waiting per-instance for a Test Connection or the
     full 24h. Deliberately manual-only — no cron for this."""
-    cleared = engine_instances_repo.clear_all_rate_limits(conn)
+    with state.db_lock:
+        cleared = engine_instances_repo.clear_all_rate_limits(conn)
     return {"cleared": cleared}
 
 
@@ -604,5 +614,6 @@ async def clear_database(conn=Depends(state.get_conn), runner=Depends(state.get_
         raise HTTPException(
             status_code=409, detail="Cannot clear the database while a run is in progress"
         )
-    result = repository.clear_queue_data(conn)
+    with state.db_lock:
+        result = repository.clear_queue_data(conn)
     return {"cleared": True, **result}

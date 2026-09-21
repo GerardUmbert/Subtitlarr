@@ -70,12 +70,19 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
 
 
+class UpdateAccountRequest(BaseModel):
+    current_password: str
+    new_username: str
+    new_password: str = ""
+
+
 @router.get("/login", response_class=HTMLResponse)
 def login_page(request: Request, conn=Depends(state.get_conn)):
     from app.main import templates  # local import — avoids a circular import, see module docstring
 
     if auth_session.is_logged_in(request):
-        creds = repository.get_admin_credentials(conn)
+        with state.db_lock:
+            creds = repository.get_admin_credentials(conn)
         if creds is not None and creds["must_change_password"]:
             return RedirectResponse("/change-password", status_code=303)
         return RedirectResponse("/", status_code=303)
@@ -84,7 +91,8 @@ def login_page(request: Request, conn=Depends(state.get_conn)):
     # a real password is set, must_change_password is False and this
     # hint disappears, since showing "default is admin/admin" forever
     # would be actively misleading past first setup.
-    creds = repository.get_admin_credentials(conn)
+    with state.db_lock:
+        creds = repository.get_admin_credentials(conn)
     show_default_hint = creds is not None and creds["must_change_password"]
     return templates.TemplateResponse(request, "login.html", {"show_default_hint": show_default_hint})
 
@@ -100,7 +108,8 @@ def login_submit(req: LoginRequest, request: Request, conn=Depends(state.get_con
         raise HTTPException(status_code=401, detail="Incorrect username or password.")
 
     auth_session.log_in(request)
-    creds = repository.get_admin_credentials(conn)
+    with state.db_lock:
+        creds = repository.get_admin_credentials(conn)
     redirect_to = "/change-password" if creds and creds["must_change_password"] else "/"
     return {"redirect": redirect_to}
 
@@ -136,7 +145,8 @@ def change_password_submit(req: ChangePasswordRequest, request: Request, conn=De
     if csrf_error is not None:
         raise HTTPException(status_code=403, detail=csrf_error)
 
-    creds = repository.get_admin_credentials(conn)
+    with state.db_lock:
+        creds = repository.get_admin_credentials(conn)
     if creds is None or not auth_session.verify_login(conn, creds["username"], req.current_password):
         raise HTTPException(status_code=401, detail="Current password is incorrect.")
 
@@ -145,5 +155,44 @@ def change_password_submit(req: ChangePasswordRequest, request: Request, conn=De
     if not req.new_password:
         raise HTTPException(status_code=422, detail="Password must not be empty.")
 
-    repository.update_admin_password(conn, auth_session.hash_password(req.new_password), must_change_password=False)
+    with state.db_lock:
+        repository.update_admin_password(conn, auth_session.hash_password(req.new_password), must_change_password=False)
     return {"redirect": "/"}
+
+
+@router.get("/api/auth/account")
+def get_account(request: Request, conn=Depends(state.get_conn)):
+    if not auth_session.is_logged_in(request):
+        raise HTTPException(status_code=401, detail="Not logged in")
+    with state.db_lock:
+        creds = repository.get_admin_credentials(conn)
+    return {"username": creds["username"] if creds else auth_session.DEFAULT_USERNAME}
+
+
+@router.post("/api/auth/account")
+def update_account(req: UpdateAccountRequest, request: Request, conn=Depends(state.get_conn)):
+    if not auth_session.is_logged_in(request):
+        raise HTTPException(status_code=401, detail="Not logged in")
+    csrf_error = auth_session.check_csrf(request)
+    if csrf_error is not None:
+        raise HTTPException(status_code=403, detail=csrf_error)
+
+    with state.db_lock:
+        creds = repository.get_admin_credentials(conn)
+    if creds is None or not auth_session.verify_login(conn, creds["username"], req.current_password):
+        raise HTTPException(status_code=401, detail="Current password is incorrect.")
+
+    new_username = req.new_username.strip()
+    if not new_username:
+        raise HTTPException(status_code=422, detail="Username must not be empty.")
+
+    with state.db_lock:
+        if req.new_password:
+            if req.new_password == auth_session.DEFAULT_PASSWORD:
+                raise HTTPException(status_code=422, detail="Choose a password other than the default.")
+            repository.update_admin_password(conn, auth_session.hash_password(req.new_password), must_change_password=False)
+
+        if new_username != creds["username"]:
+            repository.update_admin_username(conn, new_username)
+
+    return {"username": new_username}

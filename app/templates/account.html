@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Account{% endblock %}
+{% block content %}
+<div id="account-app">
+  <div class="page-head">
+    <div>
+      <h1>Account</h1>
+      <p class="page-sub">Change the username and password used to log in to this Subtitlarr instance.</p>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-body">
+      <div class="panel-title">Login details</div>
+      <div class="panel-title-sub">Your current password is required to confirm any change</div>
+
+      <form @submit.prevent="submit">
+        <div class="field">
+          <label>Current password</label>
+          <div class="password-field">
+            <input :type="showCurrentPassword ? 'text' : 'password'" v-model="currentPassword" autocomplete="current-password" required />
+            <button type="button" class="password-toggle" @click="showCurrentPassword = !showCurrentPassword" :aria-label="showCurrentPassword ? 'Hide password' : 'Show password'">{% raw %}{{ showCurrentPassword ? '⊘' : '👁' }}{% endraw %}</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Username</label>
+          <input v-model="username" autocomplete="username" required />
+          <p class="field-hint">Can be a plain name or an email address — whatever you'll remember at the login screen.</p>
+        </div>
+        <div class="field">
+          <label>New password</label>
+          <div class="password-field">
+            <input :type="showNewPassword ? 'text' : 'password'" v-model="newPassword" autocomplete="new-password" placeholder="Leave blank to keep your current password" />
+            <button type="button" class="password-toggle" @click="showNewPassword = !showNewPassword" :aria-label="showNewPassword ? 'Hide password' : 'Show password'">{% raw %}{{ showNewPassword ? '⊘' : '👁' }}{% endraw %}</button>
+          </div>
+        </div>
+        <div class="field" v-if="newPassword">
+          <label>Confirm new password</label>
+          <div class="password-field">
+            <input :type="showNewPassword ? 'text' : 'password'" v-model="newPasswordConfirm" autocomplete="new-password" />
+          </div>
+        </div>
+        <p class="field-hint error" v-if="error">● {% raw %}{{ error }}{% endraw %}</p>
+        <p class="field-hint" v-if="saved">● saved</p>
+        <div class="field-row">
+          <button class="btn btn-primary" type="submit" :disabled="saving">
+            {% raw %}{{ saving ? 'Saving…' : 'Save' }}{% endraw %}
+          </button>
+        </div>
+      </form>
+
+      <p class="field-hint" style="margin-top:20px; border-top:1px solid var(--border); padding-top:14px;">
+        Locked out? Run <code>subtitlarr --reset-admin</code> from the container console to reset the username and password back to defaults.
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/account.js?v={{ asset_version }}"></script>
+{% endblock %}

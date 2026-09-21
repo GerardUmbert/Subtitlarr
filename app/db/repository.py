@@ -1079,6 +1079,15 @@ def update_admin_password(
         )
 
 
+def update_admin_username(conn: sqlite3.Connection, username: str) -> None:
+    now = _now()
+    with conn:
+        conn.execute(
+            "UPDATE admin_credentials SET username = ?, updated_at = ? WHERE id = 1",
+            (username, now),
+        )
+
+
 def create_manual_translation_upload_token(
     conn: sqlite3.Connection, token: str, item_id: int, expires_at: str,
 ) -> None:

@@ -17,6 +17,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 COPY mcp_server ./mcp_server
 
+COPY bin/subtitlarr /usr/local/bin/subtitlarr
+RUN chmod +x /usr/local/bin/subtitlarr
+
 RUN useradd --uid 1000 --create-home --shell /usr/sbin/nologin subtitlarr \
     && mkdir -p /data \
     && chown -R subtitlarr:subtitlarr /app /data
