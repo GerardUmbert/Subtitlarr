@@ -323,6 +323,13 @@ set your Bazarr connection from **Settings** and add at least one engine
 instance from the **Translation Engine** page before running a
 translation.
 
+You can change the username/password anytime from the **Account** page
+(User menu at the bottom of the sidebar). If you ever get locked out, run
+`subtitlarr --reset-admin` from the container's console — on Unraid, the
+Docker tab's container icon → **Console** button; from a shell, `docker
+exec -it subtitlarr subtitlarr --reset-admin` — to reset both back to
+`admin`/`admin`, forcing a password change on next login.
+
 ### Docker Compose (local dev, or if you don't already run Ollama)
 
 ```bash
