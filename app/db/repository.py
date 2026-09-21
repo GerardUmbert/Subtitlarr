@@ -1077,3 +1077,38 @@ def update_admin_password(
             """,
             (password_hash, must_change_password, now),
         )
+
+
+def create_manual_translation_upload_token(
+    conn: sqlite3.Connection, token: str, item_id: int, expires_at: str,
+) -> None:
+    now = _now()
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO manual_translation_upload_tokens (token, item_id, expires_at, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (token, item_id, expires_at, now),
+        )
+
+
+def consume_manual_translation_upload_token(conn: sqlite3.Connection, token: str, item_id: int) -> bool:
+    """Validates AND marks the token used in one atomic UPDATE — deliberately
+    not a separate SELECT-then-UPDATE, which would let two concurrent
+    requests both pass the check before either marks it used (a real
+    single-use bypass). Returns True only if the token existed, was for
+    THIS item_id specifically, was unused, and hadn't expired — the same
+    single UPDATE enforces all four conditions at once via its WHERE
+    clause, so rowcount tells the whole story."""
+    now = _now()
+    with conn:
+        cur = conn.execute(
+            """
+            UPDATE manual_translation_upload_tokens
+            SET used_at = ?
+            WHERE token = ? AND item_id = ? AND used_at IS NULL AND expires_at > ?
+            """,
+            (now, token, item_id, now),
+        )
+        return cur.rowcount > 0

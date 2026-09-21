@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+import secrets
+from datetime import datetime, timedelta, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from app import state
@@ -11,6 +14,19 @@ router = APIRouter(
     prefix="/api/queue", tags=["queue"],
     dependencies=[Depends(require_session_or_mcp_token)],
 )
+
+# Deliberately separate from `router` above — POST .../manual-translation
+# accepts a short-lived, single-use, item-scoped upload token (see
+# AUTH_PLAN.md, a local untracked design doc, and
+# repository.consume_manual_translation_upload_token) as a full
+# ALTERNATIVE to a real session or the standing MCP bearer token, not in
+# addition to it. That token is specifically for a plain script (the one
+# subtitlarr_submit_manual_translation's docstring tells the calling
+# assistant to run) that has no reason to also hold the MCP token — the
+# whole point of a scoped, disposable credential is to avoid that script
+# needing a long-lived secret at all. A router-level dependency can't be
+# selectively skipped for one route, hence the separate router.
+manual_translation_router = APIRouter(prefix="/api/queue", tags=["queue"])
 
 
 def _with_cached_flag(rows: list) -> list[dict]:
@@ -219,12 +235,28 @@ async def get_manual_translation_source(
         raise HTTPException(status_code=422, detail="Source subtitle path resolved but has no cues.")
 
     subs = srt_io.cues_from_bazarr(cues)
+
+    # Minted here (not only from the MCP tool) so a direct HTTP caller of
+    # this GET gets the same token — the upload token is what
+    # POST .../manual-translation accepts as a full alternative to a real
+    # session/the MCP token, specifically so the plain submission script
+    # subtitlarr_submit_manual_translation's docstring tells the calling
+    # assistant to run doesn't need to also carry a standing credential.
+    # 1 hour: generous enough that even a large multi-chunk translation
+    # can finish before submission, still short-lived enough to be
+    # worthless if it ends up echoed into a tool-call transcript later.
+    token = secrets.token_urlsafe(32)
+    expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    with state.db_lock:
+        repository.create_manual_translation_upload_token(conn, token, item_id, expires_at)
+
     return {
         "item_id": item_id,
         "source_language": entry["source_lang"],
         "target_language": item["target_language"],
         "cue_count": len(subs),
         "dialogue_text": srt_io.extract_dialogue_text(subs),
+        "upload_token": token,
     }
 
 
@@ -233,9 +265,26 @@ class ManualTranslationRequest(BaseModel):
     model_name: str = "claude-code"
 
 
-@router.post("/{item_id}/manual-translation")
+def _require_upload_token_or_router_auth(request: Request, conn, item_id: int) -> None:
+    """Auth for POST .../manual-translation specifically: a valid,
+    unexpired, unused upload token scoped to THIS item_id (consumed
+    atomically on success) OR the normal require_session_or_mcp_token
+    check (a logged-in browser, or the standing MCP token) — either one
+    is sufficient, not both. See manual_translation_router's own comment
+    for why this route sits outside the blanket router-level dependency."""
+    upload_token = request.headers.get("x-upload-token")
+    if upload_token:
+        with state.db_lock:
+            consumed = repository.consume_manual_translation_upload_token(conn, upload_token, item_id)
+        if consumed:
+            return
+        raise HTTPException(status_code=401, detail="Upload token is invalid, expired, or already used.")
+    require_session_or_mcp_token(request, conn)
+
+
+@manual_translation_router.post("/{item_id}/manual-translation")
 async def submit_manual_translation(
-    item_id: int, req: ManualTranslationRequest,
+    item_id: int, req: ManualTranslationRequest, request: Request,
     conn=Depends(state.get_conn), client=Depends(state.get_client), runner=Depends(state.get_runner),
 ):
     """Accepts a translation produced OUTSIDE any configured engine
@@ -253,6 +302,8 @@ async def submit_manual_translation(
     Blocked while a translation run is active, same reasoning as the
     force-translate path — a live run could be mid-write on this exact
     item."""
+    _require_upload_token_or_router_auth(request, conn, item_id)
+
     with state.db_lock:
         item = repository.get_item(conn, item_id)
     if item is None:
