@@ -642,7 +642,11 @@ def build_mcp() -> FastMCP:
         age_threshold_days (how many days an item must have been
         missing a subtitle before a scheduled/"run now" pass will
         touch it — the "cutoff"), daily_translation_limit, and the
-        independent sync/backup/telemetry cron expressions."""
+        independent sync/backup/telemetry cron expressions. Every field
+        returned here is settable via subtitlarr_set_schedule_config and
+        can be restored to defaults via subtitlarr_reset_schedule_config,
+        except backup_keep_count (retention count), which is deploy-time
+        only."""
         return schedule.get_schedule_config()
 
     @mcp.tool(annotations=MUTATING)
@@ -652,6 +656,14 @@ def build_mcp() -> FastMCP:
         daily_translation_limit: int | None = None,
         cron_expression: str | None = None,
         pause_between_items_seconds: int | None = None,
+        clear_rate_limits_before_scheduled_run: bool | None = None,
+        queue_uploads_enabled: bool | None = None,
+        push_uploads_cron: str | None = None,
+        sync_media_cron: str | None = None,
+        sync_subs_cron: str | None = None,
+        language_check_cron: str | None = None,
+        backup_cron: str | None = None,
+        telemetry_enabled: bool | None = None,
     ) -> dict:
         """Updates one or more scheduling settings — any field left as
         None keeps its CURRENT value (this reads the full current
@@ -664,34 +676,73 @@ def build_mcp() -> FastMCP:
         to find a real subtitle first. daily_translation_limit caps how
         many items a scheduled/"run now" pass will translate per day (0
         = unlimited); it does not apply to a forced per-item re-run or
-        an explicit subtitlarr_run_by_ids call."""
+        an explicit subtitlarr_run_by_ids call.
+
+        CAUTION — these can make the app malfunction or silently stop
+        protecting you if set carelessly: an invalid cron expression is
+        rejected outright, but a *valid* one that fires too rarely (or an
+        empty string, which disables sync_media_cron/sync_subs_cron/
+        language_check_cron/push_uploads_cron/backup_cron entirely — manual-
+        only via the Jobs page) can leave the wanted-list, source-subtitle
+        prefetch, language-mismatch check, queued-upload push, or database
+        backups running far less often than intended, or not at all.
+        Disabling backup_cron in particular removes the only recovery path
+        for a destructive mistake like clear-database. clear_rate_limits_
+        before_scheduled_run off can let a tripped cooldown silently starve
+        every following scheduled run until someone notices. Crons also
+        interact with each other's timing (sync jobs are meant to land
+        before the translation cron; push_uploads/language_check are meant
+        to land after it) — moving one without the others can undo that
+        ordering. When in doubt, call subtitlarr_reset_schedule_config
+        instead of guessing at a fix."""
         current = schedule.get_schedule_config()
+
+        def _pick(value, key):
+            return value if value is not None else current[key]
+
         payload = schedule.ScheduleConfig(
-            cron_expression=cron_expression if cron_expression is not None else current["cron_expression"],
-            age_threshold_days=(
-                age_threshold_days if age_threshold_days is not None else current["age_threshold_days"]
+            cron_expression=_pick(cron_expression, "cron_expression"),
+            age_threshold_days=_pick(age_threshold_days, "age_threshold_days"),
+            daily_translation_limit=_pick(daily_translation_limit, "daily_translation_limit"),
+            pause_between_items_seconds=_pick(pause_between_items_seconds, "pause_between_items_seconds"),
+            clear_rate_limits_before_scheduled_run=_pick(
+                clear_rate_limits_before_scheduled_run, "clear_rate_limits_before_scheduled_run"
             ),
-            daily_translation_limit=(
-                daily_translation_limit
-                if daily_translation_limit is not None
-                else current["daily_translation_limit"]
-            ),
-            pause_between_items_seconds=(
-                pause_between_items_seconds
-                if pause_between_items_seconds is not None
-                else current["pause_between_items_seconds"]
-            ),
-            clear_rate_limits_before_scheduled_run=current["clear_rate_limits_before_scheduled_run"],
-            queue_uploads_enabled=current["queue_uploads_enabled"],
-            push_uploads_cron=current["push_uploads_cron"],
-            sync_media_cron=current["sync_media_cron"],
-            sync_subs_cron=current["sync_subs_cron"],
-            language_check_cron=current["language_check_cron"],
-            backup_cron=current["backup_cron"],
-            telemetry_enabled=current["telemetry_enabled"],
+            queue_uploads_enabled=_pick(queue_uploads_enabled, "queue_uploads_enabled"),
+            push_uploads_cron=_pick(push_uploads_cron, "push_uploads_cron"),
+            sync_media_cron=_pick(sync_media_cron, "sync_media_cron"),
+            sync_subs_cron=_pick(sync_subs_cron, "sync_subs_cron"),
+            language_check_cron=_pick(language_check_cron, "language_check_cron"),
+            backup_cron=_pick(backup_cron, "backup_cron"),
+            telemetry_enabled=_pick(telemetry_enabled, "telemetry_enabled"),
         )
         return schedule.set_schedule_config(
             payload, scheduler=state.get_scheduler(), conn=state.get_conn(), runner=state.get_runner()
+        )
+
+    @mcp.tool(annotations=MUTATING)
+    @_catch_http_errors
+    def subtitlarr_reset_schedule_config(fields: list[str] | None = None) -> dict:
+        """Resets scheduling settings back to their built-in defaults —
+        the safe way to undo a bad subtitlarr_set_schedule_config call
+        instead of trying to reconstruct the original values by hand.
+        With no `fields` given, resets EVERYTHING: the translation cron,
+        age_threshold_days, daily_translation_limit,
+        pause_between_items_seconds, clear_rate_limits_before_scheduled_run,
+        queue_uploads_enabled, and all five independent crons (sync_media,
+        sync_subs, language_check, push_uploads, backup), plus
+        telemetry_enabled. Pass `fields` (matching subtitlarr_set_schedule_config's
+        parameter names, e.g. ["backup_cron", "language_check_cron"]) to
+        reset only specific settings and leave the rest as they are.
+        Defaults restore the crons' original relative ordering (sync jobs
+        before the translation run, push/language-check after it) and
+        re-enable backup_cron, so this is also the fix if a prior change
+        left backups or a sync job disabled."""
+        return schedule.reset_schedule_config(
+            schedule.ScheduleResetRequest(fields=fields),
+            scheduler=state.get_scheduler(),
+            conn=state.get_conn(),
+            runner=state.get_runner(),
         )
 
     # -----------------------------------------------------------------

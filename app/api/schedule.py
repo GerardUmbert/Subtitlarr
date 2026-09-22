@@ -6,12 +6,31 @@ from pydantic import BaseModel
 from app import state
 from app.api import jobs as jobs_api
 from app.auth.session import require_session_or_mcp_token
-from app.config import settings
+from app.config import Settings, settings
 from app.db import settings_store
 
 router = APIRouter(
     prefix="/api", tags=["schedule"],
     dependencies=[Depends(require_session_or_mcp_token)],
+)
+
+# Field name -> (settings attr, persisted-key) is the same string for every
+# schedule field, so the one tuple below both defines "what a full reset
+# touches" and lets set_schedule_config's save loop and reset_schedule_config
+# share the same list instead of drifting out of sync.
+SCHEDULE_FIELDS = (
+    "schedule_cron",
+    "age_threshold_days",
+    "daily_translation_limit",
+    "pause_between_items_seconds",
+    "clear_rate_limits_before_scheduled_run",
+    "queue_uploads_enabled",
+    "push_uploads_cron",
+    "sync_media_cron",
+    "sync_subs_cron",
+    "language_check_cron",
+    "backup_cron",
+    "telemetry_enabled",
 )
 
 
@@ -28,6 +47,10 @@ class ScheduleConfig(BaseModel):
     language_check_cron: str
     backup_cron: str
     telemetry_enabled: bool
+
+
+class ScheduleResetRequest(BaseModel):
+    fields: list[str] | None = None
 
 
 @router.get("/config/schedule")
@@ -105,45 +128,55 @@ def set_schedule_config(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=f"Invalid cron expression: {exc}") from exc
 
-    settings.schedule_cron = config.cron_expression
-    with state.db_lock:
-        settings_store.save_one(conn, "schedule_cron", config.cron_expression)
-    settings.age_threshold_days = config.age_threshold_days
-    with state.db_lock:
-        settings_store.save_one(conn, "age_threshold_days", config.age_threshold_days)
-    settings.daily_translation_limit = config.daily_translation_limit
-    with state.db_lock:
-        settings_store.save_one(conn, "daily_translation_limit", config.daily_translation_limit)
-    settings.pause_between_items_seconds = config.pause_between_items_seconds
-    with state.db_lock:
-        settings_store.save_one(conn, "pause_between_items_seconds", config.pause_between_items_seconds)
-    settings.clear_rate_limits_before_scheduled_run = config.clear_rate_limits_before_scheduled_run
-    with state.db_lock:
-        settings_store.save_one(
-            conn, "clear_rate_limits_before_scheduled_run", config.clear_rate_limits_before_scheduled_run
-        )
-    settings.queue_uploads_enabled = config.queue_uploads_enabled
-    with state.db_lock:
-        settings_store.save_one(conn, "queue_uploads_enabled", config.queue_uploads_enabled)
-    settings.push_uploads_cron = config.push_uploads_cron
-    with state.db_lock:
-        settings_store.save_one(conn, "push_uploads_cron", config.push_uploads_cron)
-    settings.sync_media_cron = config.sync_media_cron
-    with state.db_lock:
-        settings_store.save_one(conn, "sync_media_cron", config.sync_media_cron)
-    settings.sync_subs_cron = config.sync_subs_cron
-    with state.db_lock:
-        settings_store.save_one(conn, "sync_subs_cron", config.sync_subs_cron)
-    settings.language_check_cron = config.language_check_cron
-    with state.db_lock:
-        settings_store.save_one(conn, "language_check_cron", config.language_check_cron)
-    settings.backup_cron = config.backup_cron
-    with state.db_lock:
-        settings_store.save_one(conn, "backup_cron", config.backup_cron)
-    settings.telemetry_enabled = config.telemetry_enabled
-    with state.db_lock:
-        settings_store.save_one(conn, "telemetry_enabled", config.telemetry_enabled)
+    values = config.model_dump()
+    values["schedule_cron"] = values.pop("cron_expression")
+    for key in SCHEDULE_FIELDS:
+        setattr(settings, key, values[key])
+        with state.db_lock:
+            settings_store.save_one(conn, key, values[key])
     return {"saved": True}
+
+
+@router.post("/config/schedule/reset")
+def reset_schedule_config(
+    request: ScheduleResetRequest,
+    scheduler=Depends(state.get_scheduler),
+    conn=Depends(state.get_conn),
+    runner=Depends(state.get_runner),
+):
+    """Resets the given schedule fields (or all of them, if none named) back
+    to their built-in defaults. Field names match ScheduleConfig, except the
+    translation cron is "cron_expression" here too, for symmetry with
+    GET/POST /api/config/schedule."""
+    reset_keys = set(SCHEDULE_FIELDS)
+    if request.fields:
+        requested = {"schedule_cron" if f == "cron_expression" else f for f in request.fields}
+        unknown = requested - set(SCHEDULE_FIELDS)
+        if unknown:
+            raise HTTPException(status_code=422, detail=f"Unknown schedule field(s): {sorted(unknown)}")
+        reset_keys = requested
+
+    defaults = Settings()
+    current = get_schedule_config()
+    current["schedule_cron"] = current.pop("cron_expression")
+    merged = {**current, **{key: getattr(defaults, key) for key in reset_keys}}
+
+    payload = ScheduleConfig(
+        cron_expression=merged["schedule_cron"],
+        age_threshold_days=merged["age_threshold_days"],
+        daily_translation_limit=merged["daily_translation_limit"],
+        pause_between_items_seconds=merged["pause_between_items_seconds"],
+        clear_rate_limits_before_scheduled_run=merged["clear_rate_limits_before_scheduled_run"],
+        queue_uploads_enabled=merged["queue_uploads_enabled"],
+        push_uploads_cron=merged["push_uploads_cron"],
+        sync_media_cron=merged["sync_media_cron"],
+        sync_subs_cron=merged["sync_subs_cron"],
+        language_check_cron=merged["language_check_cron"],
+        backup_cron=merged["backup_cron"],
+        telemetry_enabled=merged["telemetry_enabled"],
+    )
+    set_schedule_config(payload, scheduler=scheduler, conn=conn, runner=runner)
+    return get_schedule_config()
 
 
 @router.get("/schedule/next-runs")

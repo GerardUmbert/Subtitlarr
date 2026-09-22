@@ -19,6 +19,20 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   `admin`/`admin` defaults and flags the account to force a password
   change on next login, without needing the running app to still be
   reachable.
+- **`subtitlarr_set_schedule_config` (MCP) now covers every schedule
+  setting**, not just the translate-job basics — `clear_rate_limits_
+  before_scheduled_run`, `queue_uploads_enabled`, and all five
+  independent crons (sync wanted/missing, pull pending subtitles,
+  language check, push queued uploads, database backup) can now be
+  changed through the MCP the same way they can from Settings, with a
+  docstring warning about what a bad value can break (e.g. emptying
+  `backup_cron` disables your only recovery path for a destructive
+  mistake).
+- **A new `subtitlarr_reset_schedule_config` MCP tool** resets some or
+  all schedule settings back to this deployment's defaults (whatever
+  `.env`/compose sets, or Subtitlarr's own built-in fallback if unset) —
+  the safe way to undo a bad `subtitlarr_set_schedule_config` call.
+  Backed by a new `POST /api/config/schedule/reset` endpoint.
 
 ### Fixed
 - **The Dashboard's "No language check engine configured" banner
