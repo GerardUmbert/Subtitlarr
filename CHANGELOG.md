@@ -49,6 +49,19 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   10-second polling occasionally reading back a stale/incorrect
   `instance_id: null` and flashing the banner. All call sites now match
   the locking pattern already used everywhere else.
+- **A job stuck showing "running" forever in the Jobs history after a
+  server restart killed it mid-run** — `close_stale_open_runs()` (run
+  automatically on every startup, and via "Fix broken runs"/
+  `POST /api/jobs/close-stale-runs`) only ever swept the `run_history`
+  table (translation batches), leaving `job_events` rows (disclaimer
+  backfill, language check, push uploads, sync, backup, stale audit) with
+  `finished_at IS NULL` untouched with no cleanup path at all. A new
+  `close_stale_job_events()` closes those out the same way (marked
+  `failed` with an explanatory error, since there's no per-item log to
+  backfill real result counts from) and runs alongside the existing
+  run-history sweep both at startup and from the same "Fix broken runs"
+  button/endpoint, which now also reports `closed_job_events` in its
+  response.
 
 ## [1.0.0]
 

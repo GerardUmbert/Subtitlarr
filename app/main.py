@@ -81,6 +81,12 @@ async def lifespan(app: FastAPI):
             "Closed %d run(s) left open (finished_at IS NULL) from a "
             "previous process that was killed mid-batch.", closed_runs,
         )
+    closed_job_events = repository.close_stale_job_events(state.db_conn)
+    if closed_job_events:
+        logging.getLogger(__name__).warning(
+            "Closed %d job event(s) left open (finished_at IS NULL) from a "
+            "previous process that was killed mid-run.", closed_job_events,
+        )
 
     state.bazarr_client = BazarrClient(
         base_url=settings.bazarr_base_url, api_key=settings.bazarr_api_key

@@ -113,17 +113,25 @@ def test_clear_database_refuses_while_a_run_is_active(client):
 def test_close_stale_runs_closes_open_runs(client):
     conn = database.connect(settings.db_path)
     stale_run = repository.start_run(conn, "manual_full")
+    stale_event = repository.start_job_event(conn, "disclaimer_backfill", "manual")
     conn.close()
 
     resp = client.post("/api/jobs/close-stale-runs")
     assert resp.status_code == 200
-    assert resp.json()["closed"] == 1
+    body = resp.json()
+    assert body["closed"] == 1
+    assert body["closed_job_events"] == 1
 
     check_conn = database.connect(settings.db_path)
     row = check_conn.execute(
         "SELECT finished_at FROM run_history WHERE id = ?", (stale_run,)
     ).fetchone()
     assert row["finished_at"] is not None
+    event_row = check_conn.execute(
+        "SELECT finished_at, status FROM job_events WHERE id = ?", (stale_event,)
+    ).fetchone()
+    assert event_row["finished_at"] is not None
+    assert event_row["status"] == "failed"
     check_conn.close()
 
 

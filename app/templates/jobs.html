@@ -196,7 +196,7 @@
         </button>
       </div>
       <p class="field-hint" v-if="fixStaleRunsResult">
-        {% raw %}{{ fixStaleRunsResult.closed > 0 ? `● closed ${fixStaleRunsResult.closed} stuck run(s)` : '● nothing to fix — no broken runs found' }}{% endraw %}
+        {% raw %}{{ (fixStaleRunsResult.closed > 0 || fixStaleRunsResult.closed_job_events > 0) ? `● closed ${fixStaleRunsResult.closed} stuck run(s), ${fixStaleRunsResult.closed_job_events} stuck job event(s)` : '● nothing to fix — no broken runs found' }}{% endraw %}
       </p>
     </div>
   </div>

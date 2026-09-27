@@ -68,6 +68,30 @@ def close_stale_open_runs(conn: sqlite3.Connection) -> int:
         return len(stale_runs)
 
 
+def close_stale_job_events(conn: sqlite3.Connection) -> int:
+    """job_events rows with finished_at IS NULL from a process that was
+    killed mid-run — same failure mode as close_stale_open_runs() but for
+    the non-translation jobs table (disclaimer_backfill, language_check,
+    push_uploads, etc.), which finish_job_event() only ever updates from
+    inside a running process's own finally block. Marks them 'failed' with
+    an explanatory error (there's no item_run_log-equivalent to backfill
+    real result counts from) rather than deleting them, so the job history
+    stays honest about the interruption instead of just disappearing.
+    Returns the number of events closed."""
+    now = _now()
+    with conn:
+        cur = conn.execute(
+            """
+            UPDATE job_events
+            SET finished_at = ?, status = 'failed',
+                error = 'Interrupted by a server restart; no result recorded.'
+            WHERE finished_at IS NULL
+            """,
+            (now,),
+        )
+        return cur.rowcount
+
+
 def reset_stuck_translating_items(conn: sqlite3.Connection) -> int:
     """Items still marked 'translating' are always stale on startup — there
     is no checkpointing, so a process restart mid-batch means the in-flight

@@ -580,8 +580,10 @@ async def close_stale_runs(conn=Depends(state.get_conn), runner=Depends(state.ge
     """Closes out run_history rows left open (finished_at IS NULL) by a
     process that was killed mid-batch — NOT a destructive wipe like
     clear-database. The run and its item history stay intact, just marked
-    finished instead of stuck open forever on the History page. Also runs
-    automatically on every server startup; this lets it be triggered
+    finished instead of stuck open forever on the History page. Also closes
+    out any similarly-stuck job_events rows (disclaimer_backfill,
+    language_check, push_uploads, etc.) the same way. Both cleanups also run
+    automatically on every server startup; this lets them be triggered
     on-demand too."""
     if runner.current is not None and runner.current.active:
         raise HTTPException(
@@ -589,7 +591,8 @@ async def close_stale_runs(conn=Depends(state.get_conn), runner=Depends(state.ge
         )
     with state.db_lock:
         closed = repository.close_stale_open_runs(conn)
-    return {"closed": closed}
+        closed_job_events = repository.close_stale_job_events(conn)
+    return {"closed": closed, "closed_job_events": closed_job_events}
 
 
 @router.post("/clear-engine-rate-limits")
