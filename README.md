@@ -295,6 +295,33 @@ close, and look for what holds up across runs: cue recovery and failures,
 time per cue, and how the diff reads. Only decide which engine, temperature or
 instructions is better once the same side keeps winning.
 
+## Login and API access
+
+Everything sits behind a login: a single admin account, seeded as
+`admin`/`admin` and forced to a real password on first login (change it
+anytime from the **Account** page; recover with `subtitlarr --reset-admin`).
+Passwords are bcrypt-hashed, a logged-in browser holds a signed session
+cookie (its key lives in a `.session_secret` file next to the database), and
+login attempts are limited to 5 per minute per IP.
+
+- **Scripts and other callers**: every page and meaningful `/api/*` route
+  needs either that login session or the MCP bearer token, so a script that
+  called the web API directly now needs one of them. The
+  [External translate API](#external-translate-api) keeps its own separate,
+  narrower token.
+- **Behind a reverse proxy**: state-changing requests from a logged-in
+  browser are checked against forged cross-site requests by comparing the
+  `Origin` (or `Referer`) with the request's `Host` header. This works for a
+  LAN IP, Tailscale or MagicDNS without configuration, but a reverse proxy
+  must pass the original `Host` header through, or those requests are
+  rejected. Bearer-token requests aren't subject to this check.
+- **Manual translation upload token**: fetching an item's source for manual
+  translation returns a one-hour, single-use token scoped to that item, so
+  the submitting script never needs the standing MCP token.
+
+It protects a trusted-network install; don't expose Subtitlarr directly to
+the internet.
+
 ## AI assistant access (MCP)
 
 Subtitlarr exposes an [MCP](https://modelcontextprotocol.io) server so

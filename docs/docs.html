@@ -116,6 +116,7 @@
     <div class="docs-sidebar-group">Configuration</div>
     <a href="#env-vars">All settings reference</a>
     <a href="#queue-uploads">Queue uploads explained</a>
+    <a href="#login-security">Login &amp; API access</a>
 
     <div class="docs-sidebar-group">Reference</div>
     <a href="#mcp-server">AI assistant access (MCP)</a>
@@ -256,6 +257,19 @@
           <tr><td>Disks spin down and nothing else keeps them awake</td><td><code>true</code> — push the batch once you're ready, or schedule it</td></tr>
         </tbody>
       </table>
+    </div>
+
+    <h2 id="login-security" class="reveal-scroll">Login &amp; API access</h2>
+    <p>Everything in Subtitlarr sits behind a login. There is a single admin account, seeded as <code>admin</code>/<code>admin</code> on first boot and forced to a real password before the app is otherwise usable. Change the username or password anytime from the <strong>Account</strong> page, or recover from a lockout with <a href="#locked-out"><code>subtitlarr --reset-admin</code></a>.</p>
+    <ul>
+      <li><strong>Passwords and sessions</strong> &mdash; the password is stored as a bcrypt hash, and a logged-in browser holds a signed session cookie. The signing key is generated on first start and kept in a <code>.session_secret</code> file next to the database, so keep it in the same persistent volume; deleting it logs everyone out.</li>
+      <li><strong>Login attempts are rate limited</strong> &mdash; 5 per minute per IP address. After that the login returns HTTP 429 until the minute passes.</li>
+      <li><strong>Scripts and other callers</strong> &mdash; every page and every meaningful <code>/api/*</code> route requires either that login session or the <a href="#mcp-server">MCP bearer token</a>. A script that used to call the web API directly now needs one of those. The <a href="#external-translate">External translate API</a> keeps its own separate, narrower token.</li>
+      <li><strong>Behind a reverse proxy</strong> &mdash; actions from a logged-in browser that change something (saving settings, running a job) are checked against forged cross-site requests: the request's <code>Origin</code> (or <code>Referer</code>) must match the <code>Host</code> header it arrived with. This works for a plain LAN IP, a Tailscale address or a MagicDNS name without any configuration. If you use a reverse proxy, make sure it passes the original <code>Host</code> header through (nginx: <code>proxy_set_header Host $host;</code>), or those requests will be rejected. Requests carrying a bearer token are not subject to this check.</li>
+      <li><strong>Manual-translation upload token</strong> &mdash; when an assistant fetches an item's source dialogue for manual translation, Subtitlarr hands back a short-lived upload token valid for one hour, for that one item only, and consumed by the first successful submission. The script that submits the translation therefore never needs the standing MCP token, and the upload token is worthless anywhere else even if it ends up in an assistant's transcript.</li>
+    </ul>
+    <div class="callout">
+      The login protects a trusted-network install; it is not a reason to expose Subtitlarr directly to the internet. Keep it behind your VPN, LAN or an authenticating reverse proxy.
     </div>
 
     <!-- ── TROUBLESHOOTING ── -->
