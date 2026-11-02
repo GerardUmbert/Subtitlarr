@@ -13,7 +13,7 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write  # create the GitHub Release below
       packages: write
     steps:
       - uses: actions/checkout@v4
@@ -70,3 +70,44 @@ jobs:
           build-args: |
             TELEMETRY_MEASUREMENT_ID=${{ secrets.TELEMETRY_MEASUREMENT_ID }}
             TELEMETRY_API_SECRET=${{ secrets.TELEMETRY_API_SECRET }}
+
+      # Plain v*.*.* tags only — a dev-v*.*.* tag is a test build, not a
+      # release. The notes are every CHANGELOG.md section newer than the
+      # previous plain release tag, because versions that only ever shipped
+      # as `dev` builds (never as `latest`) belong to the first release that
+      # does ship them.
+      - name: Publish GitHub Release from the changelog
+        if: steps.version.outputs.is_dev == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists, leaving it alone."
+            exit 0
+          fi
+          git fetch --tags --force --quiet
+          prev=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname \
+            | sed -n "/^${GITHUB_REF_NAME//./\.}$/{n;p;q}")
+          prev=${prev#v}
+          echo "Release notes: $VERSION back to (excluding) ${prev:-the start of the changelog}"
+          # GitHub keeps every newline in a release body as a line break, so
+          # the changelog's hard-wrapped bullets are joined back into one
+          # line each, and "## [1.1.0]" loses its brackets.
+          awk -v prev="$prev" '
+            function flush() { if (buf != "") { print buf; buf = "" } }
+            index($0, "## [") == 1 {
+              if (prev != "" && index($0, "## [" prev "]") == 1) { flush(); exit }
+              found = 1
+            }
+            !found { next }
+            index($0, "## [") == 1 { flush(); gsub(/\[|\]/, ""); print; next }
+            /^- /                  { flush(); buf = $0; next }
+            /^  [^ ]/ && buf != "" { sub(/^ +/, ""); buf = buf " " $0; next }
+                                   { flush(); print }
+            END { flush() }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "No CHANGELOG.md section for $VERSION; see CHANGELOG.md for details." > release-notes.md
+          fi
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md
