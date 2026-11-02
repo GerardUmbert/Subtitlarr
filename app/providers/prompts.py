@@ -61,10 +61,13 @@ LANGUAGE_VARIANTS: dict[str, dict[str, tuple[str, str]]] = {
     "es": {
         "es-ES": (
             "European (Castilian) Spain",
-            " Use exclusively colloquial Peninsular Spanish (tuteo, vosotros forms) "
-            "from start to finish. Do not mix in Latin American morphologies "
-            "(seseo verbal, 'ustedes' for informal plural, voseo). Keep one stable "
-            "register per character across the whole file.\n"
+            " Use Peninsular Spanish from Spain (Castilian Spanish: tuteo, "
+            "vosotros forms) from start to finish. Do not mix in Latin "
+            "American forms ('ustedes' for informal plural, voseo). Match "
+            "the source's register: colloquial dialogue stays colloquial, "
+            "while formal, historical or period dialogue stays formal and "
+            "period-appropriate, avoiding modern slang. Keep one stable "
+            "register per character across the whole file."
         ),
         "es-MX": (
             "Mexican",
