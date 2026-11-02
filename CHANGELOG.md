@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [dev]
+## [1.1.0]
 
 ### Changed
 - **Translation prompt refined** (thanks to Manuel5cc, PR #3): dual-speaker
