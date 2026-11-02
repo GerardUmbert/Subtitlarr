@@ -124,6 +124,41 @@ def test_update_config_merges_not_replaces(client):
     assert updated["config"]["has_api_key"] is True  # key preserved
 
 
+def test_extra_instructions_can_be_set_and_cleared_via_update(client):
+    """Blank is normally 'leave unchanged' on update (it protects masked API
+    keys), but extra_instructions is plain text where blank is a real value."""
+    created = client.post(
+        "/api/config/engine-instances",
+        json={"name": "G", "provider_type": "gemini", "config": {"api_key": "k", "extra_instructions": "Be formal."}},
+    ).json()
+    assert created["config"]["extra_instructions"] == "Be formal."
+
+    cleared = client.put(
+        f"/api/config/engine-instances/{created['id']}",
+        json={"config": {"extra_instructions": ""}},
+    ).json()
+    assert cleared["config"]["extra_instructions"] == ""
+    assert cleared["config"]["has_api_key"] is True  # key still untouched
+
+
+def test_extra_instructions_over_length_limit_rejected(client):
+    too_long = "x" * 2001
+    resp = client.post(
+        "/api/config/engine-instances",
+        json={"name": "G", "provider_type": "gemini", "config": {"api_key": "k", "extra_instructions": too_long}},
+    )
+    assert resp.status_code == 422
+    created = client.post(
+        "/api/config/engine-instances",
+        json={"name": "G2", "provider_type": "gemini", "config": {"api_key": "k"}},
+    ).json()
+    resp = client.put(
+        f"/api/config/engine-instances/{created['id']}",
+        json={"config": {"extra_instructions": too_long}},
+    )
+    assert resp.status_code == 422
+
+
 def test_create_defaults_fill_in_missing_config_fields(client):
     """No default model is filled in for a fresh NVIDIA instance —
     deepseek-ai/deepseek-v4-flash (the former default) is dead, and

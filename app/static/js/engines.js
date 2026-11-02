@@ -11,6 +11,16 @@ const TEMPERATURE_FIELD = {
   hint: "Lower = more literal/consistent, higher = more varied/creative. Most providers default to ~1.0 (tuned for chat) if left unset, which invites more format drift and stylistic variation than a rigid subtitle-translation task wants — 0.2 (default here) trades away creative flexibility for reliability.",
 };
 
+// Free text appended to the system prompt for THIS instance only (see
+// prompts.build_system_prompt) — lets a capable cloud engine take extra
+// style rules (idioms, period register, a glossary) without bloating the
+// prompt a small local model gets, which stays unchanged when this is empty.
+const EXTRA_INSTRUCTIONS_FIELD = {
+  key: "extra_instructions", label: "Extra instructions (optional)", type: "textarea", maxlength: 2000,
+  placeholder: "e.g. Keep character names untranslated. Use formal register for this period drama.",
+  hint: "Appended to the translation prompt for this engine only. Leave empty to use the default prompt — recommended for small local models, which follow short prompts best. Some providers' content filters may block responses if you ask for stronger language than the default.",
+};
+
 // One entry per provider_type — drives both the "add new instance" menu
 // and each card's config form generically, instead of duplicating markup
 // per provider like the old single-active-engine page did. Field hints
@@ -31,6 +41,7 @@ const PROVIDER_TYPES = {
       { key: "concurrent_batch_window", label: "Concurrent batches", type: "number", min: 1, step: 1, hint:
         "How many batches are sent at once before waiting for that group to finish. Confirmed live at 15 RPM for the recommended model — 3 keeps comfortable headroom." },
       TEMPERATURE_FIELD,
+      EXTRA_INSTRUCTIONS_FIELD,
     ],
   },
   ollama: {
@@ -44,6 +55,7 @@ const PROVIDER_TYPES = {
       { key: "batch_token_budget", label: "Batch size override (dialogue tokens)", type: "number", min: 0, step: 100, hint:
         "0 = auto (derives from context window above). 1 = one cue per request, most reliable but slowest. 400-900 is the sweet spot; 900 has been seen to drop into garbled output on some content, 400 has not." },
       TEMPERATURE_FIELD,
+      EXTRA_INSTRUCTIONS_FIELD,
     ],
   },
   llamacpp: {
@@ -58,6 +70,7 @@ const PROVIDER_TYPES = {
         "llama.cpp's own server has no built-in auth — only needed if the Base URL points at an instance behind a reverse proxy/gateway enforcing its own auth. Sent as Authorization: Bearer." },
       { key: "batch_token_budget", label: "Batch size override (dialogue tokens)", type: "number", min: 0, step: 100 },
       TEMPERATURE_FIELD,
+      EXTRA_INSTRUCTIONS_FIELD,
     ],
   },
   nvidia: {
@@ -73,6 +86,7 @@ const PROVIDER_TYPES = {
       { key: "concurrent_batch_window", label: "Concurrent batches", type: "number", min: 1, step: 1, hint:
         "NVIDIA's free tier allows up to 40 requests/minute; a small window naturally stays well under that." },
       TEMPERATURE_FIELD,
+      EXTRA_INSTRUCTIONS_FIELD,
     ],
   },
   openrouter: {
@@ -87,6 +101,7 @@ const PROVIDER_TYPES = {
         "Free \":free\" models are capped at 50 requests/DAY on top of 20/minute — keep this high so one file doesn't burn a large chunk of the day's quota." },
       { key: "concurrent_batch_window", label: "Concurrent batches", type: "number", min: 1, step: 1 },
       TEMPERATURE_FIELD,
+      EXTRA_INSTRUCTIONS_FIELD,
     ],
   },
   groq: {
@@ -102,6 +117,7 @@ const PROVIDER_TYPES = {
       { key: "concurrent_batch_window", label: "Concurrent batches", type: "number", min: 1, step: 1, hint:
         "Defaults to 1 (sequential) — the TPM cap is a single rolling budget shared across every concurrent request." },
       TEMPERATURE_FIELD,
+      EXTRA_INSTRUCTIONS_FIELD,
     ],
   },
   anthropic: {
@@ -115,6 +131,7 @@ const PROVIDER_TYPES = {
       { key: "batch_token_budget", label: "Batch size (dialogue tokens)", type: "number", min: 1, step: 100 },
       { key: "concurrent_batch_window", label: "Concurrent batches", type: "number", min: 1, step: 1 },
       TEMPERATURE_FIELD,
+      EXTRA_INSTRUCTIONS_FIELD,
     ],
   },
 };

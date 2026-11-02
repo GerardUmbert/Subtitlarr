@@ -127,6 +127,22 @@ def validate_temperature(value: float | None) -> None:
 THINKING_VALUES = (False, True, "low", "medium", "high")
 
 
+# The UI textarea's maxlength is only a soft hint (same as the temperature
+# input's max above), so this is the actual enforcement point. Generous
+# for a glossary or a few style rules, small enough that it can't swamp
+# a small local model's context.
+EXTRA_INSTRUCTIONS_MAX_LENGTH = 2000
+
+
+def validate_extra_instructions(value: str | None) -> None:
+    """Raises ValueError if value is longer than EXTRA_INSTRUCTIONS_MAX_LENGTH.
+    None (not set) is always fine."""
+    if value is not None and len(value) > EXTRA_INSTRUCTIONS_MAX_LENGTH:
+        raise ValueError(
+            f"extra_instructions must be at most {EXTRA_INSTRUCTIONS_MAX_LENGTH} characters, got {len(value)}"
+        )
+
+
 def validate_thinking(value) -> None:
     """Raises ValueError if value isn't one of THINKING_VALUES. None (not
     set) is always fine — it means "use the instance's own saved
@@ -193,6 +209,7 @@ def build_provider(
     else:
         raise ValueError(f"Unknown or unimplemented provider type: {provider_type!r}")
     provider.batch_token_budget = config.get("batch_token_budget", 0)
+    provider.extra_instructions = (config.get("extra_instructions") or "").strip()
     return provider
 
 

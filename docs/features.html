@@ -77,7 +77,7 @@
   </div>
 
   <h2 class="reveal-scroll">Compare Engines</h2>
-  <p>Linked from the top of the Translation Engine page. Run the same source subtitle through two engine instances side by side — or one instance against an uploaded reference translation — to judge speed, reliability, and actual output quality before committing an instance to your real cascade. Source can be searched from Bazarr's whole library or uploaded directly. Nothing here touches your real queue or Bazarr; output is sandboxed and cleared on restart.</p>
+  <p>Linked from the top of the Translation Engine page. Run the same source subtitle through two engine instances side by side — or one instance against an uploaded reference translation — to judge speed, reliability, and actual output quality before committing an instance to your real cascade. Source can be searched from Bazarr's whole library or uploaded directly. Nothing here touches your real queue or Bazarr; output is sandboxed and cleared on restart. Each side also has its own editable <strong>temperature</strong> and <strong>extra instructions</strong>, so you can test the same engine at two temperatures, or with versus without extra prompt text. <a href="docs.html#comparing-engines">How to compare well</a>.</p>
   <div class="screenshot-frame reveal-scroll">
     <img src="assets/screenshots/compare.png" alt="Subtitlarr Compare Engines page showing source selection and two engine instances configured side by side">
   </div>
@@ -90,6 +90,10 @@
     <div class="feature-card reveal-scroll">
       <h3>Automatic rate-limit cooldown</h3>
       <p>3 consecutive failures against an engine instance trip a 24h cooldown, skipped without a live round-trip — clearable early via a Test Connection or the Jobs page's manual "clear all rate limits."</p>
+    </div>
+    <div class="feature-card reveal-scroll">
+      <h3>Account page &amp; lockout recovery</h3>
+      <p>Change the admin username or password anytime from the User menu in the sidebar. Locked out? <code>subtitlarr --reset-admin</code> from the container console resets it to <code>admin</code>/<code>admin</code> without needing the app running.</p>
     </div>
     <div class="feature-card reveal-scroll">
       <h3>Per-item model tracking</h3>

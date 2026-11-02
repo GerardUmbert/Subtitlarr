@@ -233,6 +233,26 @@ hits the per-item budget quickly and the remainder falls back in bulk,
 re-chunked properly — so one heavily-flagged movie can't consume a
 disproportionate share of your daily Gemini quota chasing a lost cause.
 
+### Extra instructions (per engine)
+
+Every engine instance has an optional **Extra instructions** box (up to 2000
+characters) on the Translation Engine page. Whatever you type is appended to
+the end of the translation prompt for **that engine only**; leave it empty and
+the default prompt is used unchanged.
+
+- It refines style and vocabulary only (a glossary, "keep character names
+  untranslated", "formal register, this is a period drama"). The index and
+  output-format rules always still apply.
+- It exists so a capable cloud engine can take richer rules without making
+  the prompt longer for a small local model, which follows a short prompt
+  best — keep it empty for those.
+- Be careful asking for stronger or more explicit language than the default:
+  some providers' content filters (Gemini especially) can block a whole batch
+  in response.
+
+Use [Comparing engines](#comparing-engines) below to test whether a given set
+of instructions actually helps before relying on it.
+
 ## Comparing engines
 
 The **Compare Engines** page (linked from the top of Translation Engine)
@@ -247,13 +267,33 @@ actual output quality before committing an instance to your real cascade.
 - **Pick what to compare**: two engine instances (run in parallel or
   sequentially, each with its own editable temperature), or one instance
   against an uploaded reference translation you already trust.
+- **Temperature**: how much the model is allowed to vary its wording.
+  Lower is more literal and consistent; higher is more varied and creative.
+  Subtitle translation wants literal, consistent output that reliably keeps
+  the index/format structure, so Subtitlarr defaults to 0.2 (most providers
+  default to about 1.0, which is tuned for chat). Each side is pre-filled
+  from its instance's saved value, and you can edit it here to see what a
+  different value changes without touching the real instance. The same
+  instance can be compared against itself at two temperatures.
+- **Extra instructions**: each side's box is pre-filled from the instance's
+  saved [Extra instructions](#extra-instructions-per-engine). Edit or empty
+  it for one side to compare the same engine with versus without the extra
+  text, again without changing the saved instance.
 - **Nothing here touches your real queue or Bazarr.** Output is cached
   separately from normal translation runs and cleared on restart — this is a
   sandbox for testing engine/model choices, not a way to translate for real.
 
 Useful before adding a new engine instance to your cascade, after changing a
-model or temperature, or when deciding whether a paid/cloud engine is
-actually worth it over a local one for your content.
+model, temperature or extra instructions, or when deciding whether a
+paid/cloud engine is actually worth it over a local one for your content.
+
+**Run several comparisons, not just one.** Model output varies from run to
+run even at a low temperature, and one file can flatter or punish an engine
+by luck. Compare on a handful of different items (dialogue-heavy, fast
+banter, profanity, different genres), repeat a comparison if the result is
+close, and look for what holds up across runs: cue recovery and failures,
+time per cue, and how the diff reads. Only decide which engine, temperature or
+instructions is better once the same side keeps winning.
 
 ## AI assistant access (MCP)
 
@@ -269,8 +309,9 @@ Tools cover its own documentation (so the assistant answers "how do I
 configure X" from the real current docs), queue/job/history status, manual
 translation (for items a configured engine can't handle — content-filter
 refusals, exhausted quota, a dead credential), run control, sync jobs,
-engine-cascade reordering (never credential writes), the schedule/age-
-threshold cutoff, language rules (read-only), and submitting raw subtitle
+engine-cascade reordering (never credential writes), every schedule
+setting (age threshold, daily limit, all the crons) plus a reset-to-defaults
+tool, language rules (read-only), and submitting raw subtitle
 content for translation by Subtitlarr's own engine cascade with no Bazarr
 item involved (see [External translate API](#external-translate-api)
 below). See the

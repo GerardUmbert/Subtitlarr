@@ -125,9 +125,13 @@
         <li><strong>Engine cascade</strong> — list configured engine instances (API keys always masked) and reorder
           the cascade. Adding/editing an instance's credentials stays a Translation Engine page action, not
           available over MCP.</li>
-        <li><strong>Schedule/cutoff</strong> — read and update the age threshold ("cutoff" — how long an item must
-          have been missing a subtitle before a scheduled run touches it), daily translation limit, cron
-          expression, and pause between items.</li>
+        <li><strong>Schedule/cutoff</strong> — read and update every schedule setting: the age threshold ("cutoff" —
+          how long an item must have been missing a subtitle before a scheduled run touches it), daily
+          translation limit, pause between items, whether rate limits are cleared before a scheduled run,
+          queued-upload mode, and all the independent crons (translation, Bazarr syncs, pulling pending
+          subtitles, language check, pushing queued uploads, database backup).
+          <code>subtitlarr_reset_schedule_config</code> restores some or all of them to this deployment's
+          defaults, the safe way to undo a bad change.</li>
         <li><strong>Language rules</strong> — read source-language priority, target-language allowlist, and regional
           variant preferences (read-only).</li>
       </ul>

@@ -210,12 +210,18 @@ def build_system_prompt(
     target_lang_code: str,
     catalan_vegeta_insults: bool = False,
     language_variants: dict[str, str] | None = None,
+    extra_instructions: str = "",
 ) -> str:
     """language_variants maps a language code (e.g. "es") to the chosen
     variant key (e.g. "es-419") — see LANGUAGE_VARIANTS above. Any language
     not present in the dict, or an unrecognized variant key, falls back to
     that language's DEFAULT_LANGUAGE_VARIANTS entry (or no addon at all for
-    languages with no variants defined)."""
+    languages with no variants defined).
+
+    extra_instructions is an engine instance's own free-text addition (see
+    the "Extra instructions" field on the Engines page), appended last so
+    it can refine — but never replaces — the format rules above. Blank
+    means no change at all to the prompt."""
     prompt = SYSTEM_PROMPT.format(
         source_lang=language_name(source_lang_code),
         source_lang_code=source_lang_code,
@@ -234,6 +240,14 @@ def build_system_prompt(
         if addon is None:
             addon = variants[DEFAULT_LANGUAGE_VARIANTS[target_lang_code]]
         prompt += addon[1]
+
+    extra = (extra_instructions or "").strip()
+    if extra:
+        prompt += (
+            "\n\nAdditional instructions for this translation (they refine "
+            "style and vocabulary only; the index/format rules above still "
+            "apply exactly):\n" + extra
+        )
     return prompt
 
 

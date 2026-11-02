@@ -123,6 +123,13 @@ createApp({
       thinkingA: false,
       thinkingB: false,
 
+      // Per-side "Extra instructions" prompt text — pre-filled from the
+      // picked instance's saved value (same pattern as temperature above);
+      // an emptied box is sent as "" and really means "none" for this run,
+      // so two sides can be compared with and without the extra text.
+      extraInstructionsA: "",
+      extraInstructionsB: "",
+
       // Optional: compare engine A's fresh result against an uploaded
       // already-translated file instead of running a second engine.
       useReference: false,
@@ -249,7 +256,13 @@ createApp({
       if (!side) return side;
       const other = side === this.result?.results?.[0] ? this.result?.results?.[1] : this.result?.results?.[0];
       if (!other || other.instance_id !== side.instance_id || side.temperature == null) return side;
-      return { ...side, instance_name: `${side.instance_name} (temp ${side.temperature})` };
+      const parts = [`temp ${side.temperature}`];
+      // Same instance with and without extra instructions is the whole point
+      // of that override, so tell the two sides apart by it too.
+      if ((side.extra_instructions || "") !== (other.extra_instructions || "")) {
+        parts.push(side.extra_instructions ? "extra instructions" : "no extra instructions");
+      }
+      return { ...side, instance_name: `${side.instance_name} (${parts.join(", ")})` };
     },
     downloadSide(side) {
       const blob = new Blob([side.subtitle_text], { type: "text/plain;charset=utf-8" });
@@ -268,11 +281,13 @@ createApp({
       const inst = this.instances.find((i) => i.id === this.instanceIdA);
       this.temperatureA = inst && inst.config ? (inst.config.temperature ?? null) : null;
       this.thinkingA = inst && inst.config ? (inst.config.thinking ?? false) : false;
+      this.extraInstructionsA = inst && inst.config ? (inst.config.extra_instructions ?? "") : "";
     },
     onInstanceBChange() {
       const inst = this.instances.find((i) => i.id === this.instanceIdB);
       this.temperatureB = inst && inst.config ? (inst.config.temperature ?? null) : null;
       this.thinkingB = inst && inst.config ? (inst.config.thinking ?? false) : false;
+      this.extraInstructionsB = inst && inst.config ? (inst.config.extra_instructions ?? "") : "";
     },
     // The number input's min/max attrs are only a soft browser hint — a
     // user can still type/scroll past them. Confirmed live: temperature=3
@@ -364,6 +379,8 @@ createApp({
       // flag entirely, so there's nothing useful to override.
       const opts = {
         temperatureA: this.temperatureA, temperatureB: this.temperatureB,
+        extraInstructionsA: this.extraInstructionsA,
+        ...(this.useReference ? {} : { extraInstructionsB: this.extraInstructionsB }),
         ...(this.isCatalanTarget
           ? { catalanVegetaInsultsA: this.catalanVegetaInsultsA, catalanVegetaInsultsB: this.catalanVegetaInsultsB }
           : {}),

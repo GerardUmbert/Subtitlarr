@@ -108,6 +108,10 @@ class TranslationProvider(ABC):
     # the caller's own batch as-is") for any provider not going through
     # build_provider(), e.g. a test double.
     batch_token_budget: int = 0
+    # This instance's own optional free-text addition to the system prompt
+    # (config key "extra_instructions"), set by registry.build_provider().
+    # Blank for any provider not going through it, e.g. a test double.
+    extra_instructions: str = ""
 
     @abstractmethod
     async def translate(

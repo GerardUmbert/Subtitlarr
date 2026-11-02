@@ -110,6 +110,8 @@
     <a href="#cascade-basics">How the cascade works</a>
     <a href="#content-blocks">Content-block bisection</a>
     <a href="#rate-limits">Rate limits &amp; cooldown</a>
+    <a href="#extra-instructions">Extra instructions</a>
+    <a href="#comparing-engines">Comparing engines</a>
 
     <div class="docs-sidebar-group">Configuration</div>
     <a href="#env-vars">All settings reference</a>
@@ -193,6 +195,27 @@
     <h2 id="rate-limits" class="reveal-scroll">Rate limits &amp; cooldown</h2>
     <p>3 consecutive failures against an engine instance trip a 24-hour cooldown — the instance is skipped without even attempting a live round-trip for the rest of that window. This clears automatically after 24 hours, or immediately via a <strong>Test Connection</strong> on that instance, or the Jobs page's manual "clear all rate limits" action.</p>
 
+    <h2 id="extra-instructions" class="reveal-scroll">Extra instructions (per engine)</h2>
+    <p>Every engine instance has an optional <strong>Extra instructions</strong> box (up to 2000 characters) on the Translation Engine page. What you type is appended to the end of the translation prompt for <em>that engine only</em>. Left empty, the default prompt is used unchanged.</p>
+    <ul>
+      <li>It refines style and vocabulary only &mdash; a glossary, &ldquo;keep character names untranslated&rdquo;, &ldquo;formal register, this is a period drama&rdquo;. The index and output-format rules always still apply.</li>
+      <li>It exists so a capable cloud engine can take richer rules without making the prompt longer for a small local model, which follows a short prompt best. Keep it empty for those.</li>
+      <li>Be careful asking for stronger or more explicit language than the default: some providers&rsquo; content filters (Gemini especially) can block a whole batch in response.</li>
+    </ul>
+    <p>Test whether a set of instructions actually helps with <a href="#comparing-engines">Compare Engines</a> before relying on it.</p>
+
+    <h2 id="comparing-engines" class="reveal-scroll">Comparing engines</h2>
+    <p>The <strong>Compare Engines</strong> page runs the same source subtitle through two engine instances side by side (or one instance against an uploaded reference translation) so you can judge speed, reliability and output quality before committing an instance to your cascade. Nothing it does touches your real queue or Bazarr.</p>
+    <h3>Temperature</h3>
+    <p>Temperature is how much the model is allowed to vary its wording. Lower is more literal and consistent; higher is more varied and creative. Subtitle translation wants literal output that reliably keeps the index/format structure, so Subtitlarr defaults to <code>0.2</code> &mdash; most providers default to about 1.0, which is tuned for chat and invites format drift. Each side is pre-filled from its instance&rsquo;s saved value; edit it on the Compare page to see what a different value changes without touching the real instance. You can compare one instance against itself at two temperatures.</p>
+    <h3>Extra instructions</h3>
+    <p>Each side&rsquo;s extra-instructions box is pre-filled from the instance&rsquo;s saved value. Edit or empty it for one side to compare the same engine with versus without the extra text, again without changing the saved instance.</p>
+    <h3>Run several comparisons, not just one</h3>
+    <div class="callout">
+      Model output varies from run to run even at a low temperature, and a single file can flatter or punish an engine by luck. Compare on a handful of different items (dialogue-heavy, fast banter, profanity, different genres) and repeat a comparison if the result is close.
+    </div>
+    <p>Look for what holds up across runs: cue recovery and failures, time per cue, and how the diff reads. Decide which engine, temperature or set of instructions is better only once the same side keeps winning.</p>
+
     <!-- ── CONFIGURATION ── -->
     <h2 id="env-vars" class="reveal-scroll">All settings reference</h2>
     <p>None of this needs to be touched at container start — every one of these is also editable from the web UI afterward (Settings / Language Rules / Bazarr Connection pages). This table exists purely as a reference for what each setting does and its default. Translation engine setup lives entirely in the <strong>Translation Engine</strong> page — see <a href="api-keys.html">Engine Setup</a> — not in this table.</p>
@@ -255,7 +278,7 @@
       <li><strong>Run control</strong> — start/cancel a run, run a filtered set of items, run an explicit list of item ids, re-run a single item, refresh from Bazarr without translating.</li>
       <li><strong>Sync/jobs</strong> — trigger media/subtitle sync, push queued uploads, run the language check (and set which engine it uses), run the stale audit, close stuck runs, clear engine rate limits.</li>
       <li><strong>Engine cascade</strong> — list configured engine instances (API keys always masked) and reorder the cascade. Adding or editing an instance's credentials stays a Translation Engine page action, not available over MCP.</li>
-      <li><strong>Schedule/cutoff</strong> — read and update the age threshold, daily translation limit, cron expression, and pause between items.</li>
+      <li><strong>Schedule/cutoff</strong> — read and update every schedule setting: the age threshold, daily translation limit, pause between items, whether rate limits are cleared before a scheduled run, queued-upload mode, and all the independent crons (translation, Bazarr syncs, pulling pending subtitles, language check, pushing queued uploads, database backup). <code>subtitlarr_reset_schedule_config</code> restores some or all of them to this deployment's defaults, which is the safe way to undo a bad change.</li>
       <li><strong>Language rules</strong> — read source-language priority, target-language allowlist, and regional variant preferences (read-only).</li>
     </ul>
 
@@ -320,6 +343,9 @@
 
     <h3>A completed subtitle is in the wrong language</h3>
     <p>Run the <a href="#language-check">Language Check job</a> — this exact scenario (a well-formed response that's simply still in the source language) is what it exists to catch, since structural checks alone can't detect it.</p>
+
+    <h3 id="locked-out">Locked out of the web UI</h3>
+    <p>Change your username or password anytime from the <strong>Account</strong> page (User menu at the bottom of the sidebar). If you've forgotten them, run <code>subtitlarr --reset-admin</code> from the container's console &mdash; on Unraid, the Docker tab's container icon &rarr; <strong>Console</strong>; from a shell, <code>docker exec -it subtitlarr subtitlarr --reset-admin</code>. It resets the username and password back to <code>admin</code>/<code>admin</code> and forces a new password on next login. It works even if the app itself isn't running, since it opens the database directly.</p>
 
     <h2 id="limitations" class="reveal-scroll">Known limitations</h2>
     <ul>

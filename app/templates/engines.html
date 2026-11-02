@@ -138,6 +138,9 @@
               <input v-else-if="field.type === 'password'" v-model="editBuffers[instance.id].config[field.key]"
                      type="password" :placeholder="instance.config[field.key + '_masked'] ? 'leave blank to keep current key' : field.placeholder" />
 
+              <textarea v-else-if="field.type === 'textarea'" v-model="editBuffers[instance.id].config[field.key]"
+                        :maxlength="field.maxlength" :placeholder="field.placeholder"></textarea>
+
               <input v-else-if="field.type === 'number'" v-model.number="editBuffers[instance.id].config[field.key]"
                      type="number" :min="field.min" :max="field.max" :step="field.step"
                      @blur="clampNumberField(instance.id, field)" />

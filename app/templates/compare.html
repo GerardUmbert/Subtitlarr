@@ -116,6 +116,18 @@
     </div>
     <p class="field-hint">Lower = more literal/consistent, higher = more varied/creative. Pre-filled from each engine's saved config — edit here to test a different value without changing the real instance.</p>
 
+    <div class="field-row" v-if="instanceIdA || instanceIdB" style="margin-top:6px; align-items:flex-start;">
+      <div class="field" v-if="instanceIdA" style="flex:1; min-width:0;">
+        <label>Engine A extra instructions</label>
+        <textarea v-model="extraInstructionsA" maxlength="2000" placeholder="(none)"></textarea>
+      </div>
+      <div class="field" v-if="instanceIdB && !useReference" style="flex:1; min-width:0;">
+        <label>Engine B extra instructions</label>
+        <textarea v-model="extraInstructionsB" maxlength="2000" placeholder="(none)"></textarea>
+      </div>
+    </div>
+    <p class="field-hint">Appended to the translation prompt for that side only. Pre-filled from each engine's saved "Extra instructions" — edit or empty it here to compare with vs. without, without changing the real instance.</p>
+
     <div class="field-row" v-if="thinkingCapableA || (thinkingCapableB && !useReference)" style="margin-top:6px;">
       <div class="field" v-if="thinkingCapableA">
         <label>Engine A thinking</label>
@@ -197,9 +209,16 @@
           <template v-if="side.thinking !== null && side.thinking !== undefined">
             · thinking {% raw %}{{ side.thinking === false ? 'off' : side.thinking === true ? 'on' : side.thinking }}{% endraw %}
           </template>
+          <template v-if="side.extra_instructions !== undefined">
+            · extra instructions {% raw %}{{ side.extra_instructions ? 'on' : 'off' }}{% endraw %}
+          </template>
         </div>
         <div class="stat-hint" v-else-if="side && !side.ok">{% raw %}{{ side.error }}{% endraw %}</div>
         <div class="stat-hint" v-else-if="side">reference upload — not timed</div>
+        <details class="stat-hint" v-if="side && side.extra_instructions">
+          <summary>show extra instructions used</summary>
+          <div style="white-space:pre-wrap;">{% raw %}{{ side.extra_instructions }}{% endraw %}</div>
+        </details>
         <button v-if="side && side.ok && side.subtitle_text" class="btn" style="margin-top:10px;"
                 @click="downloadSide(side)">Download .srt</button>
       </div>

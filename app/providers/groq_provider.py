@@ -91,7 +91,8 @@ class GroqProvider(TranslationProvider):
         language_variants: dict[str, str] | None = None,
     ) -> str:
         system_prompt = build_system_prompt(
-            source_lang, target_lang, catalan_vegeta_insults, language_variants
+            source_lang, target_lang, catalan_vegeta_insults, language_variants,
+            extra_instructions=self.extra_instructions,
         )
         return await self._chat_completion([
             {"role": "system", "content": system_prompt},

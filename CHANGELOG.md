@@ -5,7 +5,26 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [dev]
 
+### Changed
+- **Translation prompt refined** (thanks to Manuel5cc, PR #3): dual-speaker
+  dash cues are now translated fully into the target language, idioms and
+  set phrases use functional equivalents instead of calques, and
+  hesitations/discourse markers are rendered naturally or dropped. The
+  Spain Spanish variant now forbids mixing in Latin American forms and
+  keeps one register per character, while still matching the source's
+  register (formal or period dialogue stays formal).
+
 ### Added
+- **An optional "Extra instructions" field per engine instance** (Engines
+  page), appended to the end of the translation prompt for that engine
+  only. Lets a capable cloud engine take extra style rules (period
+  register, a glossary, naming conventions) while small local models keep
+  the short default prompt — empty means the prompt is unchanged. It
+  refines style only; the index/format rules still apply. Capped at 2000
+  characters. The Compare Engines page has a per-side override pre-filled
+  from the saved value (empty it to compare with vs. without), and the docs
+  now explain temperature, extra instructions, and why to run several
+  comparisons rather than trusting a single one.
 - **An "Account" page**, reachable from a new User menu at the bottom of
   the sidebar (replacing the old bare Log out button — the menu now pops
   up "Account" and "Log out" together). Lets you change the admin

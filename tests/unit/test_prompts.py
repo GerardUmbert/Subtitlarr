@@ -149,3 +149,42 @@ def test_language_with_no_variants_defined_gets_no_addon():
     prompt = build_system_prompt("en", "it")
     assert "Peninsular" not in prompt
     assert "Simplified" not in prompt
+
+
+def test_blank_extra_instructions_leave_prompt_unchanged():
+    base = build_system_prompt("en", "es")
+    assert build_system_prompt("en", "es", extra_instructions="") == base
+    assert build_system_prompt("en", "es", extra_instructions="   \n ") == base
+
+
+def test_extra_instructions_are_appended_last():
+    prompt = build_system_prompt("en", "es", extra_instructions="Keep names untranslated.")
+    assert prompt.endswith("Keep names untranslated.")
+    assert "index/format rules above still apply" in prompt
+
+
+def test_extra_instructions_with_braces_do_not_break_formatting():
+    prompt = build_system_prompt("en", "es", extra_instructions="Use {curly} braces literally.")
+    assert "Use {curly} braces literally." in prompt
+
+
+def test_build_provider_carries_extra_instructions_into_system_prompt():
+    from app.providers.registry import build_provider
+
+    provider = build_provider(
+        "gemini", {"api_key": "k", "model": "m", "extra_instructions": "  Period drama: formal register.  "}
+    )
+    assert provider.extra_instructions == "Period drama: formal register."
+    no_extra = build_provider("gemini", {"api_key": "k", "model": "m"})
+    assert no_extra.extra_instructions == ""
+
+
+def test_validate_extra_instructions_length_limit():
+    import pytest
+
+    from app.providers.registry import EXTRA_INSTRUCTIONS_MAX_LENGTH, validate_extra_instructions
+
+    validate_extra_instructions(None)
+    validate_extra_instructions("x" * EXTRA_INSTRUCTIONS_MAX_LENGTH)
+    with pytest.raises(ValueError):
+        validate_extra_instructions("x" * (EXTRA_INSTRUCTIONS_MAX_LENGTH + 1))

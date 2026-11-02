@@ -87,6 +87,7 @@ def _serialize(result):
                 "error": r.error,
                 "subtitle_text": r.subtitle_text,
                 "temperature": r.temperature,
+                "extra_instructions": r.extra_instructions,
                 "thinking": r.thinking,
                 "total_seconds": round(r.total_seconds, 2),
                 "batch_count": r.batch_count,
@@ -125,6 +126,11 @@ class CompareRequest(BaseModel):
     # instance's own saved config value.
     thinking_a: bool | str | None = None
     thinking_b: bool | str | None = None
+    # Per-side override of the engine's "Extra instructions" prompt text —
+    # None falls back to that instance's own saved value; any string
+    # (including "", meaning none) replaces it for just this run.
+    extra_instructions_a: str | None = None
+    extra_instructions_b: str | None = None
 
 
 @router.post("")
@@ -147,6 +153,8 @@ async def compare(
         registry.validate_temperature(req.temperature_b)
         registry.validate_thinking(req.thinking_a)
         registry.validate_thinking(req.thinking_b)
+        registry.validate_extra_instructions(req.extra_instructions_a)
+        registry.validate_extra_instructions(req.extra_instructions_b)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -163,6 +171,8 @@ async def compare(
             temperature_b=req.temperature_b,
             thinking_a=req.thinking_a,
             thinking_b=req.thinking_b,
+            extra_instructions_a=req.extra_instructions_a,
+            extra_instructions_b=req.extra_instructions_b,
         )
     except CompareError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -188,6 +198,8 @@ async def compare_uploaded(
     # .thinking_a/_b for the underlying semantics.
     thinking_a: str | None = Form(None),
     thinking_b: str | None = Form(None),
+    extra_instructions_a: str | None = Form(None),
+    extra_instructions_b: str | None = Form(None),
     conn=Depends(state.get_conn),
     client=Depends(state.get_client),
 ):
@@ -205,6 +217,8 @@ async def compare_uploaded(
         registry.validate_temperature(temperature_b)
         registry.validate_thinking(resolved_thinking_a)
         registry.validate_thinking(resolved_thinking_b)
+        registry.validate_extra_instructions(extra_instructions_a)
+        registry.validate_extra_instructions(extra_instructions_b)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -222,6 +236,8 @@ async def compare_uploaded(
             temperature_b=temperature_b,
             thinking_a=resolved_thinking_a,
             thinking_b=resolved_thinking_b,
+            extra_instructions_a=extra_instructions_a,
+            extra_instructions_b=extra_instructions_b,
         )
     except CompareError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

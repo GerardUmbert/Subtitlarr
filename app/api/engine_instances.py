@@ -81,6 +81,7 @@ def create_engine_instance(req: CreateInstanceRequest, conn=Depends(state.get_co
         config = {**registry.DEFAULT_CONFIG_BY_TYPE[req.provider_type], **req.config}
         try:
             registry.validate_temperature(config.get("temperature"))
+            registry.validate_extra_instructions(config.get("extra_instructions"))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
     with state.db_lock:
@@ -114,11 +115,14 @@ def update_engine_instance(
         # old single-engine API's save behavior for API keys.
         merged_config = dict(existing["config"])
         for key, value in req.config.items():
-            if value is None or value == "":
+            # extra_instructions is the one plain-text field where blank is
+            # a real value ("no extra instructions"), not "leave unchanged".
+            if value is None or (value == "" and key != "extra_instructions"):
                 continue
             merged_config[key] = value
         try:
             registry.validate_temperature(merged_config.get("temperature"))
+            registry.validate_extra_instructions(merged_config.get("extra_instructions"))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
