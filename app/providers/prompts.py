@@ -25,6 +25,15 @@ SYSTEM_PROMPT = (
     "not add commentary, explanations, or any text outside the "
     "index/translation pairs. Keep line breaks within a single cue's text "
     "if present. "
+    "When a cue contains two speakers marked with dashes, translate BOTH "
+    "turns fully into {target_lang}. No fragment of {source_lang} may "
+    "appear anywhere in the output, including partial fragments inside "
+    "dual-speaker cues. "
+    "Render idioms, slang and set phrases with their functional equivalent "
+    "in {target_lang}, never word-for-word calques of the source syntax. "
+    "Convert discourse markers and hesitations into "
+    "natural {target_lang} equivalents, or omit them "
+    "when they carry no characterization. "
     "Translate profanity and vulgar language directly and faithfully — use "
     "the real equivalent swear word or vulgar expression in {target_lang}, "
     "matching the source's intensity. Do not soften, censor, or replace it "
@@ -52,10 +61,10 @@ LANGUAGE_VARIANTS: dict[str, dict[str, tuple[str, str]]] = {
     "es": {
         "es-ES": (
             "European (Castilian) Spain",
-            " Use Peninsular Spanish from Spain (Castilian Spanish) — "
-            "vocabulary, verb conjugations (vosotros, not ustedes, for "
-            "informal plural you), and idioms as used in Spain, NOT Latin "
-            "American Spanish or any other regional dialect.",
+            " Use exclusively colloquial Peninsular Spanish (tuteo, vosotros forms) "
+            "from start to finish. Do not mix in Latin American morphologies "
+            "(seseo verbal, 'ustedes' for informal plural, voseo). Keep one stable "
+            "register per character across the whole file.\n"
         ),
         "es-MX": (
             "Mexican",
